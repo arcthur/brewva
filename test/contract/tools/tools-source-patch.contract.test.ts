@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { sha256Hex, shortSha256Hex } from "@brewva/brewva-std/hash";
+import { sha256Hex } from "@brewva/brewva-std/hash";
 import {
   createResourceReadTool,
   createSourcePatchTools,
@@ -26,12 +26,12 @@ import { createBundledToolRuntime, createRuntimeInstanceFixture } from "../../he
 import { toolOutcomePayload } from "../../helpers/tool-outcome.js";
 import { extractTextContent, fakeContext } from "./tools-flow.helpers.js";
 
-function requireAnchor(details: SourceReadToolDetails, line: number): string {
+function requireLine(details: SourceReadToolDetails, line: number): number {
   const anchor = details.snapshot.anchors.find((candidate) => candidate.line === line);
   if (!anchor) {
     throw new Error(`Missing anchor for line ${line}`);
   }
-  return `L${anchor.line}@${anchor.token}`;
+  return anchor.line;
 }
 
 function manualSnapshot(input: {
@@ -39,6 +39,7 @@ function manualSnapshot(input: {
   readonly uri: string;
   readonly path: string;
   readonly text: string;
+  readonly seenLines?: readonly number[];
 }): SourceSnapshot {
   const lines = input.text.endsWith("\n")
     ? input.text.slice(0, -1).split("\n")
@@ -50,21 +51,15 @@ function manualSnapshot(input: {
     contentHash: `sha256:${sha256Hex(input.text)}`,
     createdAt: 1,
     lineCount: lines.length,
-    anchors: lines.map((text, index) => {
-      const line = index + 1;
-      const hash = `sha256:${sha256Hex(text)}`;
-      return {
-        line,
-        token: shortSha256Hex(`${line}:${hash}`, 6),
-        hash,
-        text,
-      };
-    }),
+    anchors: lines.map((text, index) => ({ line: index + 1, text })),
+    // A hand-built snapshot stands in for a full-file read, so every line is seen
+    // unless a test pins a narrower set (e.g. to model a reveal-merged plan on tape).
+    seenLines: input.seenLines ?? lines.map((_, index) => index + 1),
   };
 }
 
 describe("source_read and source_patch tools", () => {
-  test("source_read emits hash-anchored editable lines", async () => {
+  test("source_read emits line-numbered editable lines", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-source-read-"));
     const filePath = join(workspace, "example.ts");
     writeFileSync(filePath, "export const alpha = 1;\nexport const beta = 2;\n", "utf8");
@@ -87,9 +82,11 @@ describe("source_read and source_patch tools", () => {
     const details = toolOutcomePayload(result) as SourceReadToolDetails;
     expect(text).toContain("[SourceRead]");
     expect(text).toMatch(/snapshot_id: snap_/u);
-    expect(text).toMatch(/L1@[A-Za-z0-9_-]{6}\|export const alpha = 1;/u);
+    expect(text).toMatch(/(?:^|\n)1:export const alpha = 1;/u);
+    expect(text).toMatch(/(?:^|\n)2:export const beta = 2;/u);
     expect(details?.resourceUri).toBe("brewva-resource:///file/example.ts");
     expect(details?.snapshot.anchors).toHaveLength(2);
+    expect(details?.snapshot.seenLines).toEqual([1, 2]);
   });
 
   test("source_read accepts file URLs without losing absolute path semantics", async () => {
@@ -115,7 +112,7 @@ describe("source_read and source_patch tools", () => {
     expect(details?.resourceUri).toBe("brewva-resource:///file/example.ts");
     expect(
       extractTextContent(result as { content: Array<{ type: string; text?: string }> }),
-    ).toContain("L1@");
+    ).toContain("1:export const alpha = 1;");
   });
 
   test("source_read accepts source:/// triple-slash URIs as repo-relative paths", async () => {
@@ -141,7 +138,7 @@ describe("source_read and source_patch tools", () => {
     expect(details?.resourceUri).toBe("brewva-resource:///file/example.ts");
     expect(
       extractTextContent(result as { content: Array<{ type: string; text?: string }> }),
-    ).toContain("L1@");
+    ).toContain("1:export const alpha = 1;");
   });
 
   test("source_read names the accepted grammar when the URI scheme is unknown", async () => {
@@ -313,10 +310,10 @@ describe("source_read and source_patch tools", () => {
       {
         edits: [
           {
-            kind: "replace_anchor",
+            kind: "replace_lines",
             uri: strippedAbsoluteUri,
             snapshot_id: readDetails.snapshot.id,
-            start_anchor: requireAnchor(readDetails, 2),
+            start_line: requireLine(readDetails, 2),
             replacement: "export const beta = 20;",
           },
         ],
@@ -362,10 +359,10 @@ describe("source_read and source_patch tools", () => {
       {
         edits: [
           {
-            kind: "replace_anchor",
+            kind: "replace_lines",
             uri: readDetails.resourceUri,
             snapshot_id: readDetails.snapshot.id,
-            start_anchor: requireAnchor(readDetails, 2),
+            start_line: requireLine(readDetails, 2),
             replacement: "export const beta = 20;",
           },
         ],
@@ -429,7 +426,7 @@ describe("source_read and source_patch tools", () => {
       {
         uri: "example.ts",
         mode: "spans",
-        spans: [{ start_line: 1, end_line: 1 }],
+        spans: [{ start_line: 1, end_line: 2 }],
       },
       undefined,
       undefined,
@@ -445,11 +442,11 @@ describe("source_read and source_patch tools", () => {
       {
         edits: [
           {
-            kind: "replace_anchor",
+            kind: "replace_lines",
             uri: readDetails.resourceUri,
             snapshot_id: readDetails.snapshot.id,
-            start_anchor: requireAnchor(readDetails, 1),
-            end_anchor: requireAnchor(readDetails, 2),
+            start_line: requireLine(readDetails, 1),
+            end_line: requireLine(readDetails, 2),
             replacement: "export const alpha = 10;\n\nexport const beta = 2;",
           },
         ],
@@ -494,10 +491,10 @@ describe("source_read and source_patch tools", () => {
       {
         edits: [
           {
-            kind: "replace_anchor",
+            kind: "replace_lines",
             uri: readDetails.resourceUri,
             snapshot_id: readDetails.snapshot.id,
-            start_anchor: requireAnchor(readDetails, 1),
+            start_line: requireLine(readDetails, 1),
             replacement: "export const value = 2;",
           },
         ],
@@ -554,10 +551,10 @@ describe("source_read and source_patch tools", () => {
       {
         edits: [
           {
-            kind: "replace_anchor",
+            kind: "replace_lines",
             uri: readDetails.resourceUri,
             snapshot_id: readDetails.snapshot.id,
-            start_anchor: requireAnchor(readDetails, 2),
+            start_line: requireLine(readDetails, 2),
             replacement: "export const changed = true;",
           },
         ],
@@ -620,17 +617,17 @@ describe("source_read and source_patch tools", () => {
       {
         edits: [
           {
-            kind: "replace_anchor",
+            kind: "replace_lines",
             uri: sourceDetails.resourceUri,
             snapshot_id: sourceDetails.snapshot.id,
-            start_anchor: requireAnchor(sourceDetails, 1),
+            start_line: requireLine(sourceDetails, 1),
             replacement: "export const value = 2;",
           },
           {
-            kind: "replace_anchor",
+            kind: "replace_lines",
             uri: generatedDetails.resourceUri,
             snapshot_id: generatedDetails.snapshot.id,
-            start_anchor: requireAnchor(generatedDetails, 2),
+            start_line: requireLine(generatedDetails, 2),
             replacement: "export const generated = false;",
           },
         ],
@@ -688,10 +685,10 @@ describe("source_read and source_patch tools", () => {
       snapshots: [snapshot.id],
       intents: [
         {
-          kind: "replace_anchor",
+          kind: "replace_lines",
           uri,
           snapshotId: snapshot.id,
-          startAnchor: `L${anchor.line}@${anchor.token}`,
+          startLine: anchor.line,
           replacement: "export const value = 2;",
         },
       ],
@@ -721,6 +718,64 @@ describe("source_read and source_patch tools", () => {
     expect(readFileSync(filePath, "utf8")).toBe("export const value = 2;\n");
   });
 
+  test("source_patch_apply replays a reveal-merged prepared plan whose edited line is not in persisted seenLines", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-source-patch-reveal-replay-"));
+    const filePath = join(workspace, "example.ts");
+    const before = "const a = 1;\nconst b = 2;\n";
+    writeFileSync(filePath, before, "utf8");
+    const adapter = createRuntimeInstanceFixture({ cwd: workspace });
+    const runtime = createBundledToolRuntime(adapter);
+    const [, apply] = createSourcePatchTools({ runtime });
+    const sessionId = "tc-source-patch-reveal-replay";
+    const uri = "brewva-resource:///file/example.ts";
+    // Model the tape state after a reveal-merge: line 2 was revealed and merged into
+    // the in-session seen set (so prepare succeeded) but only line 1 was persisted as
+    // seen. A fresh process has no in-memory plan or seen set — apply must replay from
+    // the tape's prepared status and not re-gate on the non-persisted seen set.
+    const snapshot = manualSnapshot({
+      id: "snap_reveal_replay",
+      uri,
+      path: filePath,
+      text: before,
+      seenLines: [1],
+    });
+    const plan: SourcePatchPlan = {
+      id: "plan_reveal_replay",
+      status: "prepared",
+      createdAt: 2,
+      summary: "reveal-merged replay",
+      snapshots: [snapshot.id],
+      intents: [
+        {
+          kind: "replace_lines",
+          uri,
+          snapshotId: snapshot.id,
+          startLine: 2,
+          replacement: "const b = 99;",
+        },
+      ],
+      changes: [],
+      conflicts: [],
+      preflight: { ok: true, staleRecovered: false, generatedFileRejected: false },
+      preview: "",
+    };
+    adapter.ops.tools.sourcePatch.snapshots.record(sessionId, snapshot);
+    adapter.ops.tools.sourcePatch.plans.prepare(sessionId, plan);
+
+    const result = await apply.execute(
+      "tc-source-patch-reveal-replay-apply",
+      { plan_id: plan.id },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+
+    expect(
+      extractTextContent(result as { content: Array<{ type: string; text?: string }> }),
+    ).toContain("status: applied");
+    expect(readFileSync(filePath, "utf8")).toBe("const a = 1;\nconst b = 99;\n");
+  });
+
   test("source_patch_prepare replays source snapshots from runtime events", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-source-prepare-replay-"));
     const filePath = join(workspace, "example.ts");
@@ -748,10 +803,10 @@ describe("source_read and source_patch tools", () => {
       {
         edits: [
           {
-            kind: "replace_anchor",
+            kind: "replace_lines",
             uri,
             snapshot_id: snapshot.id,
-            start_anchor: `L${anchor.line}@${anchor.token}`,
+            start_line: anchor.line,
             replacement: "export const value = 3;",
           },
         ],

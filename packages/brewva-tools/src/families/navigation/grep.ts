@@ -3,11 +3,7 @@ import { relative, resolve } from "node:path";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import { TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE } from "@brewva/brewva-vocabulary/iteration";
 import { Type } from "@sinclair/typebox";
-import {
-  formatSourceAnchor,
-  recordSourceSnapshot,
-  toSourceFileResourceUri,
-} from "../../internal/source-patch-gate.js";
+import { recordSourceSnapshot, toSourceFileResourceUri } from "../../internal/source-patch-gate.js";
 import { createRuntimeBoundBrewvaToolFactory } from "../../registry/runtime-bound-tool.js";
 import { buildStringEnumSchema } from "../../registry/string-enum-contract.js";
 import { recordToolRuntimeEvent } from "../../runtime-port/extensions.js";
@@ -271,30 +267,58 @@ export function createGrepTool(options: GrepToolOptions): ToolDefinition {
         ].filter(Boolean) as string[];
 
         const anchorMatchedLines = (lines: string[]) => {
-          const snapshots = new Map<string, ReturnType<typeof recordSourceSnapshot>>();
-          const anchoredLines = lines.map((line) => {
-            const parsed = parseGrepLocationLine(line);
-            if (!parsed) {
-              return line;
+          // First pass: resolve each match to its file + line. Group the shown
+          // match lines per file so each snapshot's seen set is exactly the lines
+          // grep surfaced — an edit built from grep output may only touch a line
+          // grep actually showed, not any other line of the matched file.
+          const parsed = lines.map((line) => {
+            const location = parseGrepLocationLine(line);
+            if (!location) {
+              return { line, location: null };
             }
-            const absolutePath = resolveReadableScopedPath(parsed.path, scope, { relativeTo: cwd });
+            const absolutePath = resolveReadableScopedPath(location.path, scope, {
+              relativeTo: cwd,
+            });
             if (!absolutePath || !existsSync(absolutePath) || !statSync(absolutePath).isFile()) {
-              return line;
+              return { line, location: null };
             }
-            let snapshot = snapshots.get(absolutePath);
-            if (!snapshot) {
-              const sourceText = readSourceTextCached(absolutePath).sourceText;
-              snapshot = recordSourceSnapshot({
+            return { line, location: { ...location, absolutePath } };
+          });
+          const seenByPath = new Map<string, Set<number>>();
+          for (const entry of parsed) {
+            if (entry.location) {
+              const seen = seenByPath.get(entry.location.absolutePath) ?? new Set<number>();
+              seen.add(entry.location.line);
+              seenByPath.set(entry.location.absolutePath, seen);
+            }
+          }
+          const snapshots = new Map<string, ReturnType<typeof recordSourceSnapshot>>();
+          for (const [absolutePath, seen] of seenByPath) {
+            const sourceText = readSourceTextCached(absolutePath).sourceText;
+            snapshots.set(
+              absolutePath,
+              recordSourceSnapshot({
                 uri: toSourceFileResourceUri(scope, absolutePath),
                 path: absolutePath,
                 sourceText,
                 runtime,
                 sessionId,
-              });
-              snapshots.set(absolutePath, snapshot);
+                seenLines: [...seen].toSorted((left, right) => left - right),
+              }),
+            );
+          }
+          // Second pass: the line number is the anchor now, so a resolvable match
+          // renders as path:line:content; unresolved lines pass through untouched.
+          const anchoredLines = parsed.map((entry) => {
+            if (!entry.location) {
+              return entry.line;
             }
-            const anchor = snapshot.anchors[parsed.line - 1];
-            return anchor ? `${parsed.path}:${formatSourceAnchor(anchor)}|${parsed.content}` : line;
+            const anchor = snapshots.get(entry.location.absolutePath)?.anchors[
+              entry.location.line - 1
+            ];
+            return anchor
+              ? `${entry.location.path}:${anchor.line}:${entry.location.content}`
+              : entry.line;
           });
           return {
             lines: anchoredLines,

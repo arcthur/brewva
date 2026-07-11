@@ -9,8 +9,6 @@ export interface SourceResourceDescriptor {
 
 export interface SourceLineAnchor {
   readonly line: number;
-  readonly token: string;
-  readonly hash: string;
   readonly text: string;
 }
 
@@ -22,30 +20,39 @@ export interface SourceSnapshot {
   readonly createdAt: number;
   readonly lineCount: number;
   readonly anchors: readonly SourceLineAnchor[];
+  /**
+   * 1-based line numbers this snapshot's originating `source_read` actually
+   * displayed. An edit intent may only target a seen line: the seen set is the
+   * harness-held seen-proof that replaced the per-line token (a model can cite a
+   * line only if the read showed it). Persisted so a resumed session keeps its
+   * seen-proof without re-reading; in-session reveal-on-reject augments a working
+   * copy of this set but is not re-persisted.
+   */
+  readonly seenLines: readonly number[];
 }
 
 export type SourcePatchIntent =
   | {
-      readonly kind: "replace_anchor";
+      readonly kind: "replace_lines";
       readonly uri: string;
       readonly snapshotId: string;
-      readonly startAnchor: string;
-      readonly endAnchor?: string;
+      readonly startLine: number;
+      readonly endLine?: number;
       readonly replacement: string;
     }
   | {
-      readonly kind: "insert_before_anchor" | "insert_after_anchor";
+      readonly kind: "insert_before_line" | "insert_after_line";
       readonly uri: string;
       readonly snapshotId: string;
-      readonly anchor: string;
+      readonly line: number;
       readonly insertion: string;
     }
   | {
-      readonly kind: "delete_anchor_range";
+      readonly kind: "delete_lines";
       readonly uri: string;
       readonly snapshotId: string;
-      readonly startAnchor: string;
-      readonly endAnchor?: string;
+      readonly startLine: number;
+      readonly endLine?: number;
     }
   | {
       readonly kind: "create_file";

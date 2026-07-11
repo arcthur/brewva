@@ -6,7 +6,6 @@ import type { SourcePatchIntent } from "@brewva/brewva-vocabulary/workbench";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaBundledToolRuntime } from "../../contracts/index.js";
 import {
-  formatSourceAnchor,
   prepareAndStoreSourcePatchPlan,
   recordSourceSnapshot,
   toSourceFileResourceUri,
@@ -405,11 +404,11 @@ function workspaceEditToIntents(input: {
       continue;
     }
     intents.push({
-      kind: "replace_anchor",
+      kind: "replace_lines",
       uri: snapshot.uri,
       snapshotId: snapshot.id,
-      startAnchor: formatSourceAnchor(first),
-      endAnchor: formatSourceAnchor(last),
+      startLine: first.line,
+      endLine: last.line,
       replacement: after,
     });
   }

@@ -13,7 +13,7 @@ Representative surfaces:
 
 - browser state, screenshots, PDFs, and snapshots
 - file globbing (`glob`), goal-focused content analysis (`look_at`), grep,
-  search-advisor recovery, output search, and hash-anchored `source_read`
+  search-advisor recovery, output search, and line-numbered `source_read`
 - `brewva-resource:///` reads through `resource_read`
 - real language-server status, diagnostics, references, definitions, and edit
   preparation

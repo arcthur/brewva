@@ -357,6 +357,42 @@ reaches for is a heuristic wearing a schema.`
   follow-up by design. Under the line `Let the tools recede so the narration advances
 — and put a ceiling on every large payload.`
 
+- [RFC: Seen-Lines Anchoring — Moving Edit Seen-Proof From The Wire Into Harness State](./rfc-seen-lines-anchoring.md):
+  active RFC borrowing oh-my-pi's seen-lines edit model into brewva's anchor
+  economy. Reframes honestly: brewva's per-line `L42@a1b2c3|` token already
+  carries seen-proof (a 24-bit token is only emitted for displayed lines, so an
+  unshown line cannot be cited) — this is **not** a missing-security story. It is
+  priced as an O(lines) wire tax paid twice: `~9 + digits` bytes of prefix on every
+  read line (~4.8 KB at the 400-line cap) plus the full anchor string re-echoed on
+  every `source_patch_prepare` intent. oh-my-pi does the same two jobs — seen-proof
+  and drift detection — at O(1): one whole-file content tag in the read header, a
+  harness-side `seenLines` set, and plain `NN:` line numbers, with a reveal-on-reject
+  self-heal the per-line token cannot offer (a seen-miss reveals the unseen line and,
+  on a **complete** full-width reveal, merges it so a straight retry lands without a
+  re-read; a truncated reveal merges nothing, blocking piecewise circumvention).
+  Chosen path: **clean cutover** — replace the per-line token outright with `NN:`
+  line numbers + a harness `seenLines` set + reveal-on-reject, no transitional flag
+  and no format coexistence (the value is already decided; a permanent dual-format
+  toggle is exactly the backward-compat cruft brewva rejects). Two corrections the
+  code forced, recorded for honesty: (1) brewva keeps its **surgical per-line-text
+  drift and recovery** unchanged — the earlier draft's whole-file tag + 3-way merge
+  was omp machinery that buys no token economy (drift is harness-side either way) and
+  only imports omp's whole-file strictness; recovery stays unique-`text` relocation
+  (what the cached `hash` already encoded, so `hash` is dropped as redundant). (2) No
+  `anchorFormat` discriminator and no config key — with no coexistence there is
+  nothing to discriminate; old pre-cutover snapshots simply fail the rehydration guard
+  (missing `seenLines`) and self-heal via re-read. Preserves brewva's skeleton wholesale
+  (prepare never mutates, apply is the single write gate with a whole-file `before`-compare
+  preflight, rollback artifact, tape snapshots, `source_patch_stale_recovered`). Surface:
+  replaces a model-facing wire 1:1 and the durable snapshot event gets **lighter** net
+  (`seenLines` added, per-anchor `token` + 64-hex `hash` removed); rides the existing
+  non-canonical snapshot event (no new literal), zero authored surface. The three
+  contract/property tests that pin today's format are rewritten (their invariants survive;
+  the surface changes), and the real promotion gate is a git-revision A/B token/success delta,
+  not a static assertion. Under the line `The per-line token pays wire tokens to avoid holding
+state; keep the state, drop the token — safety equivalent, economy better, and a reject can
+finally reveal.`
+
 When new unresolved design work starts, add one focused note here and link it
 from this README. If the stable docs already carry the accepted contract, create
 or update a decision/archive record instead of reopening this directory as a

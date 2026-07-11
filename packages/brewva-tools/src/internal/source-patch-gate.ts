@@ -1,6 +1,5 @@
 export {
   applyStoredSourcePatchPlan,
-  formatSourceAnchor,
   prepareAndStoreSourcePatchPlan,
   recordSourceSnapshot,
   toSourceFileResourceUri,

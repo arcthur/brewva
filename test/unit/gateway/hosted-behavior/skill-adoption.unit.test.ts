@@ -110,7 +110,7 @@ describe("projectLatestSkillAdoption", () => {
       invocationEvent({
         timestamp: 26,
         toolName: "source_patch_prepare",
-        args: { edits: [{ kind: "replace_anchor", uri: "skills/beta/SKILL.md" }] },
+        args: { edits: [{ kind: "replace_lines", uri: "skills/beta/SKILL.md" }] },
       }),
       invocationEvent({
         timestamp: 27,
@@ -254,7 +254,7 @@ describe("projectRecentToolTargetPaths", () => {
         invocationEvent({
           timestamp: 2,
           toolName: "source_patch_prepare",
-          args: { edits: [{ kind: "replace_anchor", uri: "b.ts" }] },
+          args: { edits: [{ kind: "replace_lines", uri: "b.ts" }] },
         }),
         invocationEvent({ timestamp: 3, toolName: "grep", args: { query: "x", paths: ["dir/c"] } }),
         invocationEvent({ timestamp: 4, toolName: "source_read", args: { uri: "a.ts" } }),

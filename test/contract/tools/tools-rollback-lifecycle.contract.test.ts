@@ -17,7 +17,7 @@ interface SourceReadDetails {
   readonly resourceUri: string;
   readonly snapshot: {
     readonly id: string;
-    readonly anchors: ReadonlyArray<{ readonly line: number; readonly token: string }>;
+    readonly anchors: ReadonlyArray<{ readonly line: number; readonly text: string }>;
   };
 }
 
@@ -46,10 +46,10 @@ async function applySamplePatch(input: {
     {
       edits: [
         {
-          kind: "replace_anchor",
+          kind: "replace_lines",
           uri: readDetails.resourceUri,
           snapshot_id: readDetails.snapshot.id,
-          start_anchor: `L${anchor.line}@${anchor.token}`,
+          start_line: anchor.line,
           replacement: input.replacement,
         },
       ],

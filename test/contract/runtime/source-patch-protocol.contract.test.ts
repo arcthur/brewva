@@ -31,11 +31,10 @@ describe("source patch protocol", () => {
       anchors: [
         {
           line: 1,
-          token: "ab",
-          hash: "sha256:line",
           text: "export const value = 1;",
         },
       ],
+      seenLines: [1],
     } satisfies SourceSnapshot;
 
     const plan = {
@@ -46,10 +45,10 @@ describe("source patch protocol", () => {
       snapshots: [snapshot.id],
       intents: [
         {
-          kind: "replace_anchor",
+          kind: "replace_lines",
           uri: snapshot.uri,
           snapshotId: snapshot.id,
-          startAnchor: "L1@ab",
+          startLine: 1,
           replacement: "export const value = 2;",
         },
       ],

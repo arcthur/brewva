@@ -2,7 +2,7 @@
 
 ## Metadata
 
-- Decision: Source reads produce hash-anchored snapshots, source writes apply only through `SourcePatchPlan`, real LSP `WorkspaceEdit` writes enter the same gate, and internal artifacts are read through the substrate-backed `brewva-resource:///` router.
+- Decision: Source reads produce line-anchored snapshots, source writes apply only through `SourcePatchPlan`, real LSP `WorkspaceEdit` writes enter the same gate, and internal artifacts are read through the substrate-backed `brewva-resource:///` router.
 - Date: `2026-05-24`
 - Status: accepted
 - Stable docs:
@@ -34,15 +34,16 @@
 ## Decision Summary
 
 - `source_read` is the durable source-reading entrypoint. File-backed reads and
-  `grep` record snapshots with model-facing anchors like `L42@a1b2c3` while
-  retaining full hashes, normalized line content, file hashes, and line ranges
-  for runtime validation.
-- `source_patch_prepare` accepts structured edit intents and produces a
-  `SourcePatchPlan`. It validates snapshot existence, full anchor hashes,
-  generated-file policy, stale recovery, output-path conflicts, and preview
-  diffs before any mutation.
+  `grep` record snapshots that render each line as `NN:text` and carry the set of
+  displayed lines (`seenLines`) plus normalized line content and file hash for
+  runtime validation. An edit intent may only target a line the read displayed.
+- `source_patch_prepare` accepts structured edit intents (line-numbered) and
+  produces a `SourcePatchPlan`. It validates snapshot existence, seen-line
+  coverage (revealing unseen lines on rejection), per-line drift with unique-text
+  recovery, generated-file policy, output-path conflicts, and preview diffs before
+  any mutation.
 - `source_patch_apply` is the only source mutation gate. It accepts a
-  `plan_id`, rechecks current file hashes, writes rollback artifacts, links the
+  `plan_id`, rechecks current file content, writes rollback artifacts, links the
   resulting `PatchSet`, and emits source patch lifecycle events.
 - Generated files are hard-rejected for modify, delete, and rename operations.
   This covers common generated markers and path forms instead of relying on

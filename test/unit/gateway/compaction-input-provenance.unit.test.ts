@@ -438,6 +438,7 @@ describe("compaction input provenance", () => {
       createdAt: 1,
       lineCount: 1,
       anchors: [],
+      seenLines: [],
     });
     runtime.ops.tools.sourcePatch.plans.apply(sessionId, {
       ok: true,

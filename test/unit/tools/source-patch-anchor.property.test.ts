@@ -77,10 +77,10 @@ propertyTest("anchors recover across unrelated leading line insertions and apply
       {
         edits: [
           {
-            kind: "replace_anchor",
+            kind: "replace_lines",
             uri: details.resourceUri,
             snapshot_id: details.snapshot.id,
-            start_anchor: `L${anchor.line}@${anchor.token}`,
+            start_line: anchor.line,
             replacement,
           },
         ],

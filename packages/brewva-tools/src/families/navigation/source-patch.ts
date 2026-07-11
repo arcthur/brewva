@@ -11,7 +11,7 @@ import {
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveBrewvaAgentDir } from "@brewva/brewva-runtime/config";
-import { sha256Hex, shortSha256Hex } from "@brewva/brewva-std/hash";
+import { sha256Hex } from "@brewva/brewva-std/hash";
 import {
   createBrewvaResourceRouter,
   createHostedResourceLoader,
@@ -64,6 +64,15 @@ const SOURCE_READ_MODE_SCHEMA = buildStringEnumSchema(SOURCE_READ_MODE_VALUES, {
 });
 const MAX_SOURCE_READ_SPANS = 16;
 const MAX_SOURCE_READ_LINES = 400;
+// Reveal-on-reject caps (borrowed from oh-my-pi's seen-lines enforcement). A
+// rejected edit inlines at most this many unseen lines, each clipped to this many
+// columns. Only a complete, full-width reveal merges into the working seen set —
+// and, past oh-my-pi, a snapshot may absorb at most SEEN_LINE_REVEAL_CAP lines
+// total via such merges across every prepare (the reveal-merge budget in
+// applyLineIntent). So the model cannot piecewise-reveal a wide blind region in
+// <=cap slices across retries; once the budget is spent it must re-read.
+const SEEN_LINE_REVEAL_CAP = 40;
+const SEEN_LINE_REVEAL_MAX_COLUMNS = 512;
 const SOURCE_URI_GRAMMAR_HINT =
   "Accepted uri forms: a repo-relative or absolute file path, source:///<path>, brewva-resource:///file/<path>, or file:///<absolute-path>.";
 // Schemes source_read can serve without the resource loader. Anything else
@@ -131,6 +140,24 @@ const SNAPSHOTS = new Map<string, SourceSnapshot>();
 const PLANS = new Map<string, StoredSourcePatchPlan>();
 const RESOURCE_ROUTERS = new Map<string, Promise<BrewvaResourceRouter>>();
 
+/**
+ * Working seen-line set per snapshot: the harness-held seen-proof that replaced
+ * the per-line token. Lazily seeded from the snapshot's persisted `seenLines`
+ * (covering fresh reads and resume rehydration alike) and augmented in-session by
+ * a complete reveal-on-reject, which is deliberately not re-persisted — a resumed
+ * session re-reveals rather than re-reads. Process-scoped; the tape's snapshot
+ * payload stays the durable source of truth.
+ */
+const SEEN_LINES = new Map<string, Set<number>>();
+
+function getSeenLineSet(snapshot: SourceSnapshot): Set<number> {
+  let seen = SEEN_LINES.get(snapshot.id);
+  if (!seen) {
+    seen = new Set(snapshot.seenLines);
+    SEEN_LINES.set(snapshot.id, seen);
+  }
+  return seen;
+}
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -139,10 +166,6 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
 
 function sha256(input: string): string {
   return `sha256:${sha256Hex(input)}`;
-}
-
-function shortToken(input: string): string {
-  return shortSha256Hex(input, 6);
 }
 
 function createId(prefix: string, contentHash: string): string {
@@ -165,33 +188,15 @@ function joinLines(lines: readonly string[], originalText: string): string {
 }
 
 function buildAnchors(lines: readonly string[]): SourceLineAnchor[] {
-  return lines.map((text, index) => {
-    const line = index + 1;
-    const hash = sha256(text);
-    return {
-      line,
-      token: shortToken(`${line}:${hash}`),
-      hash,
-      text,
-    };
-  });
+  return lines.map((text, index) => ({ line: index + 1, text }));
 }
 
-function formatAnchor(anchor: SourceLineAnchor): string {
-  return `L${anchor.line}@${anchor.token}`;
+function allLineNumbers(lineCount: number): number[] {
+  return Array.from({ length: lineCount }, (_, index) => index + 1);
 }
 
-function parseAnchor(value: string): { readonly line: number; readonly token: string } | null {
-  const match = /^L(\d+)@([A-Za-z0-9_-]{2,})$/u.exec(value.trim());
-  if (!match) {
-    return null;
-  }
-  return {
-    line: Number(match[1]),
-    token: match[2] ?? "",
-  };
-}
-
+// Builds a draft snapshot; `seenLines` is left empty for the caller to finalize
+// (from the render's displayed lines, or all lines for full-file provenance).
 function buildSnapshot(input: {
   readonly uri: string;
   readonly path: string;
@@ -207,24 +212,32 @@ function buildSnapshot(input: {
     createdAt: Date.now(),
     lineCount: lines.length,
     anchors: buildAnchors(lines),
+    seenLines: [],
   };
 }
 
+/**
+ * Record a snapshot on behalf of a caller that read the whole file (LSP rename,
+ * worker-results settlement, grep anchoring). `seenLines` defaults to every line
+ * because such callers have full-file provenance; the model-facing `source_read`
+ * tool instead passes the exact displayed subset so the seen-proof narrows to
+ * what the model actually saw. See {@link SourceSnapshot.seenLines}.
+ */
 export function recordSourceSnapshot(input: {
   readonly uri: string;
   readonly path: string;
   readonly sourceText: string;
   readonly runtime?: BrewvaBundledToolRuntime;
   readonly sessionId?: string;
+  readonly seenLines?: readonly number[];
 }): SourceSnapshot {
-  const snapshot = buildSnapshot(input);
-  SNAPSHOTS.set(snapshot.id, snapshot);
-  recordSnapshot({ runtime: input.runtime, sessionId: input.sessionId, snapshot });
+  const built = buildSnapshot(input);
+  const snapshot: SourceSnapshot = {
+    ...built,
+    seenLines: input.seenLines ?? allLineNumbers(built.lineCount),
+  };
+  commitSnapshot({ snapshot, runtime: input.runtime, sessionId: input.sessionId });
   return snapshot;
-}
-
-export function formatSourceAnchor(anchor: SourceLineAnchor): string {
-  return formatAnchor(anchor);
 }
 
 export function toSourceFileResourceUri(scope: ToolTargetScope, absolutePath: string): string {
@@ -360,60 +373,48 @@ function rejectRuntimeArtifactTarget(
     : null;
 }
 
-function resolveAnchorInSnapshot(
-  snapshot: SourceSnapshot,
-  anchorRef: string,
-): SourceLineAnchor | null {
-  const parsed = parseAnchor(anchorRef);
-  if (!parsed) {
-    return null;
-  }
-  return (
-    snapshot.anchors.find(
-      (anchor) => anchor.line === parsed.line && anchor.token === parsed.token,
-    ) ?? null
-  );
-}
-
+// Relocate a snapshot line whose content moved: the unique current line whose
+// text equals the snapshot's stored text. This is exactly the old cached-`hash`
+// relocation (the hash was only `sha256(text)`), now comparing text directly.
 function findRecoveredAnchor(input: {
-  readonly snapshot: SourceSnapshot;
   readonly expected: SourceLineAnchor;
   readonly currentLines: readonly string[];
 }): SourceLineAnchor | null {
-  const matches = buildAnchors(input.currentLines).filter(
-    (anchor) => anchor.hash === input.expected.hash,
-  );
-  return matches.length === 1 ? (matches[0] ?? null) : null;
+  let match: SourceLineAnchor | null = null;
+  for (let index = 0; index < input.currentLines.length; index += 1) {
+    if (input.currentLines[index] === input.expected.text) {
+      if (match) {
+        return null;
+      }
+      match = { line: index + 1, text: input.expected.text };
+    }
+  }
+  return match;
 }
 
-function resolveCurrentAnchor(input: {
+function resolveCurrentLine(input: {
   readonly snapshot: SourceSnapshot;
-  readonly anchorRef: string;
+  readonly line: number;
   readonly currentLines: readonly string[];
   readonly sessionId: string | undefined;
   readonly runtime: BrewvaBundledToolRuntime | undefined;
   readonly planId: string;
 }): { readonly anchor: SourceLineAnchor | null; readonly staleRecovered: boolean } {
-  const expected = resolveAnchorInSnapshot(input.snapshot, input.anchorRef);
+  const expected = input.snapshot.anchors[input.line - 1];
   if (!expected) {
     return { anchor: null, staleRecovered: false };
   }
-  const currentText = input.currentLines[expected.line - 1];
-  if (typeof currentText === "string" && sha256(currentText) === expected.hash) {
+  if (input.currentLines[expected.line - 1] === expected.text) {
     return { anchor: expected, staleRecovered: false };
   }
-  const recovered = findRecoveredAnchor({
-    snapshot: input.snapshot,
-    expected,
-    currentLines: input.currentLines,
-  });
+  const recovered = findRecoveredAnchor({ expected, currentLines: input.currentLines });
   if (input.sessionId) {
     const record: SourcePatchStaleRecoveryRecord = {
       planId: input.planId,
       snapshotId: input.snapshot.id,
       uri: input.snapshot.uri,
       recovered: Boolean(recovered),
-      reason: recovered ? undefined : "anchor_not_found",
+      reason: recovered ? undefined : "line_not_found",
     };
     input.runtime?.capabilities.tools.sourcePatch.staleRecovery.record(input.sessionId, record);
     recordToolRuntimeEvent(input.runtime, {
@@ -423,6 +424,90 @@ function resolveCurrentAnchor(input: {
     });
   }
   return { anchor: recovered, staleRecovered: Boolean(recovered) };
+}
+
+// The snapshot line numbers an intent touches — the seen-proof scope. Replace and
+// delete cover their whole range; an insert must have seen its reference line.
+function intentLineSpan(
+  intent: SourcePatchIntent,
+): { readonly startLine: number; readonly endLine: number } | null {
+  if (intent.kind === "insert_before_line" || intent.kind === "insert_after_line") {
+    return { startLine: intent.line, endLine: intent.line };
+  }
+  if (intent.kind === "replace_lines" || intent.kind === "delete_lines") {
+    const end = intent.endLine ?? intent.startLine;
+    return {
+      startLine: Math.min(intent.startLine, end),
+      endLine: Math.max(intent.startLine, end),
+    };
+  }
+  return null;
+}
+
+interface RevealedLine {
+  readonly line: number;
+  readonly text: string;
+}
+
+// Render the unseen lines for a rejection: at most SEEN_LINE_REVEAL_CAP lines,
+// each clipped to SEEN_LINE_REVEAL_MAX_COLUMNS columns. `complete` means this one
+// reveal showed every unseen line in full width — the single-reveal precondition
+// for a merge (the cumulative budget check in applyLineIntent is the other half).
+function revealUnseenLines(input: {
+  readonly snapshot: SourceSnapshot;
+  readonly unseen: readonly number[];
+}): { readonly revealed: readonly RevealedLine[]; readonly complete: boolean } {
+  const unseen = [...input.unseen].toSorted((left, right) => left - right);
+  const revealCount = Math.min(unseen.length, SEEN_LINE_REVEAL_CAP);
+  const revealed: RevealedLine[] = [];
+  let columnTruncated = false;
+  for (let index = 0; index < revealCount; index += 1) {
+    const line = unseen[index];
+    const anchor = line === undefined ? undefined : input.snapshot.anchors[line - 1];
+    if (!anchor) {
+      // Defensive: applyLineIntent range-checks the span before calling, so every
+      // unseen line has an anchor. If that ever changes, dropping the line keeps
+      // the reveal incomplete so it never merges — fail closed, never crash.
+      continue;
+    }
+    if (anchor.text.length > SEEN_LINE_REVEAL_MAX_COLUMNS) {
+      revealed.push({
+        line: anchor.line,
+        text: `${anchor.text.slice(0, SEEN_LINE_REVEAL_MAX_COLUMNS)}…`,
+      });
+      columnTruncated = true;
+    } else {
+      revealed.push({ line: anchor.line, text: anchor.text });
+    }
+  }
+  return { revealed, complete: revealed.length === unseen.length && !columnTruncated };
+}
+
+// Compose the `unseen_lines` rejection message. `outcome` decides the guidance:
+// `merged` — the reveal was complete and within budget, so a straight retry now
+// lands; `truncated` — the reveal was clipped (too many lines or too wide) so the
+// model must re-read; `budget` — the reveal was complete but the snapshot's
+// cumulative reveal-merge budget is spent, so re-read rather than piecewise-reveal.
+function unseenLinesMessage(input: {
+  readonly unseenCount: number;
+  readonly revealed: readonly RevealedLine[];
+  readonly outcome: "merged" | "truncated" | "budget";
+}): string {
+  const head =
+    input.outcome === "merged"
+      ? `${input.unseenCount} target line(s) were not shown by source_read. Revealed in full — retry the same edit to apply:`
+      : `${input.unseenCount} target line(s) were not shown by source_read. Re-read the target range with source_read before editing:`;
+  const tail =
+    input.outcome === "merged"
+      ? []
+      : input.outcome === "budget"
+        ? [
+            "reveal_budget_exhausted: too much of this snapshot revealed without a read; re-read the target range with source_read.",
+          ]
+        : ["reveal_truncated: re-read the target range with source_read before editing."];
+  return [head, ...input.revealed.map((entry) => `${entry.line}:${entry.text}`), ...tail].join(
+    "\n",
+  );
 }
 
 function normalizeReplacementLines(value: string): string[] {
@@ -436,31 +521,84 @@ function applyLineIntent(input: {
   readonly sessionId: string | undefined;
   readonly runtime: BrewvaBundledToolRuntime | undefined;
   readonly planId: string;
+  // Set when re-deriving mutations for a tape-attested prepared plan on apply. The
+  // seen-check is a prepare-time attention gate the tape's `prepared` status already
+  // records; re-running it against the non-persisted in-session reveal set would flip
+  // a cleanly-prepared plan to a contradictory `unseen_lines` conflict at apply.
+  readonly trustSeen?: boolean;
 }): {
   readonly after: string;
   readonly staleRecovered: boolean;
   readonly conflict?: SourcePatchConflict;
 } {
   const lines = splitLines(input.currentText);
-  if (
-    input.intent.kind !== "replace_anchor" &&
-    input.intent.kind !== "insert_before_anchor" &&
-    input.intent.kind !== "insert_after_anchor" &&
-    input.intent.kind !== "delete_anchor_range"
-  ) {
+  const intent = input.intent;
+  const span = intentLineSpan(intent);
+  if (!span) {
+    return {
+      after: input.currentText,
+      staleRecovered: false,
+      conflict: { uri: input.snapshot.uri, reason: "unsupported_line_intent" },
+    };
+  }
+  if (span.startLine < 1 || span.endLine > input.snapshot.lineCount) {
     return {
       after: input.currentText,
       staleRecovered: false,
       conflict: {
         uri: input.snapshot.uri,
-        reason: "unsupported_line_intent",
+        reason: "line_out_of_range",
+        message: `Lines ${span.startLine}-${span.endLine} fall outside the snapshot (${input.snapshot.lineCount} lines).`,
       },
     };
   }
-  const firstRef = "anchor" in input.intent ? input.intent.anchor : input.intent.startAnchor;
-  const first = resolveCurrentAnchor({
+
+  // Seen-check: every touched line must have been shown by the read that minted
+  // the snapshot. On a miss, reveal the unseen lines (a complete reveal merges so
+  // a straight retry lands) and reject this attempt. Skipped on replay of an
+  // already-prepared plan (see `trustSeen`).
+  if (!input.trustSeen) {
+    const seen = getSeenLineSet(input.snapshot);
+    const unseen: number[] = [];
+    for (let line = span.startLine; line <= span.endLine; line += 1) {
+      if (!seen.has(line)) {
+        unseen.push(line);
+      }
+    }
+    if (unseen.length > 0) {
+      const reveal = revealUnseenLines({ snapshot: input.snapshot, unseen });
+      // Cross-prepare anti-piecewise budget: a snapshot may absorb at most
+      // SEEN_LINE_REVEAL_CAP lines total via reveal-merge across every prepare.
+      // `seen` only ever grows here, and `snapshot.seenLines` is its dedup-free
+      // seed, so `seen.size - seenLines.length` is exactly how much has already
+      // been reveal-merged. Once the budget is spent the reveal stops merging, so
+      // the model cannot walk a wide blind region in <=cap slices — it must re-read.
+      const revealMergedSoFar = seen.size - input.snapshot.seenLines.length;
+      const withinBudget = revealMergedSoFar + unseen.length <= SEEN_LINE_REVEAL_CAP;
+      const merged = reveal.complete && withinBudget;
+      if (merged) {
+        // A complete, in-budget reveal covered every unseen line in full, so
+        // `unseen` is exactly the set to merge for a straight retry to land.
+        for (const line of unseen) {
+          seen.add(line);
+        }
+      }
+      const message = unseenLinesMessage({
+        unseenCount: unseen.length,
+        revealed: reveal.revealed,
+        outcome: merged ? "merged" : reveal.complete ? "budget" : "truncated",
+      });
+      return {
+        after: input.currentText,
+        staleRecovered: false,
+        conflict: { uri: input.snapshot.uri, reason: "unseen_lines", message },
+      };
+    }
+  }
+
+  const first = resolveCurrentLine({
     snapshot: input.snapshot,
-    anchorRef: firstRef,
+    line: span.startLine,
     currentLines: lines,
     sessionId: input.sessionId,
     runtime: input.runtime,
@@ -472,41 +610,26 @@ function applyLineIntent(input: {
       staleRecovered: first.staleRecovered,
       conflict: {
         uri: input.snapshot.uri,
-        reason: "anchor_not_found",
-        message: `Unable to resolve anchor ${firstRef}.`,
+        reason: "line_not_found",
+        message: `Unable to resolve line ${span.startLine}.`,
       },
     };
   }
 
-  if (input.intent.kind === "insert_before_anchor") {
+  if (intent.kind === "insert_before_line") {
     const nextLines = [...lines];
-    nextLines.splice(
-      first.anchor.line - 1,
-      0,
-      ...normalizeReplacementLines(input.intent.insertion),
-    );
+    nextLines.splice(first.anchor.line - 1, 0, ...normalizeReplacementLines(intent.insertion));
     return { after: joinLines(nextLines, input.currentText), staleRecovered: first.staleRecovered };
   }
-  if (input.intent.kind === "insert_after_anchor") {
+  if (intent.kind === "insert_after_line") {
     const nextLines = [...lines];
-    nextLines.splice(first.anchor.line, 0, ...normalizeReplacementLines(input.intent.insertion));
+    nextLines.splice(first.anchor.line, 0, ...normalizeReplacementLines(intent.insertion));
     return { after: joinLines(nextLines, input.currentText), staleRecovered: first.staleRecovered };
   }
 
-  if (!("startAnchor" in input.intent)) {
-    return {
-      after: input.currentText,
-      staleRecovered: false,
-      conflict: {
-        uri: input.snapshot.uri,
-        reason: "unsupported_line_intent",
-      },
-    };
-  }
-  const endRef = input.intent.endAnchor ?? input.intent.startAnchor;
-  const last = resolveCurrentAnchor({
+  const last = resolveCurrentLine({
     snapshot: input.snapshot,
-    anchorRef: endRef,
+    line: span.endLine,
     currentLines: lines,
     sessionId: input.sessionId,
     runtime: input.runtime,
@@ -518,8 +641,26 @@ function applyLineIntent(input: {
       staleRecovered: first.staleRecovered || last.staleRecovered,
       conflict: {
         uri: input.snapshot.uri,
-        reason: "anchor_not_found",
-        message: `Unable to resolve anchor ${endRef}.`,
+        reason: "line_not_found",
+        message: `Unable to resolve line ${span.endLine}.`,
+      },
+    };
+  }
+  // Fail closed when drift relocated the two endpoints to an inconsistent range:
+  // the recovered span must match the seen span the model authored. Splicing
+  // min..max of independently relocated endpoints would rewrite whatever current
+  // lines fall between them — an interior insertion or a reorder the seen-gate
+  // never vetted (the gate only proved the two endpoints' text). A whole-range
+  // shift (e.g. leading-line insertion) keeps the span, so legitimate recovery is
+  // untouched; only an inconsistent relocation trips this. Re-read rather than clobber.
+  if (last.anchor.line - first.anchor.line !== span.endLine - span.startLine) {
+    return {
+      after: input.currentText,
+      staleRecovered: first.staleRecovered || last.staleRecovered,
+      conflict: {
+        uri: input.snapshot.uri,
+        reason: "range_relocation_conflict",
+        message: `Lines ${span.startLine}-${span.endLine} no longer form a contiguous range after drift; re-read the target range with source_read before editing.`,
       },
     };
   }
@@ -527,9 +668,7 @@ function applyLineIntent(input: {
   const endLine = Math.max(first.anchor.line, last.anchor.line);
   const nextLines = [...lines];
   const replacement =
-    input.intent.kind === "replace_anchor"
-      ? normalizeReplacementLines(input.intent.replacement)
-      : [];
+    intent.kind === "replace_lines" ? normalizeReplacementLines(intent.replacement) : [];
   nextLines.splice(startLine - 1, endLine - startLine + 1, ...replacement);
   return {
     after: joinLines(nextLines, input.currentText),
@@ -715,6 +854,18 @@ function recordSnapshot(input: {
   });
 }
 
+// Cache the finalized snapshot in-process and record it to the tape. The cache is
+// set unconditionally (a session-less read still needs the snapshot resolvable by
+// prepare/apply); the tape record no-ops without a session.
+function commitSnapshot(input: {
+  readonly snapshot: SourceSnapshot;
+  readonly runtime: BrewvaBundledToolRuntime | undefined;
+  readonly sessionId: string | undefined;
+}): void {
+  SNAPSHOTS.set(input.snapshot.id, input.snapshot);
+  recordSnapshot(input);
+}
+
 function recordPlan(input: {
   readonly runtime: BrewvaBundledToolRuntime | undefined;
   readonly sessionId: string | undefined;
@@ -733,14 +884,12 @@ function recordPlan(input: {
 
 function isSourceLineAnchor(value: unknown): value is SourceLineAnchor {
   const record = asRecord(value);
-  return (
-    typeof record?.line === "number" &&
-    typeof record.token === "string" &&
-    typeof record.hash === "string" &&
-    typeof record.text === "string"
-  );
+  return typeof record?.line === "number" && typeof record.text === "string";
 }
 
+// Requiring `seenLines` is deliberate: a pre-cutover snapshot payload (no seen set)
+// fails this guard and is not rehydrated, so the model re-reads and re-mints a
+// new-format snapshot. The missing field is the clean-break fail-closed signal.
 function isSourceSnapshot(value: unknown): value is SourceSnapshot {
   const record = asRecord(value);
   return (
@@ -751,7 +900,9 @@ function isSourceSnapshot(value: unknown): value is SourceSnapshot {
     typeof record.createdAt === "number" &&
     typeof record.lineCount === "number" &&
     Array.isArray(record.anchors) &&
-    record.anchors.every(isSourceLineAnchor)
+    record.anchors.every(isSourceLineAnchor) &&
+    Array.isArray(record.seenLines) &&
+    record.seenLines.every((line) => typeof line === "number")
   );
 }
 
@@ -760,26 +911,26 @@ function isSourcePatchIntent(value: unknown): value is SourcePatchIntent {
   if (!record || typeof record.kind !== "string" || typeof record.uri !== "string") {
     return false;
   }
-  if (record.kind === "replace_anchor") {
+  if (record.kind === "replace_lines") {
     return (
       typeof record.snapshotId === "string" &&
-      typeof record.startAnchor === "string" &&
-      (record.endAnchor === undefined || typeof record.endAnchor === "string") &&
+      typeof record.startLine === "number" &&
+      (record.endLine === undefined || typeof record.endLine === "number") &&
       typeof record.replacement === "string"
     );
   }
-  if (record.kind === "insert_before_anchor" || record.kind === "insert_after_anchor") {
+  if (record.kind === "insert_before_line" || record.kind === "insert_after_line") {
     return (
       typeof record.snapshotId === "string" &&
-      typeof record.anchor === "string" &&
+      typeof record.line === "number" &&
       typeof record.insertion === "string"
     );
   }
-  if (record.kind === "delete_anchor_range") {
+  if (record.kind === "delete_lines") {
     return (
       typeof record.snapshotId === "string" &&
-      typeof record.startAnchor === "string" &&
-      (record.endAnchor === undefined || typeof record.endAnchor === "string")
+      typeof record.startLine === "number" &&
+      (record.endLine === undefined || typeof record.endLine === "number")
     );
   }
   if (record.kind === "create_file") {
@@ -882,6 +1033,9 @@ function findPlanInRuntimeEvents(input: {
   return undefined;
 }
 
+// Renders `NN:<text>` per line and returns the displayed line numbers as the
+// snapshot's seen set. The caller records the snapshot carrying these, so an edit
+// may only target a line this read actually printed.
 function formatSourceRead(input: {
   readonly filePath: string;
   readonly uri: string;
@@ -889,7 +1043,7 @@ function formatSourceRead(input: {
   readonly spans: readonly NormalizedSpan[];
   readonly mode: string;
   readonly summary?: readonly string[];
-}): string {
+}): { readonly text: string; readonly seenLines: number[] } {
   const output = [
     "[SourceRead]",
     `file: ${input.filePath}`,
@@ -901,9 +1055,9 @@ function formatSourceRead(input: {
   if (input.summary) {
     output.push("", "[Summary]", ...input.summary);
   }
-  let emitted = 0;
+  const seenLines: number[] = [];
   for (const span of input.spans) {
-    if (emitted >= MAX_SOURCE_READ_LINES) {
+    if (seenLines.length >= MAX_SOURCE_READ_LINES) {
       break;
     }
     const startLine = Math.max(1, span.startLine);
@@ -912,16 +1066,20 @@ function formatSourceRead(input: {
       continue;
     }
     output.push("", `[Span ${formatSpan(startLine, endLine)}]`);
-    for (let line = startLine; line <= endLine && emitted < MAX_SOURCE_READ_LINES; line += 1) {
+    for (
+      let line = startLine;
+      line <= endLine && seenLines.length < MAX_SOURCE_READ_LINES;
+      line += 1
+    ) {
       const anchor = input.snapshot.anchors[line - 1];
       if (!anchor) {
         continue;
       }
-      output.push(`${formatAnchor(anchor)}|${anchor.text}`);
-      emitted += 1;
+      output.push(`${anchor.line}:${anchor.text}`);
+      seenLines.push(anchor.line);
     }
   }
-  return output.join("\n");
+  return { text: output.join("\n"), seenLines };
 }
 
 async function buildSummary(filePath: string, workspaceRoot: string): Promise<string[]> {
@@ -955,7 +1113,7 @@ export function createSourceReadTool(options?: {
     name: "source_read",
     label: "Source Read",
     description:
-      "Read source resources with snapshot ids and hash-anchored editable lines. Use this before source_patch_prepare. Anchors look like L42@a1b2c3; copy them verbatim from source_read output.",
+      "Read source resources as line-numbered content (each line is NN:text) under a snapshot id. Use this before source_patch_prepare: edits reference lines by number, and only lines a source_read displayed can be edited.",
     parameters: Type.Object({
       uri: Type.String({
         minLength: 1,
@@ -1060,40 +1218,41 @@ export function createSourceReadTool(options?: {
       const uri = resourceUriForPath(scope, absolutePath);
       const source = readSourceTextCached(absolutePath);
       const sessionId = getToolSessionId(ctx);
-      const snapshot = recordSourceSnapshot({
+      // Build the snapshot, then render to learn which lines were displayed, then
+      // record the snapshot carrying that seen set — the read must know its own
+      // displayed lines before it commits the snapshot the seen-proof rests on.
+      const built = buildSnapshot({
         uri,
         path: absolutePath,
         sourceText: source.sourceText,
-        runtime,
-        sessionId,
       });
-      // Record the read so fff frecency learns which files this session touches.
-      noteFileAccess(scope.baseCwd, absolutePath);
       const mode = normalizeSourceReadMode(params.mode);
       const spans =
         mode === "raw"
-          ? [{ startLine: 1, endLine: snapshot.lineCount }]
+          ? [{ startLine: 1, endLine: built.lineCount }]
           : normalizeSpans(params.spans);
       const summary =
         mode === "summary" ? await buildSummary(absolutePath, scope.baseCwd) : undefined;
-      return okTextResult(
-        formatSourceRead({
-          filePath: absolutePath,
-          uri,
-          snapshot,
-          spans,
-          mode,
-          summary,
-        }),
-        {
-          status: "ok",
-          resourceUri: uri,
-          filePath: absolutePath,
-          snapshot,
-          mode,
-          sourceCacheHit: source.cacheHit,
-        } satisfies SourceReadToolDetails,
-      );
+      const rendered = formatSourceRead({
+        filePath: absolutePath,
+        uri,
+        snapshot: built,
+        spans,
+        mode,
+        summary,
+      });
+      const snapshot: SourceSnapshot = { ...built, seenLines: rendered.seenLines };
+      commitSnapshot({ snapshot, runtime, sessionId });
+      // Record the read so fff frecency learns which files this session touches.
+      noteFileAccess(scope.baseCwd, absolutePath);
+      return okTextResult(rendered.text, {
+        status: "ok",
+        resourceUri: uri,
+        filePath: absolutePath,
+        snapshot,
+        mode,
+        sourceCacheHit: source.cacheHit,
+      } satisfies SourceReadToolDetails);
     },
   });
 }
@@ -1107,6 +1266,9 @@ function preparePlan(input: {
   readonly metadata?: Record<string, unknown>;
   readonly planId?: string;
   readonly createdAt?: number;
+  // Propagated to the seen-check: true only when replaying a tape-attested prepared
+  // plan on apply, never on a fresh prepare.
+  readonly trustSeen?: boolean;
 }): StoredSourcePatchPlan {
   const planId = input.planId ?? createId("plan", sha256(JSON.stringify(input.edits)));
   const conflicts: SourcePatchConflict[] = [];
@@ -1151,10 +1313,10 @@ function preparePlan(input: {
     }
 
     if (
-      intent.kind === "replace_anchor" ||
-      intent.kind === "insert_before_anchor" ||
-      intent.kind === "insert_after_anchor" ||
-      intent.kind === "delete_anchor_range"
+      intent.kind === "replace_lines" ||
+      intent.kind === "insert_before_line" ||
+      intent.kind === "insert_after_line" ||
+      intent.kind === "delete_lines"
     ) {
       let snapshot = SNAPSHOTS.get(intent.snapshotId);
       if (!snapshot) {
@@ -1182,6 +1344,7 @@ function preparePlan(input: {
         sessionId: input.sessionId,
         runtime: input.runtime,
         planId,
+        trustSeen: input.trustSeen,
       });
       staleRecovered = staleRecovered || applied.staleRecovered;
       if (applied.conflict) {
@@ -1355,41 +1518,41 @@ function normalizeIntent(raw: unknown): SourcePatchIntent | null {
   if (!uri) {
     return null;
   }
-  if (kind === "replace_anchor") {
+  if (kind === "replace_lines") {
     return typeof record.snapshot_id === "string" &&
-      typeof record.start_anchor === "string" &&
+      typeof record.start_line === "number" &&
       typeof record.replacement === "string"
       ? {
           kind,
           uri,
           snapshotId: record.snapshot_id,
-          startAnchor: record.start_anchor,
-          endAnchor: typeof record.end_anchor === "string" ? record.end_anchor : undefined,
+          startLine: record.start_line,
+          endLine: typeof record.end_line === "number" ? record.end_line : undefined,
           replacement: record.replacement,
         }
       : null;
   }
-  if (kind === "insert_before_anchor" || kind === "insert_after_anchor") {
+  if (kind === "insert_before_line" || kind === "insert_after_line") {
     return typeof record.snapshot_id === "string" &&
-      typeof record.anchor === "string" &&
+      typeof record.line === "number" &&
       typeof record.insertion === "string"
       ? {
           kind,
           uri,
           snapshotId: record.snapshot_id,
-          anchor: record.anchor,
+          line: record.line,
           insertion: record.insertion,
         }
       : null;
   }
-  if (kind === "delete_anchor_range") {
-    return typeof record.snapshot_id === "string" && typeof record.start_anchor === "string"
+  if (kind === "delete_lines") {
+    return typeof record.snapshot_id === "string" && typeof record.start_line === "number"
       ? {
           kind,
           uri,
           snapshotId: record.snapshot_id,
-          startAnchor: record.start_anchor,
-          endAnchor: typeof record.end_anchor === "string" ? record.end_anchor : undefined,
+          startLine: record.start_line,
+          endLine: typeof record.end_line === "number" ? record.end_line : undefined,
         }
       : null;
   }
@@ -1449,6 +1612,10 @@ function replayStoredSourcePatchPlan(input: {
     metadata: input.plan.metadata,
     planId: input.plan.id,
     createdAt: input.plan.createdAt,
+    // The plan already passed the seen-gate at prepare time (its persisted status is
+    // `prepared`); the reveal-merge set is not durable, so re-gating on replay would
+    // wrongly reject. File-state re-checks (drift, generated, conflict) still run.
+    trustSeen: true,
   });
 }
 
@@ -1683,7 +1850,7 @@ export function createSourcePatchTools(options?: {
     name: "source_patch_prepare",
     label: "Source Patch Prepare",
     description:
-      "Prepare a multi-file source patch from hash-anchored edit intents. This never mutates files. Anchors look like L42@a1b2c3; copy them verbatim from source_read output.",
+      "Prepare a multi-file source patch from line-numbered edit intents (never mutates files). Each edit is a record {kind, uri, snapshot_id, ...}: replace_lines {start_line, end_line?, replacement} | insert_before_line or insert_after_line {line, insertion} | delete_lines {start_line, end_line?} | create_file {content} | delete_file | rename_file {new_uri}. Line numbers come from source_read; only displayed lines are editable.",
     parameters: Type.Object({
       edits: Type.Array(Type.Record(Type.String(), Type.Unknown()), { minItems: 1, maxItems: 100 }),
     }),
@@ -1729,7 +1896,7 @@ export function createSourcePatchTools(options?: {
     name: "source_patch_apply",
     label: "Source Patch Apply",
     description:
-      "Apply a prepared source patch plan after rechecking current file hashes. This is the only source mutation gate.",
+      "Apply a prepared source patch plan after re-checking current file contents. This is the only source mutation gate.",
     parameters: Type.Object({
       plan_id: Type.String({ minLength: 1 }),
     }),

@@ -22,7 +22,6 @@ import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "../../contracts/index.js";
 import {
   applyStoredSourcePatchPlan,
-  formatSourceAnchor,
   prepareAndStoreSourcePatchPlan,
   recordSourceSnapshot,
   toSourceFileResourceUri,
@@ -228,11 +227,11 @@ function fullFileReplaceIntent(input: {
     return { error: "snapshot_empty", path: input.change.path };
   }
   return {
-    kind: "replace_anchor",
+    kind: "replace_lines",
     uri: snapshot.uri,
     snapshotId: snapshot.id,
-    startAnchor: formatSourceAnchor(first),
-    endAnchor: formatSourceAnchor(last),
+    startLine: first.line,
+    endLine: last.line,
     replacement: input.content,
   };
 }

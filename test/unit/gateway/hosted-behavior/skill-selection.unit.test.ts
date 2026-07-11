@@ -741,7 +741,7 @@ describe("skill catalog layer and widened signals", () => {
       payload: {
         call: {
           toolName: "source_patch_prepare",
-          args: { edits: [{ kind: "replace_anchor", uri: "packages/core/index.ts" }] },
+          args: { edits: [{ kind: "replace_lines", uri: "packages/core/index.ts" }] },
         },
         result: { outcome: { kind: "ok" } },
       },
