@@ -4,6 +4,7 @@ import type { OperationalClaim } from "@brewva/brewva-vocabulary/iteration";
 import type { TurnEnvelope } from "@brewva/brewva-vocabulary/wire";
 import { buildTurnEnvelope } from "../../protocol/api.js";
 import type {
+  ScheduleIntentIdentity,
   SchedulePromptAnchor,
   SchedulePromptTrigger,
   SendPromptTrigger,
@@ -76,6 +77,21 @@ function readSchedulePromptAnchor(value: unknown): SchedulePromptAnchor | null |
   };
 }
 
+function readScheduleIntentIdentity(value: unknown): ScheduleIntentIdentity | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  const intentId = readStringField(value, "intentId");
+  const parentSessionId = readStringField(value, "parentSessionId");
+  if (!intentId || !parentSessionId) {
+    return undefined;
+  }
+  // `origin` is a closed literal; accept only the known provenance stamp, so a
+  // malformed WAL record can never smuggle an unexpected origin into replay.
+  const origin = value.origin === "config_policy" ? "config_policy" : undefined;
+  return { intentId, parentSessionId, ...(origin ? { origin } : {}) };
+}
+
 function mapPromptSourceToChannel(source: "gateway" | "heartbeat" | "schedule"): string {
   if (source === "heartbeat") {
     return "heartbeat";
@@ -137,6 +153,7 @@ export function extractTriggerFromEnvelope(envelope: TurnEnvelope): SendPromptTr
   const trigger: SchedulePromptTrigger = {
     kind: "schedule",
     continuityMode,
+    intent: readScheduleIntentIdentity(raw.intent),
     taskSpec: readTaskSpecField(raw, "taskSpec"),
     claims: readOperationalClaimsField(raw, "claims"),
     parentAnchor: readSchedulePromptAnchor(raw.parentAnchor),

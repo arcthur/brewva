@@ -8,7 +8,7 @@
 // Usage: bun run analyze:promotion-readiness [-- --run]
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { isAllowedGateCommand, listActiveNotePromotionReadiness } from "./promotion-gates.js";
+import { listActiveNotePromotionReadiness } from "./promotion-gates.js";
 
 const { values: args } = parseArgs({
   args: Bun.argv.slice(2),
@@ -36,16 +36,20 @@ for (const note of notes) {
   console.log(`  prose criteria: ${note.proseCriteria}  declared gates: ${note.gates.length}`);
   for (const gate of note.gates) {
     gateTotal += 1;
-    if (!isAllowedGateCommand(gate.command)) {
+    // `argv` is null when the gate string is not a shell-free `bun test`/`bun run`
+    // invocation. RFC markdown is data: an unsafe gate is reported, never run.
+    if (gate.argv === null) {
       gateFailures += 1;
-      console.log(`    ✗ (malformed prefix) ${gate.command}`);
+      console.log(`    ✗ (rejected: not a shell-free bun test/run command) ${gate.command}`);
       continue;
     }
     if (!args.run) {
       console.log(`    · ${gate.command}`);
       continue;
     }
-    const result = Bun.spawnSync(["bash", "-c", gate.command], {
+    // Spawn the validated argv directly — no shell, so a gate string can never
+    // expand into more than the words the note literally declared.
+    const result = Bun.spawnSync([...gate.argv], {
       cwd: repoRoot,
       stdout: "pipe",
       stderr: "pipe",

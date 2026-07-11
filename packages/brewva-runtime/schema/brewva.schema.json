@@ -410,7 +410,7 @@
               "additionalProperties": false,
               "properties": {
                 "approvalMode": {
-                  "description": "Approval posture for the config-authored self-improve schedule's worker sessions. \"suspend\" (default, fail-closed) keeps the interactive approval hop; \"auto_within_envelope\" lets the scheduled worker auto-approve its own effectful tools inside its governed effect boundary — the human authoring this config IS the authorization (the permission layer stays outside the loop). Model-minted schedule intents can never receive this envelope: the daemon derives it from config identity, not from intent records.",
+                  "description": "Approval posture for the config-authored self-improve schedule's worker sessions. \"auto_within_envelope\" (the shipped default for this lane) lets the scheduled worker auto-approve its own effectful tools inside its governed effect boundary — the human authoring this config IS the authorization (the permission layer stays outside the loop). \"suspend\" keeps the interactive approval hop; set it to opt out. An unrecognized value fails CLOSED to \"suspend\" during normalization. Model-minted schedule intents can never receive this envelope: the daemon derives it from config identity plus an unforgeable policy-origin stamp, never from intent records.",
                   "type": "string",
                   "enum": ["suspend", "auto_within_envelope"]
                 },

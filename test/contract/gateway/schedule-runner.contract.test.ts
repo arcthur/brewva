@@ -293,9 +293,16 @@ describe("gateway contract: schedule runner", () => {
       });
 
       expect(result.workerSessionId).toBe("schedule:intent-1:1");
+      // The intent IDENTITY travels even in fresh mode (it drives WAL-replay
+      // re-resolution of the approval envelope) — it is routing identity, not the
+      // inherited parent task/claim/anchor state this test guards against.
       expect(sentPrompt?.options?.trigger).toEqual({
         kind: "schedule",
         continuityMode: "fresh",
+        intent: {
+          intentId: "intent-1",
+          parentSessionId: "parent-session",
+        },
       });
       expect(sentPrompt?.prompt).toContain("[Schedule Wakeup]");
       expect(sentPrompt?.prompt).toContain("reason: nightly follow-up");

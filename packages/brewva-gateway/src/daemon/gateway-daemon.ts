@@ -519,6 +519,14 @@ export class GatewayDaemon {
               config: runtimeConfig.infrastructure.recoveryWal,
             }
           : undefined,
+        // A recovered schedule turn re-resolves its approval envelope from the
+        // SAME config identity + provenance gate as a live run. Binding the
+        // resolver here keeps the supervisor policy-agnostic.
+        resolveScheduleApprovalModeOnReplay: (intent) =>
+          resolveScheduleApprovalMode({
+            intent,
+            selfImprovePolicy: runtimeConfig.schedule.selfImprove,
+          }),
         recoveryWalCompactIntervalMs: Math.max(
           30_000,
           Math.floor(runtimeConfig.infrastructure.recoveryWal.compactAfterMs / 2),
@@ -733,6 +741,10 @@ export class GatewayDaemon {
   }): boolean {
     return (
       input.intent.status === "active" &&
+      // A pre-provenance intent (older tape, no origin stamp) is NOT current: it
+      // must flow through the update path to acquire the stamp, or the approval
+      // resolver would deny its envelope forever after an upgrade.
+      input.intent.origin === "config_policy" &&
       input.intent.reason === input.policy.reason &&
       input.intent.goalRef === input.policy.goalRef &&
       input.intent.continuityMode === input.policy.continuityMode &&
@@ -790,6 +802,10 @@ export class GatewayDaemon {
       const created = this.scheduler.createIntent({
         parentSessionId: policyParentSessionId,
         intentId: policyIntentId,
+        // Unforgeable provenance: only this reconcile path stamps the config
+        // origin. The approval resolver requires it, so a model-minted intent
+        // that collides on intentId can never inherit the envelope.
+        origin: "config_policy",
         reason: policy.reason,
         goalRef: policy.goalRef,
         continuityMode: policy.continuityMode,
@@ -811,6 +827,9 @@ export class GatewayDaemon {
       {
         parentSessionId: policyParentSessionId,
         intentId: policyIntentId,
+        // Re-stamp on every reconcile so the provenance survives even if a prior
+        // record (e.g. an older tape) lacked it.
+        origin: "config_policy",
         reason: policy.reason,
         goalRef: policy.goalRef,
         continuityMode: policy.continuityMode,

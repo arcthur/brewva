@@ -7,6 +7,26 @@ export function normalizeOptionalString(value: unknown): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
+/**
+ * The config-authored self-improve lane is daemon-owned and carries the approval
+ * envelope. Every model-facing schedule tool (`schedule_intent`, `follow_up`)
+ * must refuse to mint, mutate, or cancel that reserved identity: the scheduler
+ * folds every session's intents into one global map keyed by intentId, so a
+ * colliding intentId — or acting AS the policy parent session — could perturb the
+ * very record the approval resolver reads. This is the ingress half of
+ * provenance-based authorization; the daemon-only origin stamp is the second.
+ */
+export function touchesReservedScheduleIdentity(input: {
+  selfImprove: { readonly intentId: string; readonly parentSessionId: string };
+  sessionId: string;
+  intentId: string | undefined;
+}): boolean {
+  return (
+    input.sessionId === input.selfImprove.parentSessionId ||
+    (input.intentId !== undefined && input.intentId === input.selfImprove.intentId)
+  );
+}
+
 export function formatIntentSummary(intent: ScheduleIntentProjectionRecord): string {
   const nextRunAtIso = typeof intent.nextRunAt === "number" ? formatISO(intent.nextRunAt) : "none";
   return [

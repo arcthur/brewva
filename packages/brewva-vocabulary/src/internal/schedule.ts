@@ -22,6 +22,23 @@ export type ScheduleIntentStatus = string;
 
 export type ScheduleIntentEventKind = string;
 
+/**
+ * Unforgeable provenance stamp. Only the gateway daemon's reconcile path writes
+ * `"config_policy"` (onto the config-authored self-improve intent). Model-facing
+ * schedule tools never carry it, so the approval envelope can be authorized from
+ * provenance rather than from a mutable, model-reachable (parentSessionId,
+ * intentId) name-tuple.
+ */
+export type ScheduleIntentOrigin = "config_policy";
+
+/**
+ * Approval posture for a scheduled worker's effectful tools. "suspend" keeps the
+ * interactive approval hop; "auto_within_envelope" lets the config-authored
+ * self-improve lane auto-approve within its governed effect boundary. Single
+ * source of truth shared by the config type, the daemon, and the edge worker.
+ */
+export type ScheduleApprovalMode = "suspend" | "auto_within_envelope";
+
 export interface ScheduleIntentEventPayload extends ProtocolRecord {
   readonly kind?: ScheduleIntentEventKind;
   readonly intentId?: string;
@@ -33,6 +50,8 @@ export interface ScheduleIntentProjectionRecord extends ProtocolRecord {
   readonly status: ScheduleIntentStatus;
   readonly reason: string;
   readonly parentSessionId: string;
+  /** Provenance stamp; only the daemon reconcile writes "config_policy". */
+  readonly origin?: ScheduleIntentOrigin;
   readonly goalRef?: string;
   readonly continuityMode: ScheduleContinuityMode;
   readonly runAt?: number;

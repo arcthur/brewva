@@ -17,6 +17,7 @@ import {
   formatIntentSummary,
   normalizeOptionalString,
   resolveScheduleTarget,
+  touchesReservedScheduleIdentity,
 } from "./schedule-shared.js";
 
 const FOLLOW_UP_ACTION_VALUES = ["create", "cancel", "list"] as const;
@@ -115,6 +116,23 @@ export function createFollowUpTool(options: BrewvaToolOptions): ToolDefinition {
           return errTextResult("Follow-up rejected (scheduler_disabled).", {
             ok: false,
             error: "scheduler_disabled",
+          });
+        }
+
+        // Follow-ups mint schedule intents with a model-suppliable intentId, so
+        // they share the reserved-identity guard with `schedule_intent`: neither
+        // may touch the daemon-owned self-improve lane.
+        if (
+          params.action !== "list" &&
+          touchesReservedScheduleIdentity({
+            selfImprove: runtime.config.schedule.selfImprove,
+            sessionId,
+            intentId: normalizeOptionalString(params.intentId),
+          })
+        ) {
+          return errTextResult("Follow-up rejected (reserved_config_identity).", {
+            ok: false,
+            error: "reserved_config_identity",
           });
         }
 

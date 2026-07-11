@@ -1,7 +1,11 @@
 import type { BrewvaSteerOutcome } from "@brewva/brewva-substrate/session";
 import type { ContextStatusView } from "@brewva/brewva-vocabulary/context";
 import type { OperationalClaim } from "@brewva/brewva-vocabulary/iteration";
-import type { ScheduleContinuityMode } from "@brewva/brewva-vocabulary/schedule";
+import type {
+  ScheduleApprovalMode,
+  ScheduleContinuityMode,
+  ScheduleIntentOrigin,
+} from "@brewva/brewva-vocabulary/schedule";
 import type { ManagedToolMode, SessionLifecycleSnapshot } from "@brewva/brewva-vocabulary/session";
 import type { TaskSpec } from "@brewva/brewva-vocabulary/task";
 import type { SessionWireFrame, ToolOutputView } from "@brewva/brewva-vocabulary/wire";
@@ -29,9 +33,22 @@ export interface SchedulePromptAnchor {
   nextSteps?: string;
 }
 
+/**
+ * The identity of the schedule intent that drove this turn, persisted with the
+ * turn envelope so a crash-recovery replay can re-resolve the approval envelope
+ * from CURRENT config (never a stale, persisted raw grant). `origin` is the
+ * daemon-only provenance stamp the approval resolver requires.
+ */
+export interface ScheduleIntentIdentity {
+  intentId: string;
+  parentSessionId: string;
+  origin?: ScheduleIntentOrigin;
+}
+
 export interface SchedulePromptTrigger {
   kind: "schedule";
   continuityMode: ScheduleContinuityMode;
+  intent?: ScheduleIntentIdentity;
   taskSpec?: TaskSpec | null;
   claims?: OperationalClaim[];
   parentAnchor?: SchedulePromptAnchor | null;
@@ -54,7 +71,7 @@ export interface SessionWorkerInfo {
   ready: boolean;
 }
 
-export type ScheduleApprovalMode = "suspend" | "auto_within_envelope";
+export type { ScheduleApprovalMode };
 
 export interface SendPromptOptions {
   turnId?: string;

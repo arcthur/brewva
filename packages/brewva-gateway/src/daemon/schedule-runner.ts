@@ -20,6 +20,7 @@ import {
 } from "../hosted/api.js";
 import type {
   ScheduleApprovalMode,
+  ScheduleIntentIdentity,
   SchedulePromptAnchor,
   SchedulePromptTrigger,
   SessionBackend,
@@ -46,16 +47,20 @@ function hasScheduleContinuationAnchorMetadata(
 }
 
 /**
- * The approval envelope for a scheduled run is derived from CONFIG IDENTITY,
- * never from the intent record: only the config-authored self-improve intent
- * (matching intentId AND parentSessionId) with the config explicitly set to
- * `auto_within_envelope` gets it. Intents minted by model-facing tools
- * (`schedule_intent`, `follow_up`) always resolve to "suspend" regardless of
- * any fields their WAL records carry — a model must never be able to schedule
- * itself a future auto-approved session (fail-closed, axiom 4: govern effects).
+ * The approval envelope for a scheduled run is authorized from PROVENANCE, never
+ * from a model-reachable name-tuple. Three conditions must all hold: the config
+ * explicitly opts the lane into `auto_within_envelope`; the fired intent carries
+ * the unforgeable `origin: "config_policy"` stamp that only the daemon reconcile
+ * writes; and its identity matches the config-authored intent. The origin stamp
+ * is load-bearing: the scheduler folds every session's `schedule.intent` events
+ * into one global map keyed by intentId, so a model that mints a colliding
+ * intentId could otherwise perturb the record the resolver reads. Model-minted
+ * intents never carry the stamp (and the `schedule_intent` tool refuses the
+ * reserved config identity outright), so they always resolve to "suspend"
+ * (fail-closed, axiom 4: govern effects).
  */
 export function resolveScheduleApprovalMode(input: {
-  intent: Pick<ScheduleIntentProjectionRecord, "intentId" | "parentSessionId">;
+  intent: Pick<ScheduleIntentProjectionRecord, "intentId" | "parentSessionId" | "origin">;
   selfImprovePolicy: {
     readonly enabled: boolean;
     readonly approvalMode: ScheduleApprovalMode;
@@ -66,6 +71,7 @@ export function resolveScheduleApprovalMode(input: {
   const policy = input.selfImprovePolicy;
   if (!policy.enabled) return "suspend";
   if (policy.approvalMode !== "auto_within_envelope") return "suspend";
+  if (input.intent.origin !== "config_policy") return "suspend";
   if (input.intent.intentId !== policy.intentId) return "suspend";
   if (input.intent.parentSessionId !== policy.parentSessionId) return "suspend";
   return "auto_within_envelope";
@@ -103,17 +109,28 @@ export function collectScheduleContinuationSnapshot(
 export function buildSchedulePromptTrigger(input: {
   continuityMode: ScheduleContinuityMode;
   snapshot: ScheduleContinuationSnapshot;
+  intent: Pick<ScheduleIntentProjectionRecord, "intentId" | "parentSessionId" | "origin">;
 }): SchedulePromptTrigger {
+  // The intent identity travels with every schedule turn (both continuity
+  // modes) so a WAL replay can re-resolve the approval envelope from current
+  // config. `origin` is carried verbatim — only the daemon ever stamps it.
+  const intent: ScheduleIntentIdentity = {
+    intentId: input.intent.intentId,
+    parentSessionId: input.intent.parentSessionId,
+    ...(input.intent.origin ? { origin: input.intent.origin } : {}),
+  };
   if (input.continuityMode !== "inherit") {
     return {
       kind: "schedule",
       continuityMode: input.continuityMode,
+      intent,
     };
   }
 
   return {
     kind: "schedule",
     continuityMode: input.continuityMode,
+    intent,
     taskSpec: input.snapshot.taskSpec,
     claims: input.snapshot.claims,
     parentAnchor: input.snapshot.parentAnchor,
@@ -179,6 +196,7 @@ export async function executeScheduleIntentRun(input: {
   const trigger = buildSchedulePromptTrigger({
     continuityMode: input.intent.continuityMode,
     snapshot,
+    intent: input.intent,
   });
 
   recordRuntimeScheduleWakeup(input.runtime, agentSessionId, {

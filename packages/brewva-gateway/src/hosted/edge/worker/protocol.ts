@@ -1,3 +1,4 @@
+import type { ScheduleApprovalMode } from "@brewva/brewva-vocabulary/schedule";
 import type { ManagedToolMode, SessionLifecycleSnapshot } from "@brewva/brewva-vocabulary/session";
 import type { SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
 import type { SendPromptTrigger } from "../../../daemon/api.js";
@@ -27,7 +28,7 @@ export type ParentToWorkerMessage =
         walReplayId?: string;
         trigger?: SendPromptTrigger;
         source?: "gateway" | "heartbeat" | "schedule";
-        approvalMode?: "suspend" | "auto_within_envelope";
+        approvalMode?: ScheduleApprovalMode;
       };
     }
   | {

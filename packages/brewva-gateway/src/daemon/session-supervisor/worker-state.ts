@@ -11,6 +11,7 @@ import type { ChildRegistryEntry } from "../../ingress/api.js";
 import type { StructuredLogger } from "../logger.js";
 import type { RecoveryWalStore } from "../recovery.js";
 import type {
+  ScheduleApprovalMode,
   SendPromptOutput,
   SendPromptResult,
   SendPromptTrigger,
@@ -32,7 +33,7 @@ export interface QueuedTurn {
   source: "gateway" | "heartbeat" | "schedule";
   walReplayId?: string;
   trigger?: SendPromptTrigger;
-  approvalMode?: "suspend" | "auto_within_envelope";
+  approvalMode?: ScheduleApprovalMode;
   waitForCompletion: boolean;
   walId?: BrewvaWalId;
   resolve: (result: SendPromptResult) => void;

@@ -26,6 +26,7 @@ import type {
   BrewvaRegisteredModel,
 } from "@brewva/brewva-substrate/provider";
 import type { ContextStatusView } from "@brewva/brewva-vocabulary/context";
+import type { ScheduleApprovalMode } from "@brewva/brewva-vocabulary/schedule";
 import type { SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
 import { resumeDelegatedApprovalsWithinEnvelope } from "../../../delegation/api.js";
 import { recordSessionShutdownIfMissing } from "../../../utils/runtime.js";
@@ -46,6 +47,7 @@ import { runHostedTurnEnvelope } from "../../internal/turn/turn-envelope.js";
 import { resolveWorkerSessionShutdownReceipt } from "../shutdown-receipts.js";
 import type { ParentToWorkerMessage, WorkerToParentMessage } from "./protocol.js";
 import { createSessionWireRelayGate } from "./relay-gate.js";
+import { buildTerminalTurnFailedFrame } from "./terminal-frame.js";
 import { resolveWorkerTestHarness, type ResolvedWorkerTestHarness } from "./test-harness.js";
 
 const BRIDGE_TIMEOUT_MS = 15_000;
@@ -237,6 +239,18 @@ function sendSessionWireFrame(sessionId: string, frame: SessionWireFrame): void 
       frame,
     },
   });
+}
+
+function sendTerminalTurnFailedFrame(
+  sessionId: string,
+  turnId: string,
+  failureReason: string,
+  attemptId: string,
+): void {
+  sendSessionWireFrame(
+    sessionId,
+    buildTerminalTurnFailedFrame({ sessionId, turnId, failureReason, attemptId }),
+  );
 }
 
 function projectSessionContextStatus(sessionId: string): ContextStatusView | undefined {
@@ -524,7 +538,7 @@ async function runTurn(input: {
   walReplayId?: string;
   trigger?: Extract<ParentToWorkerMessage, { kind: "send" }>["payload"]["trigger"];
   source?: "gateway" | "heartbeat" | "schedule";
-  approvalMode?: "suspend" | "auto_within_envelope";
+  approvalMode?: ScheduleApprovalMode;
 }): Promise<void> {
   if (!sessionResult) {
     activeTurnId = null;
@@ -556,7 +570,7 @@ async function runTurn(input: {
     // auto-approval stays auditable. The daemon only ever sets this mode for
     // the config-identity intent — model-minted intents cannot reach it.
     if (input.source === "schedule" && input.approvalMode === "auto_within_envelope") {
-      await resumeDelegatedApprovalsWithinEnvelope({
+      const resumeOutput = await resumeDelegatedApprovalsWithinEnvelope({
         initial: output,
         sessionId: input.agentSessionId,
         listPendingApprovals: (sessionId) =>
@@ -586,6 +600,27 @@ async function runTurn(input: {
             },
           }),
       });
+      // The envelope converges to a terminal `runHostedTurnEnvelope` result on
+      // its happy path, which already emitted a `turn.committed` frame. But it
+      // can also give up while still suspended — the resume cap tripped, or a
+      // suspension reported no pending approval to accept — and then NO terminal
+      // frame was ever projected. Synthesize one so the supervisor's pending
+      // send resolves instead of hanging until its timeout.
+      if (resumeOutput.status !== "completed" && resumeOutput.status !== "failed") {
+        log("warn", "schedule approval envelope did not converge", {
+          agentSessionId: input.agentSessionId,
+          turnId: input.turnId,
+          status: resumeOutput.status,
+        });
+        sendTerminalTurnFailedFrame(
+          requestedSessionId,
+          input.turnId,
+          `schedule_envelope_${resumeOutput.status}`,
+          // A non-terminal (suspended) result carries no attemptId; match the
+          // fallback runHostedTurnEnvelope uses for its own failure receipts.
+          "runtime-turn",
+        );
+      }
     }
   } catch (error) {
     log("error", "worker turn envelope failed", {
@@ -594,6 +629,19 @@ async function runTurn(input: {
       turnId: input.turnId,
       error: error instanceof Error ? error.message : String(error),
     });
+    // A throw inside the schedule approval envelope (a decide() or resume error)
+    // must not vanish into a log line: the runtime never reached `turn.ended`, so
+    // without a terminal frame the schedule runner waits out its timeout. Emit
+    // the failure the supervisor resolves on. (Non-schedule turns terminate
+    // through `runHostedTurnEnvelope`'s own internal failure receipt.)
+    if (input.source === "schedule" && input.approvalMode === "auto_within_envelope") {
+      sendTerminalTurnFailedFrame(
+        requestedSessionId,
+        input.turnId,
+        "schedule_envelope_error",
+        "runtime-turn",
+      );
+    }
   } finally {
     if (pendingUserCancellationTurnId === input.turnId) {
       pendingUserCancellationTurnId = null;

@@ -29,6 +29,7 @@ import {
   normalizeOptionalString,
   resolveSchedulePatch,
   resolveScheduleTarget,
+  touchesReservedScheduleIdentity,
 } from "./schedule-shared.js";
 
 const SCHEDULE_ACTION_VALUES = ["create", "update", "cancel", "list"] as const;
@@ -210,6 +211,22 @@ export function createScheduleIntentTool(options: BrewvaToolOptions): ToolDefini
           return errTextResult("Schedule intent rejected (scheduler_disabled).", {
             ok: false,
             error: "scheduler_disabled",
+          });
+        }
+
+        // Reserve the daemon-owned self-improve lane from every mutating action;
+        // see touchesReservedScheduleIdentity for why.
+        if (
+          params.action !== "list" &&
+          touchesReservedScheduleIdentity({
+            selfImprove: runtime.config.schedule.selfImprove,
+            sessionId,
+            intentId: normalizeOptionalString(params.intentId),
+          })
+        ) {
+          return errTextResult("Schedule intent rejected (reserved_config_identity).", {
+            ok: false,
+            error: "reserved_config_identity",
           });
         }
 

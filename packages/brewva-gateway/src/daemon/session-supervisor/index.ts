@@ -48,6 +48,8 @@ import { createRecoveryWalRecovery, type RecoveryWalStore } from "../recovery.js
 import {
   type OpenSessionInput,
   type OpenSessionResult,
+  type ScheduleApprovalMode,
+  type ScheduleIntentIdentity,
   type SendPromptOptions,
   type SendPromptResult,
   type SessionBackend,
@@ -307,6 +309,13 @@ export interface SessionSupervisorOptions {
     workspaceRoot: string;
     config: BrewvaConfig["infrastructure"]["recoveryWal"];
   };
+  /**
+   * Re-resolve the approval envelope for a recovered schedule turn from CURRENT
+   * config. The supervisor stays policy-agnostic: the daemon binds this to
+   * `resolveScheduleApprovalMode(..., selfImprovePolicy)`. Absent (or returning
+   * "suspend"), a recovered scheduled turn keeps the interactive approval hop.
+   */
+  resolveScheduleApprovalModeOnReplay?: (intent: ScheduleIntentIdentity) => ScheduleApprovalMode;
   recoveryWalCompactIntervalMs?: number;
   onWorkerEvent?: (event: Extract<WorkerToParentMessage, { kind: "event" }>) => void;
 }
@@ -1193,6 +1202,17 @@ export class SessionSupervisor implements SessionBackend {
       return;
     }
 
+    // Re-resolve the approval envelope from CURRENT config rather than trusting a
+    // persisted grant: the WAL carries the intent IDENTITY (with its unforgeable
+    // origin), and the daemon-bound resolver decides afresh. If config has since
+    // disabled the envelope, the recovered turn correctly falls back to suspend;
+    // if it still authorizes, the unattended run resumes headless instead of
+    // hanging on an approval no scheduled worker can answer.
+    const approvalMode =
+      source === "schedule" && trigger?.intent
+        ? this.options.resolveScheduleApprovalModeOnReplay?.(trigger.intent)
+        : undefined;
+
     await this.openSession({ sessionId });
     await this.sendPrompt(sessionId, prompt, {
       turnId: record.turnId,
@@ -1200,6 +1220,7 @@ export class SessionSupervisor implements SessionBackend {
       walReplayId: record.walId,
       waitForCompletion: false,
       trigger,
+      ...(approvalMode ? { approvalMode } : {}),
     });
   }
 
