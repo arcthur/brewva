@@ -2,9 +2,12 @@ import process from "node:process";
 import { runEdgeOperation } from "@brewva/brewva-effect";
 import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
 import {
+  buildUnattendedApprovalDecider,
   createProviderConnectionPort,
   createProviderConnectionSeams,
+  resumeApprovalsWithinEnvelope,
   runHostedPromptTurn,
+  unattendedApprovalPolicyIsActive,
 } from "@brewva/brewva-gateway/hosted";
 import type { HostedRuntimeAdapterPort } from "@brewva/brewva-gateway/hosted";
 import { isRecord } from "@brewva/brewva-std/unknown";
@@ -21,11 +24,23 @@ import {
   readMessageRole,
   readMessageStopReason,
 } from "../io/message-content.js";
-import { createCliRuntimePorts, type CliOperatorPort } from "../runtime/cli-runtime-ports.js";
+import {
+  createCliRuntimePorts,
+  type CliInspectPort,
+  type CliOperatorPort,
+} from "../runtime/cli-runtime-ports.js";
 import type { CliShellSessionBundle } from "../shell/ports/session-port.js";
 import type { BrewvaSessionResult } from "./session.js";
 
 type CliPrintMode = "json" | "text";
+
+/**
+ * Provenance label recorded on every unattended auto-decision receipt. The
+ * decision's authority is the operator-authored, deep-readonly config policy —
+ * the model cannot reach it — and this actor makes the auto-approval auditable on
+ * the tape, mirroring the `schedule-envelope` / `delegation-envelope` lanes.
+ */
+const UNATTENDED_APPROVAL_ACTOR = "unattended-config-policy";
 
 export interface CliInteractiveShellOptions {
   cwd: string;
@@ -124,11 +139,19 @@ async function runCliTurn(
     printText: boolean;
     runtime: HostedRuntimeAdapterPort;
     operator: CliOperatorPort;
+    inspect: CliInspectPort;
   },
 ): Promise<string> {
   let emittedText = "";
   let streamedText = false;
   let terminalAssistantError: string | undefined;
+  // Whether the current assistant message streamed any delta. An unattended
+  // approval resume produces MULTIPLE assistant messages within one runCliTurn
+  // (pre-suspension text, then post-approval continuation); each message's text
+  // must accumulate. Tracking deltas per message — rather than "has emittedText
+  // grown at all" — lets a non-streaming provider's later message contribute its
+  // fallback text instead of being locked out by an earlier one.
+  let sawDeltaForCurrentMessage = false;
 
   const unsubscribe = session.subscribe((event: BrewvaPromptSessionEvent) => {
     if (event.type === "message_update") {
@@ -138,6 +161,7 @@ async function runCliTurn(
         typeof deltaEvent.delta === "string" &&
         deltaEvent.delta.length > 0
       ) {
+        sawDeltaForCurrentMessage = true;
         emittedText += deltaEvent.delta;
         if (options.printText) {
           streamedText = true;
@@ -160,15 +184,17 @@ async function runCliTurn(
       return;
     }
 
+    // A non-streaming message contributes its full text once, appended so a
+    // resumed continuation adds to (never replaces) the pre-suspension text.
     const fallbackText = extractVisibleTextFromMessage(event.message);
-    if (fallbackText.length === 0 || emittedText.length > 0) {
-      return;
+    if (!sawDeltaForCurrentMessage && fallbackText.length > 0) {
+      emittedText += fallbackText;
+      if (options.printText) {
+        streamedText = true;
+        writeStdout(fallbackText);
+      }
     }
-    emittedText = fallbackText;
-    if (options.printText) {
-      streamedText = true;
-      writeStdout(fallbackText);
-    }
+    sawDeltaForCurrentMessage = false;
   });
 
   try {
@@ -184,13 +210,52 @@ async function runCliTurn(
         parts: structuredClone(parts) as unknown as SessionPromptSnapshot["parts"],
       },
     });
-    const output = await runHostedPromptTurn({
+    let output = await runHostedPromptTurn({
       session,
       parts,
       source: "print",
       runtime: options.runtime,
       sessionId,
     });
+    // Unattended (`--print`) runs have no interactive approver. When the operator
+    // has declared an effect-class envelope in deep-readonly config, auto-decide
+    // approvals within it and resume; an uncovered class still suspends
+    // fail-closed. Interactive sessions never reach here (they answer approvals
+    // through the operator). The policy is read from config, never from the
+    // prompt/model, so the model cannot widen its own authority.
+    if (output.status === "suspended" && output.reason === "approval") {
+      const policy = options.runtime.config.security.unattendedApproval;
+      if (unattendedApprovalPolicyIsActive(policy)) {
+        output = await resumeApprovalsWithinEnvelope({
+          initial: output,
+          sessionId,
+          listPendingApprovals: (id) => options.inspect.proposals.listPending(id),
+          decide: buildUnattendedApprovalDecider(policy),
+          acceptApproval: (id, requestId) =>
+            options.operator.proposals.decide(id, requestId, {
+              decision: "accept",
+              actor: UNATTENDED_APPROVAL_ACTOR,
+              reason:
+                "unattended config policy allows this effect class within its declared envelope",
+            }),
+          denyApproval: (id, requestId) =>
+            options.operator.proposals.decide(id, requestId, {
+              decision: "deny",
+              actor: UNATTENDED_APPROVAL_ACTOR,
+              reason: "unattended config policy denies this effect class",
+            }),
+          resumeTurn: (resolveApproval) =>
+            runHostedPromptTurn({
+              session,
+              parts: [],
+              source: "print",
+              runtime: options.runtime,
+              sessionId,
+              resolveApproval,
+            }),
+        });
+      }
+    }
     if (output.status === "failed") {
       throw output.error instanceof Error ? output.error : new Error(String(output.error));
     }
@@ -291,6 +356,7 @@ export async function runCliPrintSession(
     initialMessage?: string;
     runtime: HostedRuntimeAdapterPort;
     operator: CliOperatorPort;
+    inspect: CliInspectPort;
   },
 ): Promise<void> {
   if (typeof options.initialMessage !== "string" || options.initialMessage.trim().length === 0) {
@@ -301,5 +367,6 @@ export async function runCliPrintSession(
     printText: options.mode === "text",
     runtime: options.runtime,
     operator: options.operator,
+    inspect: options.inspect,
   });
 }

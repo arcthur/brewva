@@ -117,6 +117,46 @@ route without changing the global box default.
 boundary. The box network allowlist is the runtime sandbox boundary for commands
 that actually route through the BoxLite-backed box.
 
+### Unattended Approval
+
+`security.unattendedApproval` lets an operator pre-answer tool-call approvals for
+an unattended headless (`brewva --print`) run, so a tool-using session can finish
+without an interactive approver instead of suspending forever. It is a map from
+`ToolEffectClass` to `"allow"` or `"deny"`; the default is empty.
+
+- A class mapped to `allow` auto-accepts the pending approval.
+- A class mapped to `deny` auto-denies it — the run continues with the tool
+  refused.
+- A class **absent** from the map suspends the run for a human (fail-closed).
+  The empty default therefore suspends every effectful tool — the same behavior
+  as before this setting existed. There is no `"ask"` value; absence is the
+  implicit ask.
+
+A call carrying several effect classes folds with precedence
+`suspend > deny > allow`: any unlisted class suspends the whole call, otherwise
+any denied class denies it, otherwise it is accepted.
+
+Do not confuse this with `security.actionAdmissionOverrides` — the two knobs act
+at different stages on different keys. `actionAdmissionOverrides` is keyed by
+`ToolActionClass` and retunes whether the kernel ADMITS a tool call at all (the
+earlier gate); `unattendedApproval` is keyed by `ToolEffectClass` and only
+pre-answers the human APPROVAL prompt an already-admitted effectful call would
+otherwise suspend on. Reach for `actionAdmissionOverrides` to change what is
+callable at all; reach for `unattendedApproval` to let a headless run
+auto-clear the approvals it would otherwise wait on.
+
+The policy is read once from configuration at process start and is never
+influenced by prompt, skill, or model output, so a model cannot widen its own
+approval envelope. Each auto-decision records the normal approval receipt on the
+tape with the actor `unattended-config-policy`, so the auto-approval stays
+auditable.
+
+Unattended approval is answered in-process by the embedded print backend. A
+`--print` run that declares a non-empty policy is therefore routed to the
+embedded backend automatically (as with `--task`), and `--backend gateway` with
+a non-empty policy is rejected — the gateway daemon path does not yet honor the
+policy server-side.
+
 ## Hosted Cache
 
 Provider token-cache policy is a hosted-session setting rather than a

@@ -102,6 +102,41 @@ calibration in _one_ ring (context/compaction) and does not exercise reversible
 action at all. That partiality is the signal that this is an axiom, not a feature —
 one feature cannot discharge a cross-cutting discipline.
 
+## Second Instance: Self-Eval And The Calibration Registry (Harness-Improvement Ring)
+
+The optimizer-last-hop Phases 2 + 3 SCAFFOLD a second instance, in a distinct
+ring — the harness-improvement loop, not context/compaction. Read honestly against
+the five clauses, the instrument is built but NOT YET exercised:
+
+- Clause 3 (currency): PARTIAL, and it fits worse than the first instance.
+  `report:self-eval` yields a repeatable, tape-derived outcome PROFILE (distinct
+  tools, per-family exercise, terminal outcome) — the common face that makes "did
+  this harness change help" checkable, but NOT a single composable scalar like
+  `netReuseValue`. A profile does not net into one comparable number, so the
+  "one currency, trade-offs compose" clause is only approximated here.
+- Clause 4 (graded claim): the registry status
+  (`asserted` / `calibrated(date, corpus)` / `contested`) is the honesty grade
+  made literal — but present only as a TYPE: all 12 parameters are currently
+  `asserted`, none `calibrated`, because no corpus has graded one. The clause is
+  scaffolded, not exercised; the uniform `asserted` column IS the proof the
+  grading has not yet run.
+- Clause 2 (closed loop): the calibration-report cycle is WIRED to ingest
+  self-eval and name the registry statuses; a parameter would move `asserted` →
+  `calibrated` only when a corpus grades it — but no corpus has run, so the loop
+  is built, not yet turned.
+- Clause 5 (calibration): the registry NAMES the calibration-eligible surface and
+  values change solely as reviewed code, gated on evidence, never auto-tuned — the
+  one clause the arc does deliver today.
+- Clause 1 (reversible action): **untouched here too.** Self-eval and the registry
+  are read-only evidence and legibility; they license no action.
+
+So the second instance is scaffolding-complete but EVIDENCE-EMPTY: the instrument
+to account harness benefit exists and is wired into one loop, but it has scored
+and graded nothing yet. Honest bookkeeping — it is SUBMITTED as second-ring
+evidence, not a satisfied second instance; the distinct-rings bar clears on the
+first exercised grading, not on the scaffold. (Both instances also leave reversible
+action untouched.)
+
 ## Negative Space (Where The Axiom Is Currently Unenforced)
 
 Each is a benefit Brewva claims but cannot directly observe, and where the same
@@ -122,16 +157,24 @@ account/grade/calibrate method would apply — surfaced here the way
 Promote into `docs/architecture/design-axioms.md` (and regenerate
 `axiom-enforcement.md`) when the discipline has earned constitutional weight:
 
-- at least two instances across **distinct rings** (compaction is one; a second —
-  attention-retention or cost-governance — is the threshold), so the axiom is
-  proven cross-cutting rather than a single-feature rationalization;
+- at least two instances across **distinct rings** where the discipline is
+  EXERCISED, not merely scaffolded. First (compaction economics, context ring):
+  exercised — `netReuseValue` composes and a grade has flipped `estimated` →
+  `measured`. Second (self-eval + the registry, harness-improvement ring):
+  scaffolded but NOT yet exercised — 0 corpus runs, all 12 parameters `asserted`.
+  So the second is SUBMITTED as evidence; the bar clears on the first exercised
+  grading, not the scaffold;
 - the implementation reading survives review against the existing axioms without
   collapsing into axiom 7;
 - the regenerated `axiom-enforcement.md` can name which rules enforce it and which
   surfaces remain negative space.
 
-Until then this stays a candidate: a named discipline with one partial instance,
-not yet a line in the constitution.
+The second ring is scaffolded and submitted as evidence, but the bar is NOT yet
+cleared: it clears on the first EXERCISED grading in that ring — a corpus run that
+moves a parameter off `asserted` — then the review reading (does it survive without
+collapsing into axiom 7?) and a regenerated `axiom-enforcement.md`. Until then this
+stays a candidate — a named discipline with one exercised instance and one
+scaffolded-but-unexercised second, not yet a line in the constitution.
 
 ## Related Work
 

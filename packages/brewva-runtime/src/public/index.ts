@@ -1,5 +1,10 @@
 export { DEFAULT_BREWVA_CONFIG } from "../config/defaults.js";
 export type { BrewvaConfig } from "../config/types.js";
+export {
+  CALIBRATION_PARAMETER_REGISTRY,
+  type CalibrationParameter,
+  type CalibrationStatus,
+} from "../governance/calibration-registry.js";
 export type { DeepReadonly } from "../core/index.js";
 export {
   CANONICAL_EVENT_TYPES,

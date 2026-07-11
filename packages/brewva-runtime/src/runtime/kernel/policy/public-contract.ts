@@ -32,12 +32,15 @@ export type {
   ToolRecoveryPolicy,
   ToolRecoveryPreparation,
   ToolRiskLevel,
+  UnattendedApprovalBehavior,
+  UnattendedApprovalPolicy,
 } from "./policy-types.js";
 export {
   ActionPolicyRegistry,
   TOOL_ACTION_CLASSES,
   TOOL_ACTION_POLICY_BY_NAME,
   TOOL_ADMISSION_BEHAVIORS,
+  TOOL_EFFECT_CLASSES,
   compareToolAdmission,
   createActionPolicyRegistry,
   deriveToolGovernanceDescriptor,

@@ -326,6 +326,28 @@ world — the panel makes the world navigable, diffable, and reversible.`
   permission layer staying outside the loop. Under the line `A tool the model never
 reaches for is a heuristic wearing a schema.`
 
+- [RFC: The Optimizer Last-Hop — Unattended-Run Approval Provenance, In-Repo Self-Eval, And The Calibration Parameter Registry](./rfc-optimizer-last-hop-fuel-eval-and-parameter-registry.md):
+  active RFC turning the tool-surface RFC's gated forward half into a landing
+  plan, sequenced by what the 2026-07-11 alignment audit showed actually breaks
+  the self-improvement loop: fuel (both `--print` backends suspend on the first
+  `exec`, so unattended corpora cannot grow — Phase 1 generalizes the schedule
+  lane's `origin: config_policy` provenance envelope into a config-declared,
+  deny-first, fail-closed unattended approval policy, and becomes axiom 9's
+  first precedent), a utility function (Phase 2 promotes the n=12 measurement
+  recipe to a repeatable `report:self-eval` job whose fixtures join the D6
+  freeze surface — an evaluator, never an optimizer), and a named action
+  surface (Phase 3's calibration parameter registry declares which asserted
+  constants are calibration-eligible with per-parameter evidence sources and
+  `asserted`/`calibrated`/`contested` statuses — the EVOLVE-BLOCK fence for any
+  future optimizer, while values still change only as reviewed code). Phase 4
+  (proposal-lane backpressure) is demand-gated on a backlog counter. Claims the
+  diversity-collapse residue, absorbs the audit's parameter-honesty debts
+  (divergent recall freshness scales, the duplicate compaction threshold), and
+  positions Phases 2 + 3 as the second-ring instance for the
+  accounting-for-unmeasurable-benefit candidate axiom. Under the line `Feed it
+under declared provenance, score it from the tape, and name exactly what it
+may touch — the permission layer stays outside.`
+
 - [RFC: Streaming Transcript Output Legibility — Dim The Tools, Fold The Code, Converge The Blocks](./rfc-streaming-transcript-output-legibility.md):
   active render-layer RFC fixing three co-occurring transcript complaints — code
   renders as one giant uncapped chunk, a normal interleaved turn stacks a dozen

@@ -36,6 +36,9 @@ import {
 const TASK_STALL_INSPECTION_SCHEMA = "brewva.task-stall-inspection.v1" as const;
 const RECENT_FAILURE_LIMIT = 6;
 const RECENT_BLOCKED_TOOL_LIMIT = 4;
+// Calibration-eligible (calibration parameter registry): the recent-tool-failure
+// count that, with tape pressure, recommends a compaction stall break.
+export const STALL_RECENT_TOOL_FAILURES_THRESHOLD = 3;
 
 interface TaskStallVerificationSummary {
   passed: boolean;
@@ -263,7 +266,10 @@ export function adjudicateTaskStallPacket(
     };
   }
 
-  if (packet.signals.recentToolFailures.length >= 3 && packet.tape.pressure !== "none") {
+  if (
+    packet.signals.recentToolFailures.length >= STALL_RECENT_TOOL_FAILURES_THRESHOLD &&
+    packet.tape.pressure !== "none"
+  ) {
     return {
       decision: "compact_recommended",
       rationale:

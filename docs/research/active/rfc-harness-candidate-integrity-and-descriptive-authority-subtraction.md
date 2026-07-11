@@ -516,7 +516,11 @@ Frozen surface (never candidate-mutable, never auto-tuned):
 
 - permission, credential, and approval surfaces;
 - tape/WAL/receipt schemas;
-- evaluator definitions and held-out splits (Goodhart guard);
+- evaluator definitions and held-out splits (Goodhart guard) — concretely
+  including the self-eval fixtures and scoring under `test/eval/self-eval/`
+  (`fixtures.ts`, `metrics.ts`, `tool-family.ts`, `report.ts`): DATA and pure
+  scoring functions that sit off the optimizable prompt/skill allowlist, so a
+  candidate can never retune the yardstick it is graded against;
 - promotion authority;
 - world isolation and rollback machinery.
 

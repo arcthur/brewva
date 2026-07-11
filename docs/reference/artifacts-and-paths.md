@@ -40,9 +40,10 @@ durability boundaries:
 - `.brewva/tape/`: canonical runtime truth and replay authority
 - `.brewva/steering/`: per-session durable-transient log of unconsumed in-session prompt injections
 - `.brewva/harness/`: workspace-scoped harness candidate lifecycle receipts
-- `.brewva/reports/`: model-authored recurring report artifacts (e.g.
-  `reports/calibration/<date>.md` from the calibration-report skill) — advisory
-  documents for human review, never runtime-read state
+- `.brewva/reports/`: recurring report artifacts (e.g.
+  `reports/calibration/<date>.md` from the calibration-report skill, and the
+  script-authored `reports/self-eval/<date>.{md,json}` from `report:self-eval`)
+  — advisory documents for human review, never runtime-read state
 - `.brewva/knowledge/`: warm knowledge layer; `knowledge/rdp/` holds
   replay-distilled precedent promotion candidates (investigation-record-shaped,
   explicit-pull via knowledge search, never auto-injected; promotion to

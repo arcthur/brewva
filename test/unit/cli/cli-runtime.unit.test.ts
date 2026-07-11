@@ -6,7 +6,10 @@ import process from "node:process";
 import type { HostedRuntimeAdapterOptions as BrewvaRuntimeOptions } from "@brewva/brewva-gateway/hosted";
 import type { BrewvaRegisteredModel } from "@brewva/brewva-substrate/provider";
 import type { BrewvaManagedPromptSession } from "@brewva/brewva-substrate/session";
-import { createCliOperatorPort } from "../../../packages/brewva-cli/src/runtime/cli-runtime-ports.js";
+import {
+  createCliInspectPort,
+  createCliOperatorPort,
+} from "../../../packages/brewva-cli/src/runtime/cli-runtime-ports.js";
 import {
   runCliInteractiveSession,
   runCliPrintSession,
@@ -87,6 +90,7 @@ describe("cli runtime print mode", () => {
         initialMessage: "Reply with exactly: pong",
         runtime,
         operator: createCliOperatorPort(runtime),
+        inspect: createCliInspectPort(runtime),
       });
       throw new Error("Expected runCliPrintSession to throw");
     } catch (error) {

@@ -4,7 +4,8 @@ import type { OutcomeVerdict } from "@brewva/brewva-vocabulary/outcome";
 const DEFAULT_MAX_SUMMARY_TOKENS = 220;
 const MAX_LINE_CHARS = 240;
 const MIN_DISTILLATION_RAW_TOKENS = 48;
-const MIN_COMPRESSION_GAIN = 0.1;
+// Calibration-eligible (calibration parameter registry).
+export const MIN_COMPRESSION_GAIN = 0.1;
 
 export interface ToolOutputDistillationInput {
   toolName: string;

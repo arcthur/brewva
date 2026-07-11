@@ -18,6 +18,16 @@ export {
 } from "./turn-adapter.js";
 export { createHostedRuntimeAdapter } from "./internal/session/runtime-ports.js";
 export { drainShadowDivergenceEvidence } from "./internal/turn/shadow-divergence-drain.js";
+export {
+  resumeApprovalsWithinEnvelope,
+  type EnvelopeApprovalDecision,
+  type EnvelopePendingApproval,
+} from "./internal/turn/resume-approvals-within-envelope.js";
+export {
+  buildUnattendedApprovalDecider,
+  decideUnattendedApproval,
+  unattendedApprovalPolicyIsActive,
+} from "./internal/turn/unattended-approval-decider.js";
 export { enqueueGoalContinuation } from "../utils/goal-continuation.js";
 export type { EnqueueGoalContinuationInput } from "../utils/goal-continuation.js";
 export { recordRuntimeGoalContinuationQueued } from "./internal/session/projection/runtime-write-adapters.js";

@@ -234,6 +234,43 @@ New orchestration breadth that widens the default hosted or extension path
 must land as opt-in control-plane behavior or as an explicit exception with a
 compatibility story.
 
+## Self-Improvement Loop
+
+The harness runs a self-improvement loop whose permission layer stays OUTSIDE the
+loop. The loop may contain measurement, reports, and proposals; it never contains
+rule authorship or approval-policy authorship. Receipt-bearing loops feed it —
+advisory calibration, harness candidates, learnings promotion, the
+`schedule.selfImprove` heartbeat, independent review, replay-distilled precedent —
+and all share one governance shape:
+
+- **Measure, then propose, never mutate.** Every advisory heuristic records a tape
+  receipt with an honest `source`, and an offline recipe
+  (`analyze:advisory-receipts`, `report:self-eval`) derives reports from the tape
+  only. Recipes derive reports; rule changes land as reviewed code (the
+  advisory-receipt-and-calibration-standard decision; axiom 2).
+- **A decidability instrument (built, not yet run).** `report:self-eval` drives a
+  fixed set of headless tasks and reads per-run tape metrics, so "did this harness
+  change help" CAN be checked from the tape rather than asserted — the loop's
+  decidability condition once a corpus is run (offline; no corpus has been run
+  yet). Its fixtures and scoring join the frozen evaluator surface, never
+  candidate-mutable.
+- **A named action surface (the membership fence).** The calibration parameter
+  registry is the single declarative list of WHICH parameters are
+  calibration-eligible — the only candidate-tunable surface; everything outside it
+  is frozen by default. Its statuses (`asserted` / `calibrated` / `contested`) are
+  the honesty grade, without granting authority (axiom 18) — today all are
+  `asserted` (unexercised). It fences the NAMES, not yet a per-parameter admissible
+  range; bounding each parameter's domain is the extension a future proposer needs.
+- **Negotiated authority, not assumed.** An unattended run that feeds the loop
+  negotiates its approval authority through a declared config envelope carrying an
+  audit-trail receipt — the first axiom-9 precedent (the unattended-run
+  approval-provenance decision), not hidden privilege escalation.
+
+Promotion — moving a proposal, calibration, or candidate into the product — stays
+a reviewed human act. The registry, the frozen evaluator, and the permission layer
+are the fence that keeps a future optimizer phase reviewable rather than
+open-ended; the runtime holds no promotion authority.
+
 ## Package Map
 
 - `@brewva/brewva-runtime`: the four-port runtime root, canonical tape, kernel

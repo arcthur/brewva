@@ -9,8 +9,12 @@ import {
 } from "@brewva/brewva-gateway";
 import { runGatewayCliOperation } from "@brewva/brewva-gateway/admin";
 import { runChannelMode } from "@brewva/brewva-gateway/channels";
-import { createHostedRuntimeAdapter } from "@brewva/brewva-gateway/hosted";
+import {
+  createHostedRuntimeAdapter,
+  unattendedApprovalPolicyIsActive,
+} from "@brewva/brewva-gateway/hosted";
 import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import { loadBrewvaConfig } from "@brewva/brewva-runtime/config";
 import type { RuntimeResult } from "@brewva/brewva-runtime/core";
 import { projectDelegationInspectionState } from "@brewva/brewva-session-index";
 import { toErrorMessage, isRecord } from "@brewva/brewva-std/unknown";
@@ -637,6 +641,21 @@ export async function runCliRootOperation(): Promise<void> {
     return;
   }
 
+  // Unattended approval is answered in-process by the embedded print seam
+  // (`runCliTurn`); the gateway worker only auto-resolves the config-authored
+  // schedule lane, so a `--print` run with an active policy must use embedded or
+  // it would suspend forever. Peek at the config (cheap, cached, idempotent — the
+  // embedded runtime re-reads it) to route correctly; a malformed config surfaces
+  // its real error later when the runtime builds.
+  const unattendedApprovalActive = ((): boolean => {
+    try {
+      const peeked = loadBrewvaConfig({ cwd: parsed.cwd, configPath: parsed.configPath });
+      return unattendedApprovalPolicyIsActive(peeked.security.unattendedApproval);
+    } catch {
+      return false;
+    }
+  })();
+
   if (parsed.backend === "gateway") {
     if (parsed.undo || parsed.redo || parsed.replay) {
       console.error("Error: --backend gateway is not supported with --undo/--redo/--replay.");
@@ -653,12 +672,33 @@ export async function runCliRootOperation(): Promise<void> {
       process.exitCode = 1;
       return;
     }
+    if (unattendedApprovalActive) {
+      console.error(
+        "Error: security.unattendedApproval is not supported with --backend gateway; it requires the embedded in-loop approval path (use --backend embedded or auto).",
+      );
+      process.exitCode = 1;
+      return;
+    }
   }
 
   const shouldAttemptGatewayPrint =
-    mode === "print-text" && parsed.backend !== "embedded" && !taskSpec;
+    mode === "print-text" &&
+    parsed.backend !== "embedded" &&
+    !taskSpec &&
+    !unattendedApprovalActive;
   if (mode === "print-text" && parsed.backend === "auto" && taskSpec && parsed.verbose) {
     console.error("[backend] skipping gateway because TaskSpec requires embedded path");
+  }
+  if (
+    mode === "print-text" &&
+    parsed.backend === "auto" &&
+    unattendedApprovalActive &&
+    !taskSpec &&
+    parsed.verbose
+  ) {
+    console.error(
+      "[backend] skipping gateway because security.unattendedApproval requires the embedded in-loop approval path",
+    );
   }
 
   if (shouldAttemptGatewayPrint) {
@@ -850,6 +890,7 @@ export async function runCliRootOperation(): Promise<void> {
         initialMessage,
         runtime,
         operator,
+        inspect,
       });
       emitJsonBundle = true;
     } else {
@@ -858,6 +899,7 @@ export async function runCliRootOperation(): Promise<void> {
         initialMessage,
         runtime,
         operator,
+        inspect,
       });
       printCostSummary(getSessionId(), inspect);
     }

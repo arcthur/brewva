@@ -11,7 +11,6 @@ import {
   projectBrewvaCompactionMessages,
   selectBrewvaSessionCompactionCutPoint,
   serializeBrewvaCompactionConversation,
-  shouldCompactBrewvaContext,
   summarizeBrewvaCompactionMessage,
 } from "@brewva/brewva-substrate/compaction";
 
@@ -104,14 +103,6 @@ describe("substrate compaction mechanisms", () => {
       }),
       messages[1]!,
     ]);
-  });
-
-  test("keeps compaction trigger calculation pure", () => {
-    expect(shouldCompactBrewvaContext({ tokens: 81, contextWindow: 100 })).toBe(true);
-    expect(
-      shouldCompactBrewvaContext({ tokens: 81, contextWindow: 100 }, { thresholdRatio: 0.9 }),
-    ).toBe(false);
-    expect(shouldCompactBrewvaContext({ tokens: null, contextWindow: 100 })).toBe(false);
   });
 
   test("truncates oversized tool result bodies for the compaction transcript", () => {

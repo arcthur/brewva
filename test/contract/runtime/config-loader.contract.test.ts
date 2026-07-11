@@ -514,6 +514,67 @@ describe("Brewva config loader normalization", () => {
     );
   });
 
+  test("loads a valid security.unattendedApproval effect-class envelope", () => {
+    const workspace = createTestWorkspace("unattended-approval-valid");
+    writeFileSync(
+      join(workspace, ".brewva/brewva.json"),
+      JSON.stringify(
+        {
+          security: {
+            unattendedApproval: {
+              local_exec: "allow",
+              external_network: "deny",
+            },
+          },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const loaded = loadBrewvaConfig({ cwd: workspace, configPath: ".brewva/brewva.json" });
+    expect(loaded.security.unattendedApproval).toEqual({
+      local_exec: "allow",
+      external_network: "deny",
+    });
+  });
+
+  test("defaults security.unattendedApproval to an empty (suspend-everything) policy", () => {
+    const workspace = createTestWorkspace("unattended-approval-default");
+    const loaded = loadBrewvaConfig({ cwd: workspace, configPath: ".brewva/brewva.json" });
+    expect(loaded.security.unattendedApproval).toEqual({});
+  });
+
+  test("fails fast on an unknown security.unattendedApproval effect class", () => {
+    const workspace = createTestWorkspace("unattended-approval-bad-class");
+    writeFileSync(
+      join(workspace, ".brewva/brewva.json"),
+      JSON.stringify(
+        { security: { unattendedApproval: { not_an_effect_class: "allow" } } },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    expect(() => loadBrewvaConfig({ cwd: workspace, configPath: ".brewva/brewva.json" })).toThrow(
+      /unattendedApproval/,
+    );
+  });
+
+  test("fails fast on an invalid security.unattendedApproval decision value", () => {
+    const workspace = createTestWorkspace("unattended-approval-bad-value");
+    const config = structuredClone(DEFAULT_BREWVA_CONFIG);
+    (config.security.unattendedApproval as Record<string, unknown>).local_exec = "ask";
+
+    // The schema (enum allow|deny) is the first fail-closed gate; it rejects the
+    // invalid value before normalization's defense-in-depth throw is reached.
+    expect(() => createRuntimeInstanceFixture({ cwd: workspace, config })).toThrow(
+      /unattendedApproval\/local_exec/,
+    );
+  });
+
   test("loads the project config from workspace root when running from a nested cwd inside a repo", () => {
     const workspace = createTestWorkspace("workspace-root-config");
     const nestedCwd = join(workspace, "packages", "api");

@@ -39,6 +39,10 @@ export {
   resolveHarnessCandidateLedgerPath,
 } from "./internal/candidate-ledger.js";
 export {
+  countProposalBacklog,
+  unconsumedHarnessCandidates,
+} from "./internal/proposal-backpressure.js";
+export {
   buildHarnessCandidatePatch,
   type HarnessCandidatePatch,
 } from "./internal/candidate-patch.js";

@@ -29,34 +29,57 @@ change rules, weights, thresholds, config, or tool surfaces yourself
 3. Run the recall runtime eval with `exec`: `bun run eval:recall`. Record
    per-scenario pass/fail. A scenario that flipped since the previous report is
    a regression finding, not a footnote.
-4. If the harness trace surface is available, run `brewva harness patrol` and
+4. Score end-to-end outcome quality with `exec`: `bun run report:self-eval`
+   (add `--fixture <id>` to scope, or record the leg as skipped when no provider
+   or budget is available). It drives the frozen build/debug/comprehension
+   fixtures through the embedded runtime and reads per-run tape metrics. Capture
+   the completion rate (completed vs fail-closed suspended), the per-family
+   tool-surface exercise profile, and deltas vs the previous report under
+   `.brewva/reports/self-eval/`.
+5. If the harness trace surface is available, run `brewva harness patrol` and
    note drift clusters; if the command is unavailable, record that the patrol
    leg was skipped rather than silently omitting it.
-5. Distill precedent candidates with `exec`: `bun run rdp:distill`. It reads
+6. Distill precedent candidates with `exec`: `bun run rdp:distill`. It reads
    committed tape failures and writes investigation-record-shaped promotion
    candidates under `.brewva/knowledge/rdp/` — candidates for human review,
    never active solution records. Note how many candidates are new since the
    previous report.
-6. List promotion readiness with `exec`:
+7. List promotion readiness with `exec`:
    `bun run analyze:promotion-readiness` (add `-- --run` only when the pass has
    budget for executing the declared gates). Capture per-note gate counts and
-   any gate failures.
-7. Write the report to `.brewva/reports/calibration/<YYYY-MM-DD>.md` with
+   any gate failures. Then count the proposal-lane backpressure with `exec`:
+   `bun run analyze:proposal-backpressure` — unconsumed harness candidates by age
+   bucket.
+8. Name the calibration-eligible parameters with `exec`:
+   `bun run analyze:calibration-registry`. Record which parameters are
+   `asserted` (unexercised) vs `contested`, so any calibration proposal moves a
+   named registry parameter — the only candidate-tunable surface — instead of
+   inventing a new tunable knob.
+9. Write the report to `.brewva/reports/calibration/<YYYY-MM-DD>.md` with
    exactly these sections:
    - `## Corpus` — sessions, events, time range.
    - `## Deltas` — what changed since the previous report (or "first pass").
    - `## Zero-Firing Advisories` — surfaces with no receipts this window; say
      "unexercised, not unnecessary" when the corpus cannot distinguish.
    - `## Eval Outcomes` — recall scenarios (and any other suites you ran).
+   - `## Self-Eval` — completion rate and per-family tool-surface exercise
+     profile with deltas vs the prior self-eval report; the standing chart the
+     tool-surface RFC's one-off n=12 table became (or "leg skipped").
    - `## Promotion Readiness` — per-note gates declared/passed and prose
      criteria remaining.
    - `## Distilled Precedent Candidates` — new RDP candidates this window with
      their `(toolName, failureClass)` patterns.
+   - `## Calibration Registry` — the calibration-eligible parameters by status
+     (`asserted`/`contested`); any `calibration` proposal must target one of
+     these named parameters, never a new knob.
+   - `## Proposal Backpressure` — one line: unconsumed proposals by age bucket
+     (the Phase-4 demand counter). A backlog growing across consecutive reports
+     is the trigger to design aging/expiry; a flat or low count means do not.
    - `## Proposals` — numbered, each tagged `subtraction`, `calibration`, or
      `investigation`, each citing its evidence lines above. Proposals are for
      human review; do not act on them in this session.
-8. Pin a one-line summary of the report path and headline delta with
-   `workbench_note` so the parent schedule session can surface it next run.
+10. Pin a one-line summary of the report path and headline delta with
+    `workbench_note` so the parent schedule session can surface it next run.
 
 ## Boundaries
 

@@ -174,6 +174,7 @@ Every accepted decision inherits these rules:
 - [projection-admission](./projection-admission.md)
 - [requirement-fitness-and-independent-review](./requirement-fitness-and-independent-review.md)
 - [verification-receipt-plane-selection-feedback-and-execution-pacing](./verification-receipt-plane-selection-feedback-and-execution-pacing.md)
+- [unattended-run-approval-provenance-and-axiom-9-precedent](./unattended-run-approval-provenance-and-axiom-9-precedent.md)
 
 ## Maintenance Rule
 

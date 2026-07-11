@@ -11,7 +11,8 @@ import { queryRuntimeEvents, type HostedRuntimeAdapterPort } from "../session/ru
 import { makeHostedContextBlock, type HostedContextBlock } from "./hosted-context-blocks.js";
 
 const RECENT_TOOL_RESULT_WINDOW = 12;
-const MIN_CONSECUTIVE_MISSING_PATH_FAILURES = 2;
+// Calibration-eligible (calibration parameter registry).
+export const MIN_CONSECUTIVE_MISSING_PATH_FAILURES = 2;
 const MAX_OBSERVED_PATHS = 24;
 const MAX_OBSERVED_DIRECTORIES = 24;
 const MISSING_PATH_PATTERN =

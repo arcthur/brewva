@@ -3,6 +3,7 @@ import type { SecurityEnforcementPreference, VerificationLevel } from "../core/s
 import type {
   ToolActionAdmissionOverrides,
   ToolActionClass,
+  UnattendedApprovalPolicy,
 } from "../runtime/kernel/policy/public-contract.js";
 
 export interface BrewvaSecurityBoundaryNetworkRule {
@@ -172,6 +173,14 @@ export interface BrewvaConfig {
     mode: "permissive" | "standard" | "strict";
     sanitizeContext: boolean;
     actionAdmissionOverrides: ToolActionAdmissionOverrides;
+    /**
+     * Effect-class approval envelope for unattended (`--print`) runs. Empty by
+     * default, so every effectful tool suspends exactly as today. See
+     * `UnattendedApprovalPolicy`: `allow`/`deny` per `ToolEffectClass`, absence
+     * suspends for a human (fail-closed). Consulted only by headless print
+     * backends; interactive sessions ignore it.
+     */
+    unattendedApproval: UnattendedApprovalPolicy;
     enforcement: {
       effectAuthorizationMode: SecurityEnforcementPreference;
       skillMaxTokensMode: SecurityEnforcementPreference;

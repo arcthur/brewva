@@ -132,6 +132,30 @@ export type ToolActionPolicyResolver = (
 
 export type ToolActionAdmissionOverrides = Partial<Record<ToolActionClass, ToolAdmissionBehavior>>;
 
+/**
+ * How an unattended (`--print`) run pre-answers a tool-call approval when no
+ * interactive approver is present. `allow` auto-accepts the pending approval;
+ * `deny` auto-denies it (the run continues, the tool refused). A class ABSENT
+ * from the policy suspends the run for a human (fail-closed) — absence is the
+ * implicit `ask` of `ToolAdmissionBehavior`, made explicit here as "no auto
+ * decision". Deliberately narrower than `ToolAdmissionBehavior`: an unattended
+ * run has no one to ask, so the only meaningful auto decisions are allow/deny.
+ */
+export type UnattendedApprovalBehavior = "allow" | "deny";
+
+/**
+ * The effect-class envelope an operator declares for unattended runs. Keyed by
+ * `ToolEffectClass` (the effect a call will actually have) because the decision
+ * happens at the pending-approval boundary, where the projected effect classes
+ * are what is visible — distinct from `ToolActionAdmissionOverrides`, which
+ * retunes kernel admission by `ToolActionClass` at a different stage. The empty
+ * policy (the default) names nothing, so every effectful tool suspends: today's
+ * headless behavior, unchanged. The model can never widen it — it is resolved
+ * from deep-readonly config at process start with no prompt, skill, or tape
+ * input path.
+ */
+export type UnattendedApprovalPolicy = Partial<Record<ToolEffectClass, UnattendedApprovalBehavior>>;
+
 export interface EffectiveToolActionPolicy extends ToolActionPolicy {
   effectiveAdmission: ToolAdmissionBehavior;
 }

@@ -156,13 +156,19 @@ function readUpdatedAt(data: Record<string, unknown>): string | undefined {
   );
 }
 
+// Calibration-eligible (calibration parameter registry): a normative knowledge
+// doc stays current far longer than a session memory — deliberately longer than
+// the tape scale (RECALL_TAPE_*_MAX_DAYS).
+export const KNOWLEDGE_FRESH_MAX_DAYS = 90;
+export const KNOWLEDGE_AGING_MAX_DAYS = 365;
+
 function resolveFreshnessSignal(updatedAt: string | undefined, now = Date.now()): FreshnessSignal {
   if (!updatedAt) return "unknown";
   const timestamp = Date.parse(updatedAt);
   if (!Number.isFinite(timestamp)) return "unknown";
   const ageDays = Math.max(0, (now - timestamp) / (1000 * 60 * 60 * 24));
-  if (ageDays <= 90) return "fresh";
-  if (ageDays <= 365) return "aging";
+  if (ageDays <= KNOWLEDGE_FRESH_MAX_DAYS) return "fresh";
+  if (ageDays <= KNOWLEDGE_AGING_MAX_DAYS) return "aging";
   return "stale";
 }
 

@@ -1,13 +1,14 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname } from "node:path";
 import { join, resolve } from "node:path";
 import { performance } from "node:perf_hooks";
 import {
   assertCapabilitySelectionPremise,
   SCENARIO_CARRIED_CONFIG_KEY,
 } from "./capability-premise.js";
+import { DEFAULT_PRINT_TURN_TIMEOUT_MS, spawnPrintTurn } from "./print-turn.js";
 import type { EvalScenario, EvalTelemetry, OutputContract } from "./types.js";
+import { stageWorkspaceFiles } from "./workspace-staging.js";
 
 // Generic-scenario runtime execution (the seam RuntimeExecutor refused to fake):
 // each run is one REAL `brewva --print` turn in a hermetic temp workspace, so
@@ -24,10 +25,6 @@ import type { EvalScenario, EvalTelemetry, OutputContract } from "./types.js";
 // config and agent-dir instruction files (that env also carries the provider
 // credentials the turn needs), so ABSOLUTE pass rates are machine-dependent —
 // only the within-machine baseline/candidate DELTA is the measurement.
-
-const REPO_ROOT = resolve(import.meta.dir, "../..");
-const CLI_ENTRY = resolve(REPO_ROOT, "packages/brewva-cli/src/index.ts");
-const DEFAULT_TIMEOUT_MS = 180_000;
 
 export interface GenericRuntimeCliOverrides {
   /** Backend for the print turn; real eval runs default to "embedded". */
@@ -128,6 +125,8 @@ export function parseNamedOutputs(
   return outputs;
 }
 
+// Generic scenarios need the throw-on-failure contract (a non-zero exit means
+// no parseable answer), so this wraps the shared non-throwing spawn and raises.
 async function runPrintTurn(input: {
   readonly prompt: string;
   readonly model: string;
@@ -135,70 +134,30 @@ async function runPrintTurn(input: {
   readonly timeoutMs: number;
   readonly cli?: GenericRuntimeCliOverrides;
 }): Promise<string> {
-  const args = [
-    CLI_ENTRY,
-    "--print",
-    "--backend",
-    input.cli?.backend ?? "embedded",
-    ...(input.model && input.model !== "default" ? ["--model", input.model] : []),
-    ...(input.cli?.extraArgs ?? []),
-    // "--" terminates option parsing: a task_description starting with "-"
-    // (markdown list prose) must never be read as a CLI flag.
-    "--",
-    input.prompt,
-  ];
-  const child = Bun.spawn(["bun", ...args], {
+  const result = await spawnPrintTurn({
+    prompt: input.prompt,
+    model: input.model,
     cwd: input.cwd,
-    stdout: "pipe",
-    stderr: "pipe",
-    env: { ...process.env, ...input.cli?.env },
+    timeoutMs: input.timeoutMs,
+    ...(input.cli?.backend ? { backend: input.cli.backend } : {}),
+    ...(input.cli?.extraArgs ? { extraArgs: input.cli.extraArgs } : {}),
+    ...(input.cli?.env ? { env: input.cli.env } : {}),
   });
-  let timedOut = false;
-  const killTimer = setTimeout(() => {
-    timedOut = true;
-    child.kill();
-    // A descendant holding the stdout pipe can keep the streams open past
-    // SIGTERM; escalate so the deadline is a real deadline.
-    setTimeout(() => child.kill("SIGKILL"), 5_000);
-  }, input.timeoutMs);
-  const deadline = new Promise<never>((_, reject) => {
-    setTimeout(
-      () =>
-        reject(
-          new Error(
-            `brewva --print timed out after ${input.timeoutMs}ms (workspace: ${input.cwd})`,
-          ),
-        ),
-      input.timeoutMs + 10_000,
+  if (result.timedOut) {
+    throw new Error(
+      `brewva --print timed out after ${input.timeoutMs}ms (workspace: ${input.cwd}): ${result.stderr
+        .trim()
+        .slice(-400)}`,
     );
-  });
-  try {
-    const [stdout, stderr, exitCode] = await Promise.race([
-      Promise.all([
-        new Response(child.stdout).text(),
-        new Response(child.stderr).text(),
-        child.exited,
-      ]),
-      deadline,
-    ]);
-    if (timedOut) {
-      throw new Error(
-        `brewva --print timed out after ${input.timeoutMs}ms (workspace: ${input.cwd}): ${stderr
-          .trim()
-          .slice(-400)}`,
-      );
-    }
-    if (exitCode !== 0) {
-      throw new Error(
-        `brewva --print exited ${exitCode} (workspace: ${input.cwd}): ${
-          stderr.trim().slice(-800) || stdout.trim().slice(-800)
-        }`,
-      );
-    }
-    return stdout;
-  } finally {
-    clearTimeout(killTimer);
   }
+  if (result.exitCode !== 0) {
+    throw new Error(
+      `brewva --print exited ${result.exitCode} (workspace: ${input.cwd}): ${
+        result.stderr.trim().slice(-800) || result.stdout.trim().slice(-800)
+      }`,
+    );
+  }
+  return result.stdout;
 }
 
 /**
@@ -206,16 +165,7 @@ async function runPrintTurn(input: {
  * so premise tests stage EXACTLY what the runtime stages.
  */
 export function stageScenarioWorkspaceFiles(scenario: EvalScenario, workspace: string): void {
-  for (const [relativePath, content] of Object.entries(scenario.context.workspace_files ?? {})) {
-    const absolutePath = resolve(workspace, relativePath);
-    if (absolutePath !== workspace && !absolutePath.startsWith(`${workspace}/`)) {
-      throw new Error(
-        `Scenario ${scenario.id}: workspace_files path escapes the workspace: ${relativePath}`,
-      );
-    }
-    mkdirSync(dirname(absolutePath), { recursive: true });
-    writeFileSync(absolutePath, content, "utf8");
-  }
+  stageWorkspaceFiles(scenario.context.workspace_files ?? {}, workspace, `Scenario ${scenario.id}`);
 }
 
 /**
@@ -298,7 +248,7 @@ export async function executeGenericRuntimeScenario(
     prompt,
     model: input.model,
     cwd: workspace,
-    timeoutMs: input.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+    timeoutMs: input.timeoutMs ?? DEFAULT_PRINT_TURN_TIMEOUT_MS,
     ...(cliOverrides ? { cli: cliOverrides } : {}),
   });
   const durationMs = performance.now() - startedAt;

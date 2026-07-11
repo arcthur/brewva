@@ -60,6 +60,25 @@ type MissingToolActionClass = Exclude<ToolActionClass, (typeof TOOL_ACTION_CLASS
 const TOOL_ACTION_CLASS_EXHAUSTIVE_CHECK: Record<MissingToolActionClass, never> = {};
 void TOOL_ACTION_CLASS_EXHAUSTIVE_CHECK;
 
+const TOOL_EFFECT_CLASS_VALUES = [
+  "workspace_read",
+  "workspace_write",
+  "local_exec",
+  "runtime_observe",
+  "external_network",
+  "external_side_effect",
+  "schedule_mutation",
+  "memory_write",
+  "budget_mutation",
+  "control_state_mutation",
+  "delegation",
+  "credential_access",
+] as const satisfies readonly ToolEffectClass[];
+
+type MissingToolEffectClass = Exclude<ToolEffectClass, (typeof TOOL_EFFECT_CLASS_VALUES)[number]>;
+const TOOL_EFFECT_CLASS_EXHAUSTIVE_CHECK: Record<MissingToolEffectClass, never> = {};
+void TOOL_EFFECT_CLASS_EXHAUSTIVE_CHECK;
+
 const TOOL_ADMISSION_BEHAVIOR_VALUES = [
   "allow",
   "ask",
@@ -74,6 +93,7 @@ const TOOL_ADMISSION_BEHAVIOR_EXHAUSTIVE_CHECK: Record<MissingToolAdmissionBehav
 void TOOL_ADMISSION_BEHAVIOR_EXHAUSTIVE_CHECK;
 
 export const TOOL_ACTION_CLASSES = TOOL_ACTION_CLASS_VALUES;
+export const TOOL_EFFECT_CLASSES = TOOL_EFFECT_CLASS_VALUES;
 export const TOOL_ADMISSION_BEHAVIORS = TOOL_ADMISSION_BEHAVIOR_VALUES;
 
 function buildPolicy(input: ToolActionPolicyInput): ToolActionPolicy {

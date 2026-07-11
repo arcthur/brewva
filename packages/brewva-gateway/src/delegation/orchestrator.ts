@@ -36,6 +36,7 @@ import {
   getRuntimeSkillCatalogEntry,
   releaseRuntimeParallelSlot,
 } from "../hosted/api.js";
+import { resumeApprovalsWithinEnvelope } from "../hosted/api.js";
 import { recordSessionShutdownIfMissing } from "../utils/runtime.js";
 import type { HostedSubagentBackgroundController } from "./background/controller.js";
 import {
@@ -76,7 +77,6 @@ import {
   resolveRunRecords,
 } from "./orchestrator/records.js";
 import { getCanonicalForkPrompt } from "./protocol.js";
-import { resumeDelegatedApprovalsWithinEnvelope } from "./resume-delegated-approvals.js";
 import {
   applyDelegationFinalizationReceipt,
   aggregateChildCost,
@@ -764,7 +764,7 @@ export function createHostedSubagentAdapter(
         const approvalChildRuntime = child.runtime;
         const approvalChildSession = child.session;
         const approvalChildSessionId = childSessionId;
-        output = await resumeDelegatedApprovalsWithinEnvelope({
+        output = await resumeApprovalsWithinEnvelope({
           initial: output,
           sessionId: approvalChildSessionId,
           listPendingApprovals: (sessionId) =>

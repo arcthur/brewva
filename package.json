@@ -17,8 +17,10 @@
   "type": "module",
   "scripts": {
     "analyze:advisory-receipts": "bun run script/analyze-advisory-receipts.ts",
+    "analyze:calibration-registry": "bun run script/analyze-calibration-registry.ts",
     "analyze:projection": "bun run script/analyze-projection.ts",
     "analyze:promotion-readiness": "bun run script/analyze-promotion-readiness.ts",
+    "analyze:proposal-backpressure": "bun run script/analyze-proposal-backpressure.ts",
     "bench:tui": "bun run --preload @opentui/solid/preload test/bench/tui-streaming.bench.ts",
     "build": "bun run typecheck && bun run build:binaries",
     "build:binaries": "bun run script/build-binaries.ts",
@@ -59,6 +61,7 @@
     "rdp:distill": "bun run script/rdp-distill.ts",
     "report:context-evidence": "bun run script/report-context-evidence.ts",
     "report:delegation-evidence": "bun run script/report-delegation-evidence.ts",
+    "report:self-eval": "bun run test/eval/self-eval/run-self-eval.ts",
     "start": "bun run --preload @opentui/solid/preload packages/brewva-cli/src/index.ts",
     "test": "bun run test:ci",
     "test:ci": "bun run test:unit && bun run test:contract && bun run test:system && bun run test:fitness",

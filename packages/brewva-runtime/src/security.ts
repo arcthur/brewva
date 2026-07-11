@@ -140,6 +140,8 @@ export type {
   ToolRecoveryPolicy,
   ToolRecoveryPreparation,
   ToolRiskLevel,
+  UnattendedApprovalBehavior,
+  UnattendedApprovalPolicy,
 } from "./runtime/kernel/policy/public-contract.js";
 export type {
   CredentialVaultDiscoveredEntry,

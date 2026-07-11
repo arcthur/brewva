@@ -2,10 +2,13 @@ import { existsSync } from "node:fs";
 import type {
   ToolActionClass,
   ToolAdmissionBehavior,
+  ToolEffectClass,
+  UnattendedApprovalBehavior,
 } from "../runtime/kernel/policy/public-contract.js";
 import {
   TOOL_ACTION_CLASSES,
   TOOL_ADMISSION_BEHAVIORS,
+  TOOL_EFFECT_CLASSES,
   compareToolAdmission,
   getToolActionClassAdmissionBounds,
 } from "../runtime/kernel/policy/tool-admission-policy.js";
@@ -33,6 +36,8 @@ const VALID_BOX_NETWORK_MODES = new Set(["off", "allowlist"]);
 const VALID_BOX_SESSION_LIFETIMES = new Set(["session", "forever"]);
 const VALID_ACTION_CLASSES = new Set<string>(TOOL_ACTION_CLASSES);
 const VALID_ADMISSION_BEHAVIORS = new Set<string>(TOOL_ADMISSION_BEHAVIORS);
+const VALID_EFFECT_CLASSES = new Set<string>(TOOL_EFFECT_CLASSES);
+const VALID_UNATTENDED_BEHAVIORS = new Set<string>(["allow", "deny"]);
 
 function normalizeActionAdmissionOverrides(
   value: unknown,
@@ -65,6 +70,31 @@ function normalizeActionAdmissionOverrides(
       );
     }
     normalized[normalizedActionClass] = normalizedAdmission;
+  }
+  return normalized;
+}
+
+function normalizeUnattendedApproval(
+  value: unknown,
+  fallback: BrewvaConfig["security"]["unattendedApproval"],
+): BrewvaConfig["security"]["unattendedApproval"] {
+  if (!isRecord(value)) {
+    return { ...fallback };
+  }
+  const normalized: BrewvaConfig["security"]["unattendedApproval"] = {};
+  for (const [effectClass, behavior] of Object.entries(value)) {
+    // Fail-loud on a typo (mirrors actionAdmissionOverrides): a misspelled
+    // effect class in an approval envelope is a policy the operator believes is
+    // active. Halting at load is safer than silently suspending everything.
+    if (!VALID_EFFECT_CLASSES.has(effectClass)) {
+      throw new Error(`Invalid security.unattendedApproval effect class '${effectClass}'`);
+    }
+    if (!VALID_UNATTENDED_BEHAVIORS.has(behavior as string)) {
+      throw new Error(
+        `Invalid security.unattendedApproval.${effectClass} decision '${String(behavior)}' (expected 'allow' or 'deny'; omit the class to suspend)`,
+      );
+    }
+    normalized[effectClass as ToolEffectClass] = behavior as UnattendedApprovalBehavior;
   }
   return normalized;
 }
@@ -205,6 +235,10 @@ export function normalizeSecurityConfig(
     actionAdmissionOverrides: normalizeActionAdmissionOverrides(
       securityInput.actionAdmissionOverrides,
       defaults.actionAdmissionOverrides,
+    ),
+    unattendedApproval: normalizeUnattendedApproval(
+      securityInput.unattendedApproval,
+      defaults.unattendedApproval,
     ),
     enforcement: {
       effectAuthorizationMode: normalizeStrictStringEnum(

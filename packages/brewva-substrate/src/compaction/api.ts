@@ -4,11 +4,6 @@ export {
   BREWVA_EMERGENCY_COMPACTION_SUMMARY_HEADER,
 } from "./constants.js";
 export {
-  shouldCompactBrewvaContext,
-  type BrewvaContextCompactionThresholdOptions,
-  type BrewvaContextCompactionUsage,
-} from "./context-threshold.js";
-export {
   buildBrewvaDeterministicCompactionSummary,
   type BrewvaCompactionSummaryOptions,
 } from "./emergency-fallback.js";

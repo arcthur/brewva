@@ -29,7 +29,6 @@ import type {
 import type { ContextStatusView } from "@brewva/brewva-vocabulary/context";
 import type { ScheduleApprovalMode } from "@brewva/brewva-vocabulary/schedule";
 import type { SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
-import { resumeDelegatedApprovalsWithinEnvelope } from "../../../delegation/api.js";
 import { recordSessionShutdownIfMissing } from "../../../utils/runtime.js";
 import {
   createHostedSession as createGatewaySession,
@@ -44,6 +43,7 @@ import {
 } from "../../internal/session/runtime-ports.js";
 import { TaskProgressWatchdog } from "../../internal/session/watchdog/task-progress-watchdog.js";
 import type { HostedSessionLogger } from "../../internal/shared/logger.js";
+import { resumeApprovalsWithinEnvelope } from "../../internal/turn/resume-approvals-within-envelope.js";
 import { runHostedTurnEnvelope } from "../../internal/turn/turn-envelope.js";
 import { resolveWorkerSessionShutdownReceipt } from "../shutdown-receipts.js";
 import type { ParentToWorkerMessage, WorkerToParentMessage } from "./protocol.js";
@@ -571,7 +571,7 @@ async function runTurn(input: {
     // auto-approval stays auditable. The daemon only ever sets this mode for
     // the config-identity intent — model-minted intents cannot reach it.
     if (input.source === "schedule" && input.approvalMode === "auto_within_envelope") {
-      const resumeOutput = await resumeDelegatedApprovalsWithinEnvelope({
+      const resumeOutput = await resumeApprovalsWithinEnvelope({
         initial: output,
         sessionId: input.agentSessionId,
         listPendingApprovals: (sessionId) =>
