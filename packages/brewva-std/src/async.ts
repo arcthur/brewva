@@ -160,6 +160,58 @@ export function createNonOverlappingTaskRunner(
   };
 }
 
+export interface SingleFlight<K, V> {
+  /**
+   * Run `factory` for `key`, coalescing concurrent calls for the same key onto a
+   * single shared in-flight promise so `factory` runs once. The slot is cleared
+   * once that promise settles (resolve OR reject), so a later call re-invokes
+   * `factory` — this de-dupes concurrent work, it does NOT memoize the result.
+   * Callers that also want a persistent result cache keep it in a sibling map and
+   * check it before calling `run`. Complementary to
+   * {@link createNonOverlappingTaskRunner}, which DROPS an overlapping call rather
+   * than joining it.
+   */
+  run: (key: K, factory: () => PromiseLike<V> | V) => Promise<V>;
+  /**
+   * Forget all in-flight tracking so subsequent calls start fresh (they will not
+   * join a call that was in flight before the clear). Already-running factories
+   * still run to completion; their results are simply no longer shared. For
+   * shutdown/reset paths.
+   */
+  clear: () => void;
+  /** Number of keys with a call in flight right now. */
+  readonly size: number;
+}
+
+export function createSingleFlight<K, V>(): SingleFlight<K, V> {
+  const inFlight = new Map<K, Promise<V>>();
+  return {
+    run(key: K, factory: () => PromiseLike<V> | V): Promise<V> {
+      const existing = inFlight.get(key);
+      if (existing) {
+        return existing;
+      }
+      // Promise.resolve().then defers factory to a microtask, so a synchronous
+      // throw inside it rejects the shared promise instead of escaping run().
+      const promise = Promise.resolve()
+        .then(factory)
+        .finally(() => {
+          if (inFlight.get(key) === promise) {
+            inFlight.delete(key);
+          }
+        });
+      inFlight.set(key, promise);
+      return promise;
+    },
+    clear(): void {
+      inFlight.clear();
+    },
+    get size(): number {
+      return inFlight.size;
+    },
+  };
+}
+
 export function createAsyncBridge<T>(options: AsyncBridgeOptions = {}): AsyncBridge<T> {
   const capacity = normalizeAsyncBridgeCapacity(options.capacity);
   const queue: T[] = [];

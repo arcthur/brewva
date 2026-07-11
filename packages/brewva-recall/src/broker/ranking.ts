@@ -1,3 +1,4 @@
+import { clamp01 } from "@brewva/brewva-std/math";
 import type {
   RecallEvidenceStrength,
   RecallFreshness,
@@ -62,7 +63,7 @@ export function computeRankingScore(
   const source = sourceBaseWeight(entry, context);
   const strength = EVIDENCE_STRENGTH_WEIGHT[entry.evidenceStrength];
   const freshness = FRESHNESS_WEIGHT[entry.freshness];
-  const semantic = Math.max(0, Math.min(1, entry.semanticScore));
+  const semantic = clamp01(entry.semanticScore);
   const rankingScore = source + strength + semantic + freshness + curationAdjustmentValue;
   const rankReasons = [
     `source:${entry.sourceFamily}`,

@@ -1,3 +1,4 @@
+import { toPosixPath } from "@brewva/brewva-std/text";
 import { estimateTokenCount } from "@brewva/brewva-token-estimation";
 
 export type BrewvaPromptStability = "stable" | "session" | "turn";
@@ -286,7 +287,7 @@ export function buildBrewvaCapabilitySelectionPromptBlock(
 export function buildBrewvaSystemPromptDocument(
   options: BuildBrewvaSystemPromptDocumentOptions = {},
 ): BrewvaSystemPromptDocument {
-  const cwd = (options.cwd ?? process.cwd()).replace(/\\/gu, "/");
+  const cwd = toPosixPath(options.cwd ?? process.cwd());
   const date = new Date().toISOString().slice(0, 10);
   const selectedTools = options.selectedTools ?? ["read", "exec", "edit", "write"];
   const toolSnippets = options.toolSnippets ?? {};

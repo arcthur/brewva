@@ -5,6 +5,7 @@ import {
   type ExecutedKnowledgeSearch,
   type ScoredKnowledgeDoc,
 } from "@brewva/brewva-recall/knowledge";
+import { compactWhitespace } from "@brewva/brewva-std/text";
 export { readTrimmedString } from "@brewva/brewva-std/unknown";
 import {
   isPathInsideRoots,
@@ -126,7 +127,7 @@ function fingerprintBody(value: string | undefined): string | undefined {
   if (!value) {
     return undefined;
   }
-  const normalized = value.replace(/\s+/g, " ").trim().toLowerCase();
+  const normalized = compactWhitespace(value).toLowerCase();
   return normalized.length > 0 ? normalized : undefined;
 }
 

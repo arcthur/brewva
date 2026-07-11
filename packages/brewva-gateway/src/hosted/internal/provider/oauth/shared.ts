@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import type { Server } from "node:http";
-import { readNonEmptyString } from "@brewva/brewva-std/text";
+import { compactWhitespace, readNonEmptyString } from "@brewva/brewva-std/text";
 import { readFiniteNumberValue } from "@brewva/brewva-std/unknown";
 
 export const OAUTH_HTTP_TIMEOUT_MS = 30_000;
@@ -62,7 +62,7 @@ export async function fetchOAuth(input: RequestInfo | URL, init?: RequestInit): 
 }
 
 function truncateOAuthErrorBody(body: string): string {
-  const compact = body.replace(/\s+/gu, " ").trim();
+  const compact = compactWhitespace(body);
   if (compact.length <= 500) {
     return compact;
   }

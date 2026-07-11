@@ -1,4 +1,6 @@
-import { dirname, isAbsolute, relative, resolve } from "node:path";
+import { dirname, isAbsolute, resolve } from "node:path";
+import { relativePosixPath } from "@brewva/brewva-std/node/fs";
+import { toPosixPath } from "@brewva/brewva-std/text";
 
 const MAX_OBSERVED_PATHS = 24;
 const LOCATION_PATH_PATTERN = /^([^:\n]+):(?:L)?\d+(?:@[A-Za-z0-9_-]+)?(?::|\||\s|$)/u;
@@ -17,7 +19,7 @@ function normalizeWorkspacePath(baseCwd: string, candidate: string): string | un
   }
 
   const absolutePath = isAbsolute(trimmed) ? resolve(trimmed) : resolve(baseCwd, trimmed);
-  const relativePath = relative(baseCwd, absolutePath).replaceAll("\\", "/");
+  const relativePath = relativePosixPath(baseCwd, absolutePath);
   if (relativePath.startsWith("../") || relativePath === "..") {
     return undefined;
   }
@@ -78,7 +80,7 @@ export function buildReadPathDiscoveryObservationPayload(input: {
     [
       ...(input.observedDirectories ?? []),
       ...observedPaths.map((path) => {
-        const parentDirectory = dirname(path).replaceAll("\\", "/");
+        const parentDirectory = toPosixPath(dirname(path));
         return parentDirectory === "" ? "." : parentDirectory;
       }),
     ]

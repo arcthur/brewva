@@ -26,6 +26,7 @@ import {
   rewriteFileAtomic,
   sha256HexOfFileSync,
 } from "@brewva/brewva-std/node/fs";
+import { toPosixPath } from "@brewva/brewva-std/text";
 import { isRecord, toErrorMessage } from "@brewva/brewva-std/unknown";
 import { enumerateWorkspaceFiles, type EnumeratedFile } from "./enumerate.js";
 import {
@@ -168,7 +169,7 @@ export function createWorkspaceWorldStore(options: WorldStoreOptions): Workspace
   const storeRelativePath = relative(workspaceRoot, rootDir);
   const enumerationExclusions =
     storeRelativePath && !storeRelativePath.startsWith("..")
-      ? [storeRelativePath.split("\\").join("/")]
+      ? [toPosixPath(storeRelativePath)]
       : [];
 
   const blobPath = (hex: string): string => join(objectsDir, hex.slice(0, 2), hex);

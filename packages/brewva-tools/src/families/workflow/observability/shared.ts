@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import { sha256Hex } from "@brewva/brewva-std/hash";
+import { toPosixPath as normalizeRelativePath } from "@brewva/brewva-std/text";
 import { isRecord } from "@brewva/brewva-std/unknown";
 import type { BrewvaToolContext as ExtensionContext } from "@brewva/brewva-substrate/tools";
 import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
@@ -91,10 +92,6 @@ export interface ObservabilityThrottleState {
   level: "normal" | "limited" | "blocked";
   effectiveLimit: number;
   recentSingleQueryCalls: number;
-}
-
-function normalizeRelativePath(value: string): string {
-  return value.replaceAll("\\", "/");
 }
 
 function encodeSessionId(sessionId: string): string {

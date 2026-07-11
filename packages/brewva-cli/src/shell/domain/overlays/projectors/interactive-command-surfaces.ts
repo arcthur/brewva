@@ -1,3 +1,4 @@
+import { compactWhitespace } from "@brewva/brewva-std/text";
 import { estimateModelTokens } from "@brewva/brewva-token-estimation";
 import type {
   ContextBudgetUsage,
@@ -273,7 +274,7 @@ function formatPlural(count: number, singular: string, plural = `${singular}s`):
 }
 
 function normalizeInlineText(value: string | null | undefined): string {
-  return value?.trim().replace(/\s+/gu, " ") ?? "";
+  return compactWhitespace(value ?? "");
 }
 
 function formatCategoryTitle(category: string): string {

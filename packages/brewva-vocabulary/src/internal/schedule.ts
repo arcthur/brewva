@@ -1,3 +1,4 @@
+import { deterministicJitterFraction } from "@brewva/brewva-std/backoff";
 import { type BrewvaEventRecord } from "./events.js";
 import type { ProtocolRecord } from "./types/foundation.js";
 
@@ -398,22 +399,6 @@ export interface NextScheduleRunOptions {
  */
 const RECURRING_JITTER_INTERVAL_RATIO = 0.1;
 const MAX_RECURRING_JITTER_MS = 15 * 60 * 1000;
-
-/**
- * Deterministic jitter fraction in `[0, 1)` derived from a seed via FNV-1a —
- * dependency-free and stable across processes and replays, never `Math.random`. The
- * scheduler seeds it with the intent id (replay-stable recurrence jitter); the gateway
- * rate-limit backoff seeds it per `(session, attempt)` to decorrelate a herd of turns
- * retrying the same 429. One shared primitive keeps both jitters the same mechanism.
- */
-export function deterministicJitterFraction(seed: string): number {
-  let hash = 0x811c9dc5;
-  for (let index = 0; index < seed.length; index += 1) {
-    hash ^= seed.charCodeAt(index);
-    hash = Math.imul(hash, 0x01000193) >>> 0;
-  }
-  return hash / 0x1_0000_0000;
-}
 
 /**
  * Compute an intent's next `nextRunAt` (ms epoch), or null when it has no future

@@ -1,15 +1,14 @@
 import {
   closeSync,
-  existsSync,
   fsyncSync,
   mkdirSync,
   openSync,
-  readFileSync,
   renameSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
 import { dirname, resolve } from "node:path";
+import { readJsonFileSync } from "@brewva/brewva-std/node/fs";
 import { isRecord } from "@brewva/brewva-std/unknown";
 import type { ContextBundle } from "../context/api.js";
 
@@ -50,18 +49,6 @@ function writeJsonFile(filePath: string, value: unknown): void {
   }
 }
 
-function readJsonFile(filePath: string): unknown {
-  const resolvedPath = resolve(filePath);
-  if (!existsSync(resolvedPath)) {
-    return undefined;
-  }
-  try {
-    return JSON.parse(readFileSync(resolvedPath, "utf8")) as unknown;
-  } catch {
-    return undefined;
-  }
-}
-
 export function resolveDelegationRunArtifactDir(workspaceRoot: string, runId: string): string {
   return resolve(workspaceRoot, ".orchestrator", "subagent-runs", runId);
 }
@@ -85,7 +72,7 @@ export function readDelegationContextBundleManifest(
   workspaceRoot: string,
   runId: string,
 ): DelegationContextBundleManifest | undefined {
-  const value = readJsonFile(resolveDelegationContextBundleManifestPath(workspaceRoot, runId));
+  const value = readJsonFileSync(resolveDelegationContextBundleManifestPath(workspaceRoot, runId));
   if (
     !isRecord(value) ||
     value.schema !== "brewva.delegation-context-bundle.v1" ||

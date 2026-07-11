@@ -7,6 +7,7 @@ import {
   toWorkspaceRelativePath,
 } from "@brewva/brewva-runtime/config";
 import { uniqueNonEmptyStrings as uniqueStrings } from "@brewva/brewva-std/collections";
+import { toPosixPath } from "@brewva/brewva-std/text";
 import { isRecord, toErrorMessage } from "@brewva/brewva-std/unknown";
 import { CONTEXT_COMPACTION_GATE_ARMED_EVENT_TYPE } from "@brewva/brewva-vocabulary/context";
 import { RUNTIME_OPS_TOOL_INVOCATION_STARTED_KIND } from "@brewva/brewva-vocabulary/events";
@@ -181,7 +182,7 @@ function toIso(timestamp: number | null | undefined): string | null {
 }
 
 function normalizePathForDisplay(path: string): string {
-  const normalized = path.replaceAll("\\", "/").trim();
+  const normalized = toPosixPath(path).trim();
   return normalized.length > 0 ? normalized : ".";
 }
 

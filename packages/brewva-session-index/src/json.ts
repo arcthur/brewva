@@ -1,13 +1,10 @@
+import { safeParseJson } from "@brewva/brewva-std/json";
 import { readStringList } from "@brewva/brewva-std/text";
 import { isRecord, readTrimmedString } from "@brewva/brewva-std/unknown";
 
 export function parsePayload(value: string): Record<string, unknown> {
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    return isRecord(parsed) ? parsed : {};
-  } catch {
-    return {};
-  }
+  const parsed = safeParseJson(value);
+  return isRecord(parsed) ? parsed : {};
 }
 
 export function normalizePayload(value: unknown): Record<string, unknown> {
@@ -23,12 +20,7 @@ export function normalizeInteger(value: unknown): number {
 }
 
 export function parseStringArray(value: string): string[] {
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    return readStringList(parsed);
-  } catch {
-    return [];
-  }
+  return readStringList(safeParseJson(value));
 }
 
 export { isRecord };

@@ -1,5 +1,6 @@
 import { existsSync, realpathSync, statSync } from "node:fs";
 import { dirname, resolve, sep } from "node:path";
+import { toPosixPath } from "@brewva/brewva-std/text";
 import { isRecord } from "@brewva/brewva-std/unknown";
 import { TURN_INPUT_RECORDED_EVENT_TYPE } from "@brewva/brewva-vocabulary/session";
 import type { BrewvaToolRuntime } from "../contracts/index.js";
@@ -375,7 +376,7 @@ export function resolveRuntimeArtifactReadRejection(
 }
 
 function slashPath(value: string): string {
-  return resolve(value).replaceAll("\\", "/");
+  return toPosixPath(resolve(value));
 }
 
 export function resolveRuntimeArtifactCommandRejection(
@@ -385,7 +386,7 @@ export function resolveRuntimeArtifactCommandRejection(
     relativeTo?: string;
   } = {},
 ): RuntimeArtifactReadRejection | null {
-  const normalized = command.replaceAll("\\", "/");
+  const normalized = toPosixPath(command);
   if (/(^|[\s"'`=;|&])(?:\.\/)?\.brewva(?:\/+\.?)*\/+tape(?:\/|$|[\s"'`;|&])/u.test(normalized)) {
     return resolveRuntimeArtifactReadRejection(".brewva/tape", scope, options);
   }

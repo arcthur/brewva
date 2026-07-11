@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { join, relative, resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { parseMarkdownFrontmatter } from "@brewva/brewva-std/markdown";
+import { relativePosixPath } from "@brewva/brewva-std/node/fs";
 import { isRecord } from "@brewva/brewva-std/unknown";
 import { stringify as stringifyYaml } from "yaml";
 
@@ -92,7 +93,7 @@ function parseSkillFile(filePath: string): ParsedSkillFile {
 }
 
 function isMetaSkill(skillDir: string, filePath: string): boolean {
-  return relative(skillDir, filePath).replaceAll("\\", "/").startsWith("meta/");
+  return relativePosixPath(skillDir, filePath).startsWith("meta/");
 }
 
 function buildSkillCardFrontmatter(

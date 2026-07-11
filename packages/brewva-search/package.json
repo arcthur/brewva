@@ -15,6 +15,7 @@
     }
   },
   "dependencies": {
+    "@brewva/brewva-std": "workspace:*",
     "jieba-wasm": "^2.4.0"
   },
   "engines": {

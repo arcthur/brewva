@@ -1,10 +1,11 @@
+import { compactWhitespace } from "@brewva/brewva-std/text";
 import { estimateStructuredTokenCount } from "@brewva/brewva-token-estimation";
 
 const COMPACTION_TOOL_RESULT_MAX_CHARS = 2_000;
 const COMPACTION_IMAGE_PLACEHOLDER_CHARS = 4_800;
 
 function normalizeSummaryText(text: string): string {
-  return text.replace(/\s+/gu, " ").trim();
+  return compactWhitespace(text);
 }
 
 function truncateForSummary(text: string, maxChars: number): string {

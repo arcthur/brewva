@@ -1,3 +1,4 @@
+import { toPosixPath } from "@brewva/brewva-std/text";
 import { isRecord } from "@brewva/brewva-std/unknown";
 /**
  * The canonical read-model for "a tool ran this session."
@@ -188,7 +189,7 @@ export function relativizeToWorkspace(target: string, workspaceRoot: string | nu
   if (!workspaceRoot || !target.startsWith("/")) {
     return target;
   }
-  const root = workspaceRoot.replaceAll("\\", "/").replace(/^\.\//u, "").replace(/\/+$/u, "");
+  const root = toPosixPath(workspaceRoot).replace(/^\.\//u, "").replace(/\/+$/u, "");
   if (root.length === 0) {
     return target;
   }

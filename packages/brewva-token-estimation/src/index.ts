@@ -1,3 +1,4 @@
+import { clamp01 } from "@brewva/brewva-std/math";
 import { isRecord } from "@brewva/brewva-std/unknown";
 import {
   countTokens as countCl100kTokens,
@@ -441,9 +442,7 @@ export function normalizePercent(
     typeof contextWindow === "number" &&
     Number.isFinite(contextWindow) &&
     contextWindow > 0;
-  const usageRatioFromTelemetry = hasTokenTelemetry
-    ? Math.max(0, Math.min(tokens / contextWindow, 1))
-    : null;
+  const usageRatioFromTelemetry = hasTokenTelemetry ? clamp01(tokens / contextWindow) : null;
 
   let normalized = raw;
   if (raw > 1) {
@@ -455,7 +454,7 @@ export function normalizePercent(
     normalized = distanceAsPoints < distanceAsRatio ? raw / 100 : raw;
   }
 
-  return Math.max(0, Math.min(normalized, 1));
+  return clamp01(normalized);
 }
 
 export function resolveContextUsageRatio(
@@ -481,7 +480,7 @@ export function resolveContextUsageRatio(
   ) {
     return null;
   }
-  return Math.max(0, Math.min(1, input.tokens / input.contextWindow));
+  return clamp01(input.tokens / input.contextWindow);
 }
 
 export function resolveContextUsageTokens(

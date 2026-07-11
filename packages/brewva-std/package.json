@@ -11,6 +11,12 @@
       "import": "./dist/async.js",
       "default": "./dist/async.js"
     },
+    "./backoff": {
+      "types": "./dist/backoff.d.ts",
+      "bun": "./src/backoff.ts",
+      "import": "./dist/backoff.js",
+      "default": "./dist/backoff.js"
+    },
     "./collections": {
       "types": "./dist/collections.d.ts",
       "bun": "./src/collections.ts",
@@ -52,6 +58,12 @@
       "bun": "./src/markdown.ts",
       "import": "./dist/markdown.js",
       "default": "./dist/markdown.js"
+    },
+    "./math": {
+      "types": "./dist/math.d.ts",
+      "bun": "./src/math.ts",
+      "import": "./dist/math.js",
+      "default": "./dist/math.js"
     },
     "./node/fs": {
       "types": "./dist/node/fs.d.ts",

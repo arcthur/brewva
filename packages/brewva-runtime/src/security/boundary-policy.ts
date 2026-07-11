@@ -1,5 +1,6 @@
 import { isIP } from "node:net";
-import { relative, resolve } from "node:path";
+import { resolve } from "node:path";
+import { relativePosixPath } from "@brewva/brewva-std/node/fs";
 import type { BrewvaConfig } from "../config/types.js";
 import type { DeepReadonly } from "../core/deep-readonly.js";
 import { normalizeToolName } from "../utils/tool-name.js";
@@ -46,7 +47,7 @@ function normalizeHost(host: string): string {
 function isPathInsideRoot(path: string, root: string): boolean {
   const normalizedRoot = resolve(root);
   const normalizedPath = resolve(path);
-  const rel = relative(normalizedRoot, normalizedPath).replaceAll("\\", "/");
+  const rel = relativePosixPath(normalizedRoot, normalizedPath);
   return rel === "" || rel === "." || (!rel.startsWith("../") && rel !== "..");
 }
 

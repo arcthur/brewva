@@ -1,14 +1,11 @@
 import { existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { sha256Hex } from "@brewva/brewva-std/hash";
+import { toPosixPath as normalizeRelativePath } from "@brewva/brewva-std/text";
 import { encodeSessionId } from "./session.js";
 import type { BrowserArtifact } from "./types.js";
 
 const DEFAULT_BROWSER_ARTIFACT_DIR = ".orchestrator/browser-artifacts";
-
-function normalizeRelativePath(value: string): string {
-  return value.replaceAll("\\", "/");
-}
 
 function sanitizeFileSegment(value: string): string {
   const normalized = value

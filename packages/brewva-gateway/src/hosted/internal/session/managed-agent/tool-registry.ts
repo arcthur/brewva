@@ -1,3 +1,4 @@
+import { compactWhitespace } from "@brewva/brewva-std/text";
 import type { BrewvaAgentProtocolTool } from "@brewva/brewva-substrate/agent-protocol";
 import type { BrewvaHostToolInfo } from "@brewva/brewva-substrate/host-api";
 import {
@@ -50,10 +51,7 @@ function normalizePromptSnippet(text: string | undefined): string | undefined {
   if (!text) {
     return undefined;
   }
-  const normalized = text
-    .replace(/[\r\n]+/gu, " ")
-    .replace(/\s+/gu, " ")
-    .trim();
+  const normalized = compactWhitespace(text.replace(/[\r\n]+/gu, " "));
   return normalized.length > 0 ? normalized : undefined;
 }
 

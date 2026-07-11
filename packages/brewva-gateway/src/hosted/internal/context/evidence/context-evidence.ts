@@ -1,6 +1,7 @@
 import { writeFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import { resolveCacheCostMultipliers } from "@brewva/brewva-provider-core/catalog";
+import { countByKey } from "@brewva/brewva-std/collections";
 import { isRecord } from "@brewva/brewva-std/unknown";
 import { computeNetReuseValue, type NetReuseInputs } from "@brewva/brewva-substrate/context-budget";
 import { RUNTIME_OPS_SESSION_COMPACTION_COMMITTED_KIND } from "@brewva/brewva-vocabulary/events";
@@ -697,18 +698,11 @@ function countScopeAwareStablePrefixTurns(
   return stableTurns;
 }
 
-function incrementCount(counts: Record<string, number>, key: string): void {
-  counts[key] = (counts[key] ?? 0) + 1;
-}
-
 function countByString(values: readonly string[]): Record<string, number> {
-  const counts: Record<string, number> = {};
-  for (const value of values) {
-    if (value.length > 0) {
-      incrementCount(counts, value);
-    }
-  }
-  return counts;
+  return countByKey(
+    values.filter((value) => value.length > 0),
+    (value) => value,
+  );
 }
 
 function countEconomicVerdictKind(

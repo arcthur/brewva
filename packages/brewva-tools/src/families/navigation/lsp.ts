@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { delimiter, dirname, extname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { readJsonFileSync } from "@brewva/brewva-std/node/fs";
 import { toErrorMessage, isRecord } from "@brewva/brewva-std/unknown";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import type { SourcePatchIntent } from "@brewva/brewva-vocabulary/workbench";
@@ -80,14 +81,6 @@ function splitCommand(value: string): {
   };
 }
 
-function readJsonFile(path: string): unknown {
-  try {
-    return JSON.parse(readFileSync(path, "utf8"));
-  } catch {
-    return undefined;
-  }
-}
-
 function commandFromConfigValue(value: unknown):
   | {
       readonly command: string;
@@ -115,15 +108,15 @@ function readWorkspaceConfiguredServer(cwd: string):
       readonly args: readonly string[];
     }
   | undefined {
-  const brewvaConfig = commandFromConfigValue(readJsonFile(resolve(cwd, ".brewva/lsp.json")));
+  const brewvaConfig = commandFromConfigValue(readJsonFileSync(resolve(cwd, ".brewva/lsp.json")));
   if (brewvaConfig) {
     return brewvaConfig;
   }
-  const rootConfig = commandFromConfigValue(readJsonFile(resolve(cwd, "brewva.lsp.json")));
+  const rootConfig = commandFromConfigValue(readJsonFileSync(resolve(cwd, "brewva.lsp.json")));
   if (rootConfig) {
     return rootConfig;
   }
-  const packageJson = asRecord(readJsonFile(resolve(cwd, "package.json")));
+  const packageJson = asRecord(readJsonFileSync(resolve(cwd, "package.json")));
   const brewva = asRecord(packageJson?.brewva);
   const lsp = asRecord(brewva?.lsp);
   return commandFromConfigValue(lsp);

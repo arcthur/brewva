@@ -62,10 +62,12 @@ describe("brewva std utility boundary", () => {
     expect(Object.keys(exports)).not.toContain(".");
     const requiredSubpaths = [
       "./async",
+      "./backoff",
       "./collections",
       "./hash",
       "./json",
       "./markdown",
+      "./math",
       "./node/fs",
       "./runtime-identity",
       "./text",
@@ -216,6 +218,96 @@ describe("brewva std utility boundary", () => {
       if (file.startsWith("packages/brewva-std/src/")) continue;
       for (const match of readRepoFile(file).matchAll(rawGuard)) {
         offenders.push(`${file} -> ${match[0].replace(/\s+/gu, " ").slice(0, 80)}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  test("unit-interval clamps stay behind std clamp01", () => {
+    // Bans the hand-written [0, 1] clamp — nested Math.min/Math.max bounding a
+    // value by the literals 0 AND 1, in any argument order. Both bounds must be
+    // literal 0 and 1, so range clamps like `Math.max(0, Math.min(len, i))` or
+    // `Math.max(1, Math.min(500, n))` (a different, legitimate concept) are not
+    // matched. The `[^;{}()]` gaps keep a match inside one expression and off a
+    // nested call, so `Math.min(a, fn(x, 1))` is not a false positive.
+    const clamp01Inline = new RegExp(
+      [
+        // Math.max(0, Math.min(1, X))  and  Math.max(0, Math.min(X, 1))
+        String.raw`Math\.max\(\s*0\s*,\s*Math\.min\(\s*(?:1\s*,|[^;{}()]*?,\s*1\s*\))`,
+        // Math.min(1, Math.max(0, X))
+        String.raw`Math\.min\(\s*1\s*,\s*Math\.max\(\s*0\s*,`,
+        // Math.min(Math.max(X, 0), 1)
+        String.raw`Math\.min\(\s*Math\.max\([^;{}()]*?,\s*0\s*\)\s*,\s*1\s*\)`,
+        // Math.max(Math.min(X, 1), 0)
+        String.raw`Math\.max\(\s*Math\.min\([^;{}()]*?,\s*1\s*\)\s*,\s*0\s*\)`,
+      ].join("|"),
+      "gu",
+    );
+    const offenders: string[] = [];
+    for (const file of listFiles("packages").filter((entry) => entry.endsWith(".ts"))) {
+      if (file.startsWith("packages/brewva-std/src/")) continue;
+      for (const match of readRepoFile(file).matchAll(clamp01Inline)) {
+        offenders.push(`${file} -> ${match[0].replace(/\s+/gu, " ").slice(0, 80)}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  test("POSIX path separator normalization stays behind std toPosixPath", () => {
+    // Bans the hand-written backslash→slash separator swap outside std, in all
+    // three idioms: `replaceAll("\\", "/")`, `replace(/\\/g, "/")`, and
+    // `split("\\").join("/")`. This is unambiguously path posixification — std's
+    // toPosixPath (portable) / relativePosixPath (node) own it. Callers that also
+    // trim, strip a leading `./`, or lowercase compose those on top of toPosixPath
+    // rather than re-inlining the separator swap. Scans .tsx too (TUI files).
+    const inlineSeparatorSwap =
+      /\.replaceAll\(\s*["']\\\\["']\s*,\s*["']\/["']\s*\)|\.replace\(\s*\/\\\\\/g[a-z]*\s*,\s*["']\/["']\s*\)|\.split\(\s*["']\\\\["']\s*\)\.join\(\s*["']\/["']\s*\)/gu;
+    const offenders: string[] = [];
+    for (const file of listFiles("packages").filter(
+      (entry) => entry.endsWith(".ts") || entry.endsWith(".tsx"),
+    )) {
+      if (file.startsWith("packages/brewva-std/src/")) continue;
+      for (const match of readRepoFile(file).matchAll(inlineSeparatorSwap)) {
+        offenders.push(`${file} -> ${match[0]}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  test("exponential backoff delay math stays behind std computeBackoffMs", () => {
+    // Bans hand-written exponential backoff — `factor ** attempt` (optionally
+    // wrapped in `Math.max(0, attempt)`) where the exponent is a retry counter.
+    // std's computeBackoffMs owns the scalar delay math; the retry loop, jitter,
+    // Retry-After override, and attempt base stay with the caller. Squaring
+    // (`x ** 2`) and `10 ** digits` rounding are NOT backoff and are not matched —
+    // the exponent must be a retry-attempt identifier.
+    const inlineBackoff =
+      /\*\*\s*(?:Math\.max\(\s*0\s*,\s*)?\b(?:attempt|used|retries|retry|tries|retryCount|attemptCount)\b/gu;
+    const offenders: string[] = [];
+    for (const file of listFiles("packages").filter((entry) => entry.endsWith(".ts"))) {
+      if (file.startsWith("packages/brewva-std/src/")) continue;
+      for (const match of readRepoFile(file).matchAll(inlineBackoff)) {
+        offenders.push(`${file} -> ${match[0]}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  test("whitespace collapse stays behind std compactWhitespace", () => {
+    // Bans the hand-written "collapse all whitespace to one space AND trim" pair
+    // (`/\s+/` → " " together with `.trim()`, in either order). std's
+    // compactWhitespace owns it. A collapse WITHOUT a trim, or a strip-all
+    // (`/\s+/g` → "") are different operations and are NOT matched. Scans .tsx too
+    // (a TUI overlay had a copy).
+    const inlineCompactWhitespace =
+      /\.replace(?:All)?\(\s*\/\\s\+\/g[a-z]*\s*,\s*" "\s*\)\.trim\(\)|\.trim\(\)\.replace(?:All)?\(\s*\/\\s\+\/g[a-z]*\s*,\s*" "\s*\)/gu;
+    const offenders: string[] = [];
+    for (const file of listFiles("packages").filter(
+      (entry) => entry.endsWith(".ts") || entry.endsWith(".tsx"),
+    )) {
+      if (file.startsWith("packages/brewva-std/src/")) continue;
+      for (const match of readRepoFile(file).matchAll(inlineCompactWhitespace)) {
+        offenders.push(`${file} -> ${match[0]}`);
       }
     }
     expect(offenders).toEqual([]);

@@ -1,7 +1,7 @@
 import { readFileSync, statSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { forEachUtf8LineSync } from "@brewva/brewva-std/node/fs";
-import { readNonEmptyString } from "@brewva/brewva-std/text";
+import { readNonEmptyString, toPosixPath } from "@brewva/brewva-std/text";
 import { isRecord, toErrorMessage } from "@brewva/brewva-std/unknown";
 import {
   buildManagedSessionContext,
@@ -482,7 +482,7 @@ function mapImportedEntryId(
 }
 
 export function isLegacyPiSessionArtifactPath(path: string): boolean {
-  const normalized = path.replace(/\\/g, "/").toLowerCase();
+  const normalized = toPosixPath(path).toLowerCase();
   return normalized.includes("/.pi/agent/sessions/") && normalized.endsWith(".jsonl");
 }
 

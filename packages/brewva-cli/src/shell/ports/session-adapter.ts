@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { runHostedPromptTurn, selectNextModelPresetName } from "@brewva/brewva-gateway/hosted";
 import type { HostedPromptTurnResult } from "@brewva/brewva-gateway/hosted";
+import { compactWhitespace } from "@brewva/brewva-std/text";
 import { isRecord, toErrorMessage } from "@brewva/brewva-std/unknown";
 import type { BrewvaPromptContentPart } from "@brewva/brewva-substrate/prompt";
 import type {
@@ -116,7 +117,7 @@ function takeGraphemes(text: string, maxChars: number): { text: string; truncate
 }
 
 function truncatePreview(text: string, maxChars = 96): string {
-  const normalized = text.replace(/\s+/gu, " ").trim();
+  const normalized = compactWhitespace(text);
   const head = takeGraphemes(normalized, maxChars - 3);
   if (!head.truncated) {
     return normalized;
@@ -129,7 +130,7 @@ function truncateText(text: string, maxChars: number): string {
 }
 
 function normalizeSummaryText(text: string): string {
-  return text.replace(/\s+/gu, " ").trim();
+  return compactWhitespace(text);
 }
 
 function readMessageText(content: unknown): {

@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { BrewvaConfig } from "@brewva/brewva-runtime";
 import { parseJsonc } from "@brewva/brewva-runtime/config";
+import { createSingleFlight } from "@brewva/brewva-std/async";
 import { isRecord, toErrorMessage } from "@brewva/brewva-std/unknown";
 import { normalizeAgentId } from "@brewva/brewva-vocabulary/session";
 import { createHostedRuntimeAdapter } from "../hosted/api.js";
@@ -103,7 +104,7 @@ export class AgentRuntimeManager {
 
   private readonly controllerRuntime: HostedRuntimeAdapterPort;
   private readonly handles = new Map<string, AgentRuntimeHandle>();
-  private readonly creating = new Map<string, Promise<AgentRuntimeHandle>>();
+  private readonly creating = createSingleFlight<string, AgentRuntimeHandle>();
 
   constructor(options: AgentRuntimeManagerOptions) {
     this.controllerRuntime = options.controllerRuntime;
@@ -141,22 +142,16 @@ export class AgentRuntimeManager {
       return existing.runtime;
     }
 
-    const pending = this.creating.get(agentId);
-    if (pending) {
-      const handle = await pending;
-      handle.lastUsedAt = Date.now();
-      return handle.runtime;
-    }
-
-    const creationTask = this.createRuntime(agentId);
-    this.creating.set(agentId, creationTask);
-    try {
-      const handle = await creationTask;
-      this.handles.set(agentId, handle);
-      return handle.runtime;
-    } finally {
-      this.creating.delete(agentId);
-    }
+    // Coalesce concurrent creations of the same agent onto one in-flight build;
+    // the resolved handle is cached in `handles` (checked above), so this only
+    // de-dupes the creation, it does not memoize inside the single-flight.
+    const handle = await this.creating.run(agentId, async () => {
+      const created = await this.createRuntime(agentId);
+      this.handles.set(agentId, created);
+      return created;
+    });
+    handle.lastUsedAt = Date.now();
+    return handle.runtime;
   }
 
   retainRuntime(requestedAgentId: string): void {

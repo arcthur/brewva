@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { resolve } from "node:path";
+import { clampInt as clampIntToRange } from "@brewva/brewva-std/math";
 import { toErrorMessage } from "@brewva/brewva-std/unknown";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import { Type } from "@sinclair/typebox";
@@ -29,7 +30,7 @@ const DEFAULT_MAX_OUTPUT_CHARS = 24_000;
 
 function clampInt(value: unknown, fallback: number, options: { min: number; max: number }): number {
   if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
-  return Math.max(options.min, Math.min(options.max, Math.trunc(value)));
+  return clampIntToRange(value, options.min, options.max);
 }
 
 async function runGitCommand(

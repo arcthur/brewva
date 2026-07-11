@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, resolve } from "node:path";
+import { toPosixPath } from "@brewva/brewva-std/text";
 
 export type GatewaySupervisorKind = "launchd" | "systemd";
 
@@ -474,7 +475,7 @@ export function buildGatewaySupervisorCommand(input: {
 
   if (typeof input.entryArg === "string" && input.entryArg.trim()) {
     const resolvedEntry = resolve(input.entryArg);
-    const normalizedEntry = resolvedEntry.replaceAll("\\", "/");
+    const normalizedEntry = toPosixPath(resolvedEntry);
     const isBunVirtualPath = normalizedEntry.includes("/$bunfs/");
     if (existsSync(resolvedEntry) && !isBunVirtualPath) {
       return [resolvedEntry, ...startArgs];

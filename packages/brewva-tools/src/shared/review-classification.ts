@@ -1,3 +1,5 @@
+import { toPosixPath } from "@brewva/brewva-std/text";
+
 export const REVIEW_CHANGE_CATEGORIES = [
   "authn",
   "authz",
@@ -104,7 +106,7 @@ export function coerceReviewChangedFileClasses(
 }
 
 function normalizePath(path: string): string {
-  return path.trim().replace(/\\/g, "/").toLowerCase();
+  return toPosixPath(path.trim()).toLowerCase();
 }
 
 function isDocPath(path: string): boolean {

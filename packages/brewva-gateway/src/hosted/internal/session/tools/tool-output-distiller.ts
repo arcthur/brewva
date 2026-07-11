@@ -1,3 +1,4 @@
+import { clamp01 } from "@brewva/brewva-std/math";
 import { estimateTokenCount, truncateTextToTokenBudget } from "@brewva/brewva-token-estimation";
 import type { OutcomeVerdict } from "@brewva/brewva-vocabulary/outcome";
 
@@ -438,7 +439,7 @@ export function distillToolOutput(input: ToolOutputDistillationInput): ToolOutpu
   const summaryChars = summaryText.length;
   const summaryBytes = Buffer.byteLength(summaryText, "utf8");
   const summaryTokens = estimateTokens(summaryText);
-  const compressionRatio = rawTokens > 0 ? Math.max(0, Math.min(1, summaryTokens / rawTokens)) : 1;
+  const compressionRatio = rawTokens > 0 ? clamp01(summaryTokens / rawTokens) : 1;
   const keepDistillation = shouldKeepDistillation({
     strategy,
     rawTokens,

@@ -1,4 +1,5 @@
 import { sleepAtBoundary } from "@brewva/brewva-effect";
+import { computeBackoffMs } from "@brewva/brewva-std/backoff";
 import { isRecord, toErrorMessage } from "@brewva/brewva-std/unknown";
 import type { TelegramChannelTransport, TelegramChannelTransportSendResult } from "./adapter.js";
 import type { TelegramOutboundRequest, TelegramUpdate } from "./types.js";
@@ -134,6 +135,11 @@ function isAbortError(error: unknown): boolean {
 }
 
 function normalizeRetryAfterMs(value: unknown): number | undefined {
+  // Bespoke on purpose: unlike std parseRetryAfterMs (which clamps a negative
+  // delta-seconds to 0), this rejects a negative numeric Retry-After — it falls
+  // through to Date.parse, so e.g. "-999999" (unparseable as a date) yields
+  // undefined and the caller uses its own fallback. It also accepts an
+  // already-numeric `retry_after` from the Telegram JSON body (seconds).
   if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
     return Math.max(0, Math.floor(value * 1_000));
   }
@@ -156,11 +162,14 @@ function normalizeRetryAfterMs(value: unknown): number | undefined {
 }
 
 function resolveSendRetryDelayMs(error: TelegramTransportError, attempt: number): number {
-  if (error.retryAfterMs !== undefined) {
-    return error.retryAfterMs;
-  }
-  const exponentialDelay = TELEGRAM_SEND_RETRY_DELAY_MS_DEFAULT * 2 ** attempt;
-  return Math.min(TELEGRAM_SEND_RETRY_DELAY_MS_MAX, exponentialDelay);
+  return (
+    error.retryAfterMs ??
+    computeBackoffMs(attempt, {
+      baseMs: TELEGRAM_SEND_RETRY_DELAY_MS_DEFAULT,
+      factor: 2,
+      maxMs: TELEGRAM_SEND_RETRY_DELAY_MS_MAX,
+    })
+  );
 }
 
 function extractApiErrorDetails(body: string): {

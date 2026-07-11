@@ -6,6 +6,7 @@ import {
   type SessionIndexRecentSession,
   type SessionIndexStatus,
 } from "@brewva/brewva-session-index";
+import { countByKey } from "@brewva/brewva-std/collections";
 import { toErrorMessage } from "@brewva/brewva-std/unknown";
 import { formatISO } from "date-fns";
 import { createCliInspectPort, type CliInspectPort } from "../runtime/cli-runtime-ports.js";
@@ -173,11 +174,7 @@ function deriveScopeDiscipline(
 }
 
 function deriveFindingCounts(findings: InspectFinding[]): Record<string, number> {
-  const counts: Record<string, number> = {};
-  for (const finding of findings) {
-    counts[finding.code] = (counts[finding.code] ?? 0) + 1;
-  }
-  return counts;
+  return countByKey(findings, (finding) => finding.code);
 }
 
 function deriveTopDirs(report: SessionInspectReport): SessionInspectFacet["topDirs"] {
@@ -242,12 +239,7 @@ function countDistribution(
   facets: SessionInspectFacet[],
   key: "verdict" | "smoothness" | "outcome",
 ): Record<string, number> {
-  const counts: Record<string, number> = {};
-  for (const facet of facets) {
-    const value = facet[key];
-    counts[value] = (counts[value] ?? 0) + 1;
-  }
-  return counts;
+  return countByKey(facets, (facet) => facet[key]);
 }
 
 function aggregateTopFrictionCodes(

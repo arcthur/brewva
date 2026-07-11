@@ -1,3 +1,4 @@
+import { compactWhitespace } from "@brewva/brewva-std/text";
 import type {
   SubagentOutcome,
   SubagentOutcomeArtifactRef,
@@ -29,7 +30,7 @@ import type { HostedDelegationTarget } from "./targets.js";
 const PATCH_MANIFEST_FILE_NAME = "patchset.json";
 
 function summarizeAssistantText(text: string): string {
-  const normalized = text.replaceAll(/\s+/g, " ").trim();
+  const normalized = compactWhitespace(text);
   if (normalized.length <= 360) {
     return normalized;
   }

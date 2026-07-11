@@ -10,8 +10,10 @@ import type {
 import { providerRuntimeLayer, readErrorStatus } from "@brewva/brewva-provider-core/contracts";
 import type { RuntimeProviderFrame, RuntimeProviderPort } from "@brewva/brewva-runtime";
 import { createAsyncBridge, linkAbortSignal } from "@brewva/brewva-std/async";
+import { computeBackoffMs, deterministicJitterFraction } from "@brewva/brewva-std/backoff";
 import { asDurable } from "@brewva/brewva-std/honesty";
 import type { JsonValue } from "@brewva/brewva-std/json";
+import { clamp01 } from "@brewva/brewva-std/math";
 import { toErrorMessage } from "@brewva/brewva-std/unknown";
 import type { BrewvaAgentProtocolAssistantMessage } from "@brewva/brewva-substrate/agent-protocol";
 import type { BrewvaRegisteredModel } from "@brewva/brewva-substrate/provider";
@@ -19,7 +21,6 @@ import type {
   BrewvaModelPresetState,
   BrewvaModelRoleAlias,
 } from "@brewva/brewva-substrate/session";
-import { deterministicJitterFraction } from "@brewva/brewva-vocabulary/schedule";
 import {
   resolveBrewvaModelSelection,
   selectBrewvaFallbackModel,
@@ -349,8 +350,12 @@ export function nextRateLimitBackoffMs(
   if (!config || config.maxRetries <= 0 || used >= config.maxRetries) {
     return undefined;
   }
-  const ceiling = Math.min(config.maxDelayMs, config.baseDelayMs * 2 ** Math.max(0, used));
-  const fraction = Number.isFinite(jitterFraction) ? Math.min(Math.max(jitterFraction, 0), 1) : 0;
+  const ceiling = computeBackoffMs(used, {
+    baseMs: config.baseDelayMs,
+    factor: 2,
+    maxMs: config.maxDelayMs,
+  });
+  const fraction = Number.isFinite(jitterFraction) ? clamp01(jitterFraction) : 0;
   return Math.floor(fraction * ceiling);
 }
 

@@ -8,10 +8,11 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveBrewvaAgentDir } from "@brewva/brewva-runtime/config";
 import { sha256Hex } from "@brewva/brewva-std/hash";
+import { relativePosixPath } from "@brewva/brewva-std/node/fs";
 import { toErrorMessage, isRecord } from "@brewva/brewva-std/unknown";
 import {
   createBrewvaResourceRouter,
@@ -286,7 +287,7 @@ function normalizeSourceReadMode(value: unknown): SourceReadMode {
 }
 
 function resourceUriForPath(scope: ToolTargetScope, absolutePath: string): string {
-  const relativePath = relative(scope.baseCwd, absolutePath).replaceAll("\\", "/");
+  const relativePath = relativePosixPath(scope.baseCwd, absolutePath);
   const path =
     relativePath.length > 0 && !relativePath.startsWith("..") ? relativePath : absolutePath;
   return `brewva-resource:///file/${path.replace(/^\/+/u, "")}`;
@@ -748,7 +749,7 @@ function detectMutationPathConflicts(
 }
 
 function workspaceRelativePath(scope: ToolTargetScope, path: string): string {
-  const relativePath = relative(scope.baseCwd, path).replaceAll("\\", "/");
+  const relativePath = relativePosixPath(scope.baseCwd, path);
   return relativePath.length > 0 && !relativePath.startsWith("..") ? relativePath : path;
 }
 

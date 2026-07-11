@@ -6,6 +6,7 @@ import {
   type KnowledgeSourceType,
   type ScoredKnowledgeDoc,
 } from "@brewva/brewva-recall/knowledge";
+import { compactWhitespace } from "@brewva/brewva-std/text";
 import { summarizeImpactMapSearchSignal } from "./impact-map.js";
 
 export const LEARNING_RESEARCH_OUTPUT_KEYS = [
@@ -38,7 +39,7 @@ function readStringArray(value: unknown): string[] {
 }
 
 function compactSentence(value: string, maxChars = 180): string {
-  const normalized = value.replace(/\s+/g, " ").trim();
+  const normalized = compactWhitespace(value);
   if (normalized.length <= maxChars) {
     return normalized;
   }

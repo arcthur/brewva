@@ -1,5 +1,6 @@
 import { readdir } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { toPosixPath } from "@brewva/brewva-std/text";
 import type { ShellCompletionUsageEntry } from "./prompt.js";
 import { fuzzyScore, normalizeSearchQuery } from "./search-scoring.js";
 
@@ -123,7 +124,7 @@ function completionUsageKey(kind: ShellCompletionCandidateKind, value: string): 
 }
 
 function normalizeUsagePath(value: string): string {
-  return stripPathLineRange(stripSuggestionQuotes(value)).replace(/\\/gu, "/");
+  return toPosixPath(stripPathLineRange(stripSuggestionQuotes(value)));
 }
 
 function completionUsageValue(candidate: ShellCompletionCandidate): string {
@@ -147,7 +148,7 @@ function completionUsageValue(candidate: ShellCompletionCandidate): string {
 }
 
 function normalizePathQuery(query: string): string {
-  return query.trim().replace(/^"/u, "").replace(/\\/gu, "/");
+  return toPosixPath(query.trim().replace(/^"/u, ""));
 }
 
 function stripSuggestionQuotes(value: string): string {

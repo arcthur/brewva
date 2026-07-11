@@ -1,4 +1,5 @@
 import { tokenizeSearchQuery } from "@brewva/brewva-search";
+import { clamp01 } from "@brewva/brewva-std/math";
 import Fuse from "fuse.js";
 import {
   EXACT_LINE_HIT_BONUS,
@@ -113,7 +114,7 @@ function scoreFuseResult(score: number | undefined, scale = FUSE_SCORE_SCALE): n
   if (typeof score !== "number" || !Number.isFinite(score)) {
     return 0;
   }
-  const bounded = Math.max(0, Math.min(1, score));
+  const bounded = clamp01(score);
   return (1 - bounded) * scale;
 }
 

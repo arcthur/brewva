@@ -1,3 +1,4 @@
+import { compactWhitespace } from "@brewva/brewva-std/text";
 import { isRecord } from "@brewva/brewva-std/unknown";
 import type {
   EffectCommitmentRequestRecord,
@@ -59,7 +60,7 @@ function readStringArray(value: unknown): string[] {
 }
 
 function formatArgsSummaryValue(value: string): string | undefined {
-  const normalized = value.trim().replaceAll(/\s+/g, " ");
+  const normalized = compactWhitespace(value);
   if (normalized.length === 0) {
     return undefined;
   }

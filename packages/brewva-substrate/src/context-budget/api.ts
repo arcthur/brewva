@@ -1,3 +1,4 @@
+import { clamp01 } from "@brewva/brewva-std/math";
 import {
   CONTEXT_COMPACTION_AUTO_COMPLETED_EVENT_TYPE,
   CONTEXT_COMPACTION_AUTO_FAILED_EVENT_TYPE,
@@ -232,7 +233,7 @@ export function readAutoCompactionIneffective(
     const from = positiveFinite(receipt.fromTokens);
     const to = finiteNonNegative(receipt.toTokens);
     if (from === null || to === null) continue;
-    const reductionRatio = Math.min(1, Math.max(0, (from - to) / from));
+    const reductionRatio = clamp01((from - to) / from);
     if (reductionRatio >= floor) return false;
     considered += 1;
     if (considered >= requiredAttempts) return true;
@@ -241,10 +242,8 @@ export function readAutoCompactionIneffective(
 }
 
 function clampUnitRatio(value: number): number {
-  if (!Number.isFinite(value)) return 1;
-  if (value < 0) return 0;
-  if (value > 1) return 1;
-  return value;
+  // Non-finite ratios price as fully-consumed (1); finite ones clamp into [0, 1].
+  return Number.isFinite(value) ? clamp01(value) : 1;
 }
 
 function deriveContextWindow(input: ContextBudgetStateInput): number {

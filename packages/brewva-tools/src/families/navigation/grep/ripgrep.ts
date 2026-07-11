@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { toPosixPath } from "@brewva/brewva-std/text";
 import type { GrepCase, GrepRunResult } from "./types.js";
 
 export const DEFAULT_GREP_MAX_LINE_CHARS = 16_000;
@@ -9,7 +10,7 @@ export const DEFAULT_RUNTIME_ARTIFACT_EXCLUDE_GLOBS = [
 ] as const;
 
 export function isRuntimeArtifactGrepRelativePath(path: string): boolean {
-  const normalized = path.replaceAll("\\", "/").replace(/^\.\//u, "");
+  const normalized = toPosixPath(path).replace(/^\.\//u, "");
   return (
     normalized === ".brewva/tape" ||
     normalized.startsWith(".brewva/tape/") ||
@@ -22,7 +23,7 @@ export function isRuntimeArtifactGrepPattern(pattern: string): boolean {
   if (trimmed.startsWith("!")) {
     return false;
   }
-  const normalized = trimmed.replaceAll("\\", "/").replace(/^\.\//u, "");
+  const normalized = toPosixPath(trimmed).replace(/^\.\//u, "");
   return /(^|[/,{])\.brewva\/tape(?:$|[/}*,])/u.test(normalized);
 }
 

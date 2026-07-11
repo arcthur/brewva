@@ -1,6 +1,8 @@
 import { realpathSync } from "node:fs";
-import { isAbsolute, posix, relative, resolve } from "node:path";
+import { isAbsolute, posix, resolve } from "node:path";
 import { normalizeSearchText } from "@brewva/brewva-search";
+import { relativePosixPath } from "@brewva/brewva-std/node/fs";
+import { toPosixPath } from "@brewva/brewva-std/text";
 import { isRecord } from "@brewva/brewva-std/unknown";
 import {
   MIN_DELIMITER_FALLBACK_LENGTH,
@@ -16,10 +18,7 @@ export function normalizeSessionId(sessionId: string | undefined): string | unde
 }
 
 export function normalizeSignalPath(path: string): string {
-  const normalized = path
-    .trim()
-    .replaceAll("\\", "/")
-    .replace(/^\.\/+/u, "");
+  const normalized = toPosixPath(path.trim()).replace(/^\.\/+/u, "");
   return normalized.length === 0 ? "." : normalized;
 }
 
@@ -44,7 +43,7 @@ export function normalizeSearchAdvisorPath(baseCwd: string, candidate: string): 
       normalizedAbsolute = `${normalizedBase}${absolutePath.slice(resolvedBase.length)}`;
     }
   }
-  const relativePath = relative(normalizedBase, normalizedAbsolute).replaceAll("\\", "/");
+  const relativePath = relativePosixPath(normalizedBase, normalizedAbsolute);
   if (relativePath.startsWith("../") || relativePath === "..") {
     return undefined;
   }

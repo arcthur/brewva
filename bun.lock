@@ -210,6 +210,7 @@
       "name": "@brewva/brewva-search",
       "version": "0.1.0",
       "dependencies": {
+        "@brewva/brewva-std": "workspace:*",
         "jieba-wasm": "^2.4.0",
       },
     },

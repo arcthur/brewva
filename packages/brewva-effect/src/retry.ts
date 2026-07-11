@@ -1,3 +1,4 @@
+import { computeBackoffMs } from "@brewva/brewva-std/backoff";
 import { Duration, Effect, Ref, Schedule } from "effect";
 
 export interface BrewvaRetryPolicy<E = unknown> {
@@ -39,7 +40,11 @@ function defaultRetryDelayMs(
 ): number {
   const baseDelayMs = normalizeRetryDelayMs(policy.baseDelayMs);
   const factor = policy.factor ?? 2;
-  return normalizeRetryDelayMs(baseDelayMs * factor ** Math.max(0, attempt));
+  // Uncapped exponential (the policy has no max-delay knob); the surrounding
+  // normalizeRetryDelayMs enforces the >= 1ms floor. The Effect-native
+  // Schedule.exponential path in makeBrewvaRetrySchedule is a Schedule combinator,
+  // not a scalar, so it stays as-is.
+  return normalizeRetryDelayMs(computeBackoffMs(attempt, { baseMs: baseDelayMs, factor }));
 }
 
 function makeServiceDirectedRetrySchedule<E>(

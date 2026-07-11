@@ -1,4 +1,5 @@
 import { asLossy } from "@brewva/brewva-std/honesty";
+import { clamp01 } from "@brewva/brewva-std/math";
 import { resolveWindowScaledTokens } from "@brewva/brewva-substrate/context-budget";
 import type { InternalHostPluginApi } from "@brewva/brewva-substrate/host-api";
 import {
@@ -114,7 +115,7 @@ function buildEstimatedPayloadUsage(
     return undefined;
   }
 
-  const usageRatio = Math.max(0, Math.min(1, estimatedTokens / contextWindow));
+  const usageRatio = clamp01(estimatedTokens / contextWindow);
   return {
     tokens: estimatedTokens,
     contextWindow,

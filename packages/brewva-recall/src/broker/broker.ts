@@ -2,6 +2,7 @@ import { createSessionIndex, type SessionIndex } from "@brewva/brewva-session-in
 import { isSessionIndexTextIndexedEvent } from "@brewva/brewva-session-index/evidence";
 import { uniqueNonEmptyStrings as uniqueStrings } from "@brewva/brewva-std/collections";
 import { resolveRuntimeSourceIdentity } from "@brewva/brewva-std/runtime-identity";
+import { compactWhitespace } from "@brewva/brewva-std/text";
 import {
   buildUserModelProjection,
   parseUserFactEvent,
@@ -59,7 +60,7 @@ const TURN_ENDED_OPS_EVENT_TYPE = "turn.ended";
 const brokerByRuntime = new WeakMap<object, RecallBroker>();
 
 function normalizeQuery(value: string): string {
-  return value.trim().replace(/\s+/g, " ");
+  return compactWhitespace(value);
 }
 
 function buildEmptyState(): RecallBrokerState {

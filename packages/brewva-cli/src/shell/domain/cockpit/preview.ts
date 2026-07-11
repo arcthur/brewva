@@ -1,8 +1,10 @@
+import { compactWhitespace } from "@brewva/brewva-std/text";
+
 const PROMPT_PREVIEW_LIMIT = 160;
 const THINKING_PREVIEW_LIMIT = 160;
 
 export function compactPromptPreview(text: string): string | null {
-  const normalized = text.trim().replace(/\s+/gu, " ");
+  const normalized = compactWhitespace(text);
   if (normalized.length === 0) {
     return null;
   }

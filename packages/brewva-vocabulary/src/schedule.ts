@@ -1,5 +1,5 @@
+export { deterministicJitterFraction } from "@brewva/brewva-std/backoff";
 export {
-  deterministicJitterFraction,
   getNextCronRunAt,
   mergeScheduleSpec,
   nextScheduleRunAt,

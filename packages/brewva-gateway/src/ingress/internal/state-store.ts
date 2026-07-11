@@ -4,7 +4,7 @@ import {
   createCredentialVaultService,
   type CredentialVaultService,
 } from "@brewva/brewva-runtime/security";
-import { rewriteFileAtomic } from "@brewva/brewva-std/node/fs";
+import { readJsonFileSync, rewriteFileAtomic } from "@brewva/brewva-std/node/fs";
 import { isRecord } from "@brewva/brewva-std/unknown";
 
 export interface ChildRegistryEntry {
@@ -131,14 +131,6 @@ function parseChildRegistryEntries(raw: unknown): ChildRegistryEntry[] {
   return entries;
 }
 
-function readJsonFile(filePath: string): unknown {
-  try {
-    return JSON.parse(readFileSync(filePath, "utf8")) as unknown;
-  } catch {
-    return undefined;
-  }
-}
-
 function writeJsonFileAtomically(filePath: string, value: unknown): void {
   mkdirSync(dirname(filePath), { recursive: true });
   rewriteFileAtomic(filePath, JSON.stringify(value, null, 2));
@@ -252,7 +244,7 @@ export class FileGatewayStateStore implements GatewayStateStore {
     if (!existsSync(filePath)) {
       return [];
     }
-    return parseChildRegistryEntries(readJsonFile(filePath));
+    return parseChildRegistryEntries(readJsonFileSync(filePath));
   }
 
   writeChildrenRegistry(registryPath: string, entries: ReadonlyArray<ChildRegistryEntry>): void {

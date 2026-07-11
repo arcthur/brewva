@@ -6,6 +6,7 @@ import {
   createAsyncBridge,
   createDeferred,
   createNonOverlappingTaskRunner,
+  createSingleFlight,
   linkAbortSignal,
   mapConcurrent,
 } from "@brewva/brewva-std/async";
@@ -72,6 +73,69 @@ describe("std async utilities", () => {
     await firstRunFailure;
     expect(await runner.run()).toBe(true);
     expect(attempts).toBe(2);
+  });
+
+  test("createSingleFlight shares one in-flight promise per key", async () => {
+    const flight = createSingleFlight<string, number>();
+    let calls = 0;
+    const release = createDeferred<void>();
+    const factory = () => {
+      calls += 1;
+      return release.promise.then(() => calls);
+    };
+
+    const first = flight.run("k", factory);
+    const second = flight.run("k", factory);
+    expect(first).toBe(second); // same promise object → coalesced
+    expect(flight.size).toBe(1);
+
+    release.resolve();
+    expect(await first).toBe(1);
+    expect(calls).toBe(1); // factory ran once for the coalesced key
+  });
+
+  test("createSingleFlight runs distinct keys independently and re-runs after settle", async () => {
+    const flight = createSingleFlight<string, string>();
+
+    expect(await flight.run("k", async () => "v1")).toBe("v1");
+    expect(flight.size).toBe(0); // slot cleared after settle
+    // Not memoized: a later call for the same key re-invokes the factory.
+    expect(await flight.run("k", async () => "v2")).toBe("v2");
+  });
+
+  test("createSingleFlight clears the slot after a rejection", async () => {
+    const flight = createSingleFlight<string, string>();
+
+    await flight
+      .run("k", async () => Promise.reject(new Error("boom")))
+      .then(
+        () => expect.unreachable("expected rejection"),
+        (error) => expect((error as Error).message).toBe("boom"),
+      );
+    expect(flight.size).toBe(0);
+    expect(await flight.run("k", async () => "recovered")).toBe("recovered");
+  });
+
+  test("createSingleFlight clear stops new calls from joining prior in-flight work", async () => {
+    const flight = createSingleFlight<string, number>();
+    let calls = 0;
+    const release = createDeferred<void>();
+    const factory = () => {
+      calls += 1;
+      return release.promise.then(() => calls);
+    };
+
+    const first = flight.run("k", factory);
+    expect(flight.size).toBe(1);
+    flight.clear();
+    expect(flight.size).toBe(0);
+
+    const second = flight.run("k", factory); // fresh, does not join `first`
+    expect(second).not.toBe(first);
+    release.resolve();
+    await first;
+    await second;
+    expect(calls).toBe(2);
   });
 
   test("mapConcurrent preserves input order and limits active work", async () => {

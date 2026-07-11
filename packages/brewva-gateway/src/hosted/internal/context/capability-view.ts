@@ -17,6 +17,7 @@ import type {
   ToolRecoveryPreparation,
   ToolRiskLevel,
 } from "@brewva/brewva-runtime/security";
+import { compactWhitespace } from "@brewva/brewva-std/text";
 import type { BrewvaToolRequiredCapability } from "@brewva/brewva-tools/contracts";
 import {
   collectStringEnumContracts,
@@ -216,7 +217,7 @@ function normalizeToolName(name: string): string {
 }
 
 function compactText(value: string, maxChars = 200): string {
-  const compact = value.replace(/\s+/g, " ").trim();
+  const compact = compactWhitespace(value);
   if (compact.length <= maxChars) return compact;
   return `${compact.slice(0, Math.max(1, maxChars - 3))}...`;
 }

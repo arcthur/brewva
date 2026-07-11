@@ -2,8 +2,10 @@ import { join } from "node:path";
 import { uniqueValues as uniqueStrings } from "@brewva/brewva-std/collections";
 import { parseMarkdownFrontmatter } from "@brewva/brewva-std/markdown";
 import {
+  compactWhitespace,
   normalizeStringList as readStringArray,
   readNonEmptyString as readTrimmedString,
+  toPosixPath as normalizeRelativePath,
 } from "@brewva/brewva-std/text";
 import { Type } from "@sinclair/typebox";
 import { buildStringEnumSchema } from "../../registry/string-enum-contract.js";
@@ -98,12 +100,10 @@ export const SolutionRecordInputSchema = Type.Object({
   ),
 });
 
-export function normalizeRelativePath(value: string): string {
-  return value.replaceAll("\\", "/");
-}
+export { normalizeRelativePath };
 
 export function normalizeSectionHeading(value: string): string {
-  return value.trim().replace(/\s+/g, " ");
+  return compactWhitespace(value);
 }
 
 export function normalizeBody(value: string): string {

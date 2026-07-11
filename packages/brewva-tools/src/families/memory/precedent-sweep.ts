@@ -1,5 +1,6 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
+import { join } from "node:path";
+import { relativePosixPath } from "@brewva/brewva-std/node/fs";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "../../contracts/index.js";
@@ -222,7 +223,7 @@ export function createPrecedentSweepTool(options: BrewvaToolOptions): ToolDefini
         if (auditedDocs >= limit) {
           break;
         }
-        const relativePath = relative(scope.primaryRoot, absolutePath).replace(/\\/g, "/");
+        const relativePath = relativePosixPath(scope.primaryRoot, absolutePath);
         const parsed = parseSolutionDocument(readFileSync(absolutePath, "utf8"));
         const record = parsed.record;
 

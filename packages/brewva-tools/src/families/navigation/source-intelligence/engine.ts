@@ -1,5 +1,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
+import { relativePosixPath } from "@brewva/brewva-std/node/fs";
+import { toPosixPath } from "@brewva/brewva-std/text";
 import { createOxcTypeScriptAdapter } from "./adapters/oxc-typescript.js";
 import { packageJsonAdapter } from "./adapters/package-json.js";
 import { treeSitterCppAdapter } from "./adapters/tree-sitter-cpp.js";
@@ -107,7 +109,7 @@ const DEFAULT_SKIPPED_DIRECTORIES = [
 ] as const;
 
 function normalizeSkippedDirectoryName(value: string): string | null {
-  const segments = value.replaceAll("\\", "/").split("/");
+  const segments = toPosixPath(value).split("/");
   for (let index = segments.length - 1; index >= 0; index -= 1) {
     const normalized = segments[index]?.trim();
     if (normalized && normalized.length > 0) {
@@ -258,7 +260,7 @@ function isIgnoredByGitignore(input: {
   readonly isDirectory: boolean;
   readonly rules: readonly GitignoreRule[];
 }): boolean {
-  const relativePath = relative(input.root, input.entry).replaceAll("\\", "/");
+  const relativePath = relativePosixPath(input.root, input.entry);
   if (relativePath.length === 0 || relativePath.startsWith("..")) return false;
   let ignored = false;
   for (const rule of input.rules) {

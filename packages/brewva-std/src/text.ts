@@ -6,6 +6,19 @@ export function compactWhitespace(value: string): string {
   return value.replace(/\s+/gu, " ").trim();
 }
 
+/**
+ * Rewrite Windows-style `\` path separators to POSIX `/`. A pure string
+ * transform (no filesystem access) — the std home for the `replaceAll("\\", "/")`
+ * separator normalization that several packages had grown private copies of.
+ * Callers that also strip a leading `./`, trim, or lowercase should compose those
+ * on top of this rather than re-inline the separator swap. When the input is an
+ * absolute or resolved path that must first be made relative, use
+ * `relativePosixPath` from `@brewva/brewva-std/node/fs`.
+ */
+export function toPosixPath(value: string): string {
+  return value.replaceAll("\\", "/");
+}
+
 export function truncateText(
   value: string,
   maxChars: number,

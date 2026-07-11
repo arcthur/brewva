@@ -1,4 +1,4 @@
-import { relative } from "node:path";
+import { relativePosixPath } from "@brewva/brewva-std/node/fs";
 import type {
   SourceDeclaration,
   SourceDocument,
@@ -9,7 +9,7 @@ import type {
 } from "../ir.js";
 
 function workspacePath(baseCwd: string, filePath: string): string {
-  const rel = relative(baseCwd, filePath).replaceAll("\\", "/");
+  const rel = relativePosixPath(baseCwd, filePath);
   return rel.length > 0 && !rel.startsWith("..") ? rel : filePath;
 }
 

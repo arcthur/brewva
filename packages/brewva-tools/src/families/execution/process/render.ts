@@ -1,3 +1,4 @@
+import { compactWhitespace } from "@brewva/brewva-std/text";
 import { differenceInMilliseconds } from "date-fns";
 import type { ToolTextOutcomeKind } from "../../../utils/result.js";
 import {
@@ -13,7 +14,7 @@ function formatRuntimeMs(startedAt: number, endedAt = Date.now()): string {
 }
 
 export function formatSessionLabel(command: string): string {
-  const trimmed = command.trim().replaceAll(/\s+/g, " ");
+  const trimmed = compactWhitespace(command);
   if (trimmed.length <= 96) return trimmed;
   return `${trimmed.slice(0, 93)}...`;
 }

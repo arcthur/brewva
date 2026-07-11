@@ -3,6 +3,8 @@
 // the kernel commitment path consumes it. See
 // `docs/research/active/rfc-quantified-compaction-economics-and-evidence-honesty.md`.
 
+import { clamp01 } from "@brewva/brewva-std/math";
+
 export interface NetReuseInputs {
   // Tokens freed by the compaction cut (fromTokens - toTokens). Negative when
   // the cut GREW the retained context (the summary outweighed what it replaced)
@@ -22,16 +24,6 @@ export interface NetReuseInputs {
 export interface NetReuseEstimate {
   netReuseValue: number;
   inputs: NetReuseInputs;
-}
-
-function clamp01(value: number): number {
-  if (value < 0) {
-    return 0;
-  }
-  if (value > 1) {
-    return 1;
-  }
-  return value;
 }
 
 /**

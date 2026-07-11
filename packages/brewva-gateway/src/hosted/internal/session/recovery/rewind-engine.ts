@@ -1,3 +1,4 @@
+import { toPosixPath } from "@brewva/brewva-std/text";
 import { isRecord } from "@brewva/brewva-std/unknown";
 import type {
   WorkspaceRewindReadiness,
@@ -273,7 +274,7 @@ function splitWindowByRestoreCoverage(
     bucket.push(...paths);
     pathsById.set(payload.patchSetId, bucket);
   }
-  const normalizedRoot = `${workspaceRoot.replaceAll("\\", "/")}/`;
+  const normalizedRoot = `${toPosixPath(workspaceRoot)}/`;
   const covered: string[] = [];
   const outOfScope: string[] = [];
   for (const patchSetId of windowPatchSetIds) {
@@ -284,7 +285,7 @@ function splitWindowByRestoreCoverage(
       continue;
     }
     const allGoverned = rawPaths.every((raw) => {
-      const normalized = raw.replaceAll("\\", "/");
+      const normalized = toPosixPath(raw);
       const relative = normalized.startsWith(normalizedRoot)
         ? normalized.slice(normalizedRoot.length)
         : normalized;

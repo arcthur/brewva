@@ -1,4 +1,5 @@
 import { relative, resolve } from "node:path";
+import { toPosixPath } from "@brewva/brewva-std/text";
 import { isRecord } from "@brewva/brewva-std/unknown";
 
 const DEFAULT_PATHISH_KEY_PATTERN = /(path|paths|file|files|cwd|workdir|dir|directory)/i;
@@ -17,7 +18,7 @@ interface ResolveWorkspacePathInput {
 }
 
 export function normalizeWorkspaceRelativePath(path: string): string {
-  return path.replaceAll("\\", "/").trim();
+  return toPosixPath(path).trim();
 }
 
 export function toWorkspaceRelativePath(

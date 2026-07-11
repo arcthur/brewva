@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
 import { appendFile, mkdir } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
+import { toPosixPath as normalizeRelativePath } from "@brewva/brewva-std/text";
 import { isRecord } from "@brewva/brewva-std/unknown";
 import type {
   PromptStabilityState,
@@ -25,9 +26,7 @@ function encodeSessionId(sessionId: string): string {
   return encodeURIComponent(sessionId);
 }
 
-export function normalizeRelativePath(value: string): string {
-  return value.replaceAll("\\", "/");
-}
+export { normalizeRelativePath };
 
 export function resolveEvidenceDir(workspaceRoot: string): string {
   return resolve(workspaceRoot, DEFAULT_CONTEXT_EVIDENCE_DIR);

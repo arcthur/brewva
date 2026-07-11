@@ -22,6 +22,8 @@
 // `readErrorStatus` (4) because this traverses the HOST's multi-layer error wrapping
 // (codex wrapper -> ProviderStreamError -> ProviderAttemptError -> ...), not a shallow
 // SDK `cause` chain.
+import { computeBackoffMs } from "@brewva/brewva-std/backoff";
+
 const MAX_CAUSE_DEPTH = 8;
 
 export function isRetryableProviderError(error: unknown): boolean {
@@ -106,7 +108,11 @@ const PROVIDER_RETRY_MAX_DELAY_MS = 2_000;
  * the schedule stays deterministic for tape replay and tests.
  */
 export function providerRetryDelayMs(attempt: number): number {
-  const exponent = Math.max(0, attempt - 1);
-  const delay = PROVIDER_RETRY_BASE_DELAY_MS * 2 ** exponent;
-  return Math.min(delay, PROVIDER_RETRY_MAX_DELAY_MS);
+  // 1-based attempts: pass attempt - 1 so the first retry lands on baseMs (the
+  // kernel clamps the exponent to >= 0).
+  return computeBackoffMs(attempt - 1, {
+    baseMs: PROVIDER_RETRY_BASE_DELAY_MS,
+    factor: 2,
+    maxMs: PROVIDER_RETRY_MAX_DELAY_MS,
+  });
 }

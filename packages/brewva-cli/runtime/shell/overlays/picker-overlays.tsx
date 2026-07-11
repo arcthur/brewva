@@ -1,5 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 
+import { compactWhitespace } from "@brewva/brewva-std/text";
 import { For, Show, createEffect, createMemo } from "solid-js";
 import { padToWidth, visibleWidth, wrapTextToLines } from "../../../src/internal/tui/index.js";
 import type {
@@ -111,7 +112,7 @@ function resolveSkillsDescriptionWidth(contentWidth: number, nameColumnWidth: nu
 
 function wrapPickerText(text: string, width: number): string[] {
   const boundedWidth = Math.max(1, Math.trunc(width));
-  const normalized = text.trim().replace(/\s+/gu, " ");
+  const normalized = compactWhitespace(text);
   if (normalized.length === 0) {
     return [""];
   }

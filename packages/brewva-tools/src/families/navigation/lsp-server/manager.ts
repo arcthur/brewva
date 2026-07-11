@@ -1,3 +1,4 @@
+import { createSingleFlight } from "@brewva/brewva-std/async";
 import { StdioLspClient, type LspOpenDocument } from "./client.js";
 
 interface LspWorkspaceServerInput {
@@ -38,7 +39,7 @@ function serverKey(input: LspWorkspaceServerInput): string {
 
 export class LspWorkspaceServerManager {
   private readonly entries = new Map<string, LspWorkspaceServerEntry>();
-  private readonly creating = new Map<string, Promise<LspWorkspaceServerEntry>>();
+  private readonly creating = createSingleFlight<string, LspWorkspaceServerEntry>();
 
   async withClient<T>(
     input: LspWorkspaceServerInput,
@@ -89,19 +90,13 @@ export class LspWorkspaceServerManager {
     if (existing?.client.isClosed) {
       this.entries.delete(key);
     }
-    const pending = this.creating.get(key);
-    if (pending) {
-      return await pending;
-    }
-    const created = this.createEntry(key, input);
-    this.creating.set(key, created);
-    try {
-      const entry = await created;
+    // Coalesce concurrent creations for the same server key onto one in-flight
+    // build; the resolved entry is cached in `entries` (checked above).
+    return this.creating.run(key, async () => {
+      const entry = await this.createEntry(key, input);
       this.entries.set(key, entry);
       return entry;
-    } finally {
-      this.creating.delete(key);
-    }
+    });
   }
 
   private async createEntry(

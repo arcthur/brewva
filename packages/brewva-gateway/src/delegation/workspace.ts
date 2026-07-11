@@ -4,6 +4,7 @@ import { cp, copyFile, mkdir, mkdtemp, readlink, rm, symlink, writeFile } from "
 import { tmpdir } from "node:os";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { shortSha256Hex } from "@brewva/brewva-std/hash";
+import { toPosixPath as normalizeRelativePath } from "@brewva/brewva-std/text";
 import {
   createWorkspaceWorldStore,
   listGitScopedPaths,
@@ -43,10 +44,6 @@ import { resolveDelegationContextBundleManifestPath } from "./context-manifest.j
 const IGNORED_ROOT_SEGMENTS = new Set([...RUNTIME_DATA_ROOT_NAMES, "node_modules"]);
 const PATCH_ARTIFACT_ROOT = ".orchestrator/subagent-patch-artifacts";
 const PATCH_MANIFEST_FILE_NAME = "patchset.json";
-
-function normalizeRelativePath(path: string): string {
-  return path.replaceAll("\\", "/");
-}
 
 function shouldIgnorePath(relativePath: string): boolean {
   const normalized = normalizeRelativePath(relativePath).replace(/^\.\/+/u, "");

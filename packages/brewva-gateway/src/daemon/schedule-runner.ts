@@ -1,3 +1,4 @@
+import { compactWhitespace } from "@brewva/brewva-std/text";
 import { toErrorMessage } from "@brewva/brewva-std/unknown";
 import type { OperationalClaim } from "@brewva/brewva-vocabulary/iteration";
 import type {
@@ -35,7 +36,7 @@ export interface ScheduleContinuationSnapshot {
 
 function clampText(value: string | undefined, maxChars: number): string | undefined {
   if (typeof value !== "string") return undefined;
-  const compact = value.replace(/\s+/g, " ").trim();
+  const compact = compactWhitespace(value);
   if (!compact) return undefined;
   if (compact.length <= maxChars) return compact;
   return `${compact.slice(0, Math.max(1, maxChars - 3))}...`;

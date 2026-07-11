@@ -12,6 +12,7 @@ import {
 } from "node:fs";
 import { dirname, resolve } from "node:path";
 import type { BrewvaConfig } from "@brewva/brewva-runtime";
+import { readJsonFileSync } from "@brewva/brewva-std/node/fs";
 import type { BrewvaModelRoleAlias } from "@brewva/brewva-substrate/session";
 import type {
   DelegationPacket,
@@ -104,12 +105,12 @@ function readJsonFile<T>(
   filePath: string,
   coerce: (value: unknown) => T = (value) => value as T,
 ): T | undefined {
-  const resolvedPath = resolve(filePath);
-  if (!existsSync(resolvedPath)) {
+  const parsed = readJsonFileSync(filePath);
+  if (parsed === undefined) {
     return undefined;
   }
   try {
-    return coerce(JSON.parse(readFileSync(resolvedPath, "utf8")));
+    return coerce(parsed);
   } catch {
     return undefined;
   }

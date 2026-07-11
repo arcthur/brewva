@@ -1,11 +1,14 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { basename, join, relative, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { tokenizeSearchContent, tokenizeSearchQuery } from "@brewva/brewva-search";
 import { parseMarkdownFrontmatter } from "@brewva/brewva-std/markdown";
+import { clamp01 } from "@brewva/brewva-std/math";
+import { relativePosixPath } from "@brewva/brewva-std/node/fs";
 import {
   compactWhitespace,
   normalizeStringList as readStringArray,
   readNonEmptyString as readTrimmedString,
+  toPosixPath,
   truncateText,
 } from "@brewva/brewva-std/text";
 import { toErrorMessage } from "@brewva/brewva-std/unknown";
@@ -304,7 +307,7 @@ function loadKnowledgeDocs(searchRoot: string, workspaceRoot: string): LoadedKno
   for (const source of plan.sources) {
     for (const absolutePath of source.files) {
       const raw = readFileSync(absolutePath, "utf8");
-      const relativePath = relative(resolvedWorkspaceRoot, absolutePath).replace(/\\/g, "/");
+      const relativePath = relativePosixPath(resolvedWorkspaceRoot, absolutePath);
       let data: Record<string, unknown>;
       let body: string;
       try {
@@ -378,7 +381,7 @@ function buildKnowledgeLoadPlan(searchRoot: string, workspaceRoot: string): Know
       fingerprintParts.push(`${sourceRoot.relativeDir}:missing`);
       continue;
     }
-    const searchedRoot = relative(workspaceRoot, absoluteDir).replace(/\\/g, "/");
+    const searchedRoot = relativePosixPath(workspaceRoot, absoluteDir);
     const files = collectMarkdownFiles(absoluteDir);
     searchedRoots.push(searchedRoot);
     sources.push({ sourceRoot, files });
@@ -386,7 +389,7 @@ function buildKnowledgeLoadPlan(searchRoot: string, workspaceRoot: string): Know
     for (const absolutePath of files) {
       const stats = statSync(absolutePath);
       fingerprintParts.push(
-        `${relative(workspaceRoot, absolutePath).replace(/\\/g, "/")}:${stats.size}:${stats.mtimeMs}`,
+        `${relativePosixPath(workspaceRoot, absolutePath)}:${stats.size}:${stats.mtimeMs}`,
       );
     }
   }
@@ -449,7 +452,7 @@ function normalizeScore(score: number | undefined): number {
   if (typeof score !== "number" || !Number.isFinite(score)) {
     return 0;
   }
-  const bounded = Math.max(0, Math.min(1, score));
+  const bounded = clamp01(score);
   return Math.max(1, Math.round((1 - bounded) * FUSE_BASE_SCORE));
 }
 
@@ -954,7 +957,9 @@ export function findKnowledgeDocByRelativePath(
   searchRoots: readonly string[],
   relativePath: string,
 ): KnowledgeDocRecord | undefined {
-  const normalizedRelativePath = readTrimmedString(relativePath)?.replace(/\\/g, "/");
+  const trimmedRelativePath = readTrimmedString(relativePath);
+  const normalizedRelativePath =
+    trimmedRelativePath === undefined ? undefined : toPosixPath(trimmedRelativePath);
   if (!normalizedRelativePath) {
     return undefined;
   }

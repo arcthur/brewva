@@ -1,3 +1,4 @@
+import { safeParseJson } from "@brewva/brewva-std/json";
 import type {
   ChatCompletionAssistantMessageParam,
   ChatCompletionContentPart,
@@ -157,13 +158,7 @@ export function convertMessages(
         }));
         const reasoningDetails = toolCalls
           .filter((tc) => tc.thoughtSignature)
-          .map((tc) => {
-            try {
-              return JSON.parse(tc.thoughtSignature!);
-            } catch {
-              return null;
-            }
-          })
+          .map((tc) => safeParseJson(tc.thoughtSignature!))
           .filter(Boolean);
         if (reasoningDetails.length > 0) {
           setAssistantReasoningDetails(assistantMsg, reasoningDetails);

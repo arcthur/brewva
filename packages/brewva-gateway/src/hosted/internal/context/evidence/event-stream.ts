@@ -1,4 +1,5 @@
 import type { JsonValue } from "@brewva/brewva-runtime/core";
+import { clamp01 } from "@brewva/brewva-std/math";
 import { isRecord } from "@brewva/brewva-std/unknown";
 import type { InternalHostPluginApi } from "@brewva/brewva-substrate/host-api";
 import type {
@@ -201,7 +202,7 @@ function computeMessageHealth(windowText: string, windowChars: number): MessageH
     penalty += Math.min(0.4, (maxSentenceChars - 350) / 900);
   }
 
-  const score = Math.max(0, Math.min(1, 1 - penalty));
+  const score = clamp01(1 - penalty);
 
   const flags: string[] = [];
   if (tokenCount >= 24 && repeatedTrigramRatioRaw > 0.4) flags.push("repetition_high");

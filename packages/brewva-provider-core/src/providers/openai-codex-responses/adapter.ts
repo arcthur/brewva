@@ -1,6 +1,7 @@
 import type * as NodeOs from "node:os";
 import { fromAbortableBoundaryPromise, retryWithBrewvaPolicy } from "@brewva/brewva-effect";
 import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
+import { computeBackoffMs, parseRetryAfterMs } from "@brewva/brewva-std/backoff";
 import { supportsXhigh } from "../../catalog/index.js";
 import type {
   Context,
@@ -132,23 +133,13 @@ function capRetryDelayMs(delayMs: number, maxRetryDelayMs: number | undefined): 
 }
 
 function defaultRetryDelayForAttempt(attempt: number): number {
-  return BASE_DELAY_MS * 2 ** Math.max(0, attempt);
+  // Uncapped exponential; the cap is applied separately by capRetryDelayMs, which
+  // also bounds a Retry-After-derived delay.
+  return computeBackoffMs(attempt, { baseMs: BASE_DELAY_MS, factor: 2 });
 }
 
 function readRetryAfterMs(headers: Headers): number | undefined {
-  const value = headers.get("retry-after");
-  if (!value) {
-    return undefined;
-  }
-  const seconds = Number(value);
-  if (Number.isFinite(seconds)) {
-    return Math.max(0, Math.trunc(seconds * 1000));
-  }
-  const retryAt = Date.parse(value);
-  if (!Number.isNaN(retryAt)) {
-    return Math.max(0, retryAt - Date.now());
-  }
-  return undefined;
+  return parseRetryAfterMs(headers.get("retry-after"));
 }
 
 function toError(error: unknown): Error {

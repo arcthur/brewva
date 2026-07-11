@@ -1,3 +1,5 @@
+import { toPosixPath } from "@brewva/brewva-std/text";
+
 const PROMPT_PATH_CANDIDATE_PATTERN =
   /(?:^|[\s`'"])((?:\/|\.{1,2}\/)[^\s`'",;:!?]+|[A-Za-z0-9_.@()-]+\/[A-Za-z0-9_./@()+-]+)(?=$|[\s`'",;:!?])/gu;
 
@@ -23,7 +25,7 @@ function escapeRegExp(value: string): string {
 }
 
 function normalizePathForGlob(value: string): string {
-  return value.replace(/\\/gu, "/").replace(/^\.\//u, "").replace(/\/+$/u, "");
+  return toPosixPath(value).replace(/^\.\//u, "").replace(/\/+$/u, "");
 }
 
 function globToRegExp(glob: string): RegExp {

@@ -1,3 +1,4 @@
+import { clamp01 } from "@brewva/brewva-std/math";
 import { isRecord } from "@brewva/brewva-std/unknown";
 
 export type { AnyRecord } from "@brewva/brewva-std/unknown";
@@ -25,7 +26,7 @@ export function normalizeNonNegativeNumber(value: unknown, fallback: number): nu
 
 export function normalizeUnitInterval(value: unknown, fallback: number): number {
   if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
-  return Math.max(0, Math.min(1, value));
+  return clamp01(value);
 }
 
 export function normalizeNonEmptyString(value: unknown, fallback: string): string {

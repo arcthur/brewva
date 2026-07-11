@@ -1,3 +1,4 @@
+import { compactWhitespace } from "@brewva/brewva-std/text";
 import type {
   BrewvaProviderCompletionDriver,
   BrewvaProviderCompletionResponse,
@@ -108,7 +109,7 @@ export function normalizeGeneratedSessionTitle(text: string): string {
     return "";
   }
   const unquoted = firstLine.replace(/^["'`“”‘’]+|["'`“”‘’]+$/gu, "");
-  const collapsed = unquoted.replace(/\s+/gu, " ").trim();
+  const collapsed = compactWhitespace(unquoted);
   const words = collapsed.split(" ").filter((word) => word.length > 0);
   return words
     .slice(0, 8)

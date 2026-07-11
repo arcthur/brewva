@@ -1,6 +1,8 @@
 import { statSync } from "node:fs";
-import { dirname, isAbsolute, relative, resolve } from "node:path";
+import { dirname, isAbsolute, resolve } from "node:path";
 import { scoreDocumentsByTfIdf, type TfIdfSearchDocument } from "@brewva/brewva-search";
+import { relativePosixPath } from "@brewva/brewva-std/node/fs";
+import { toPosixPath } from "@brewva/brewva-std/text";
 import type { BrewvaToolOptions } from "../../../contracts/index.js";
 import { buildSearchAdvisorSnapshot, normalizeSearchAdvisorPath } from "../search-advisor.js";
 import { createSourceIntelligenceEngine } from "../source-intelligence/engine.js";
@@ -141,7 +143,7 @@ export function rerankGroupedLines(input: {
 export function deriveBroadenedPaths(cwd: string, paths: string[]): string[] {
   const broadened = new Set<string>();
   for (const path of paths) {
-    const normalized = path.replaceAll("\\", "/");
+    const normalized = toPosixPath(path);
     if (normalized === ".") {
       broadened.add(".");
       continue;
@@ -156,7 +158,7 @@ export function deriveBroadenedPaths(cwd: string, paths: string[]): string[] {
     } catch {
       broadenedPath = dirname(absolutePath);
     }
-    const relativePath = relative(cwd, broadenedPath).replaceAll("\\", "/");
+    const relativePath = relativePosixPath(cwd, broadenedPath);
     broadened.add(relativePath.length === 0 ? "." : relativePath);
   }
   return [...broadened];
@@ -214,7 +216,7 @@ export async function buildGrepSourceSuggestions(input: {
   return results.flatMap((result) => {
     const document = result.document.metadata;
     if (!document) return [];
-    const displayPath = relative(input.baseCwd, document.filePath).replaceAll("\\", "/");
+    const displayPath = relativePosixPath(input.baseCwd, document.filePath);
     const declaration = document.declarations[0];
     const declarationText = declaration
       ? `source ${declaration.kind} ${declaration.name} @ ${formatLineSpan(

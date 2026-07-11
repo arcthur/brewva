@@ -1,6 +1,7 @@
 import { existsSync, statSync } from "node:fs";
 import { basename } from "node:path";
 import { scoreDocumentsByTfIdf, type TfIdfSearchDocument } from "@brewva/brewva-search";
+import { clampInt } from "@brewva/brewva-std/math";
 import { toErrorMessage } from "@brewva/brewva-std/unknown";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import { estimateTokenCount } from "@brewva/brewva-token-estimation";
@@ -86,7 +87,7 @@ function clampInteger(
   if (typeof value !== "number" || !Number.isFinite(value)) {
     return fallback;
   }
-  return Math.max(options.min, Math.min(options.max, Math.trunc(value)));
+  return clampInt(value, options.min, options.max);
 }
 
 function resolveToolPaths(input: {

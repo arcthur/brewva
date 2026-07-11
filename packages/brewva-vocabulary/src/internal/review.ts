@@ -1,3 +1,4 @@
+import { toPosixPath } from "@brewva/brewva-std/text";
 import { isRecord } from "@brewva/brewva-std/unknown";
 import { payloadOf } from "./events.js";
 import type { WriteInvocationPath } from "./tool-invocations.js";
@@ -265,14 +266,14 @@ export function reviewTargetRefMatchesTapeOnly(
  * the gateway skill-adoption projection so the two normalizers agree.
  */
 export function normalizeReviewPath(path: string, cwd: string | null = null): string {
-  let value = path.replaceAll("\\", "/").trim();
+  let value = toPosixPath(path).trim();
   if (value.startsWith("brewva-resource:///file/")) {
     value = decodeUriComponentSafe(value.slice("brewva-resource:///file/".length));
   } else if (value.startsWith("file://")) {
     value = decodeUriComponentSafe(value.slice("file://".length));
   }
   if (cwd && value.startsWith("/")) {
-    const normalizedCwd = cwd.replaceAll("\\", "/").replace(/\/+$/u, "");
+    const normalizedCwd = toPosixPath(cwd).replace(/\/+$/u, "");
     if (normalizedCwd.length > 0 && value.startsWith(`${normalizedCwd}/`)) {
       value = value.slice(normalizedCwd.length + 1);
     }

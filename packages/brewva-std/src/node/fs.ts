@@ -12,8 +12,20 @@ import {
   truncateSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { dirname, relative, resolve } from "node:path";
 import { StringDecoder } from "node:string_decoder";
+import { toPosixPath } from "../text.js";
+
+/**
+ * Compute the path of `to` relative to `from` and normalize its separators to
+ * POSIX `/`. Centralizes the `relative(from, to).replaceAll("\\", "/")` pattern
+ * several packages had inlined for building workspace-relative display/identity
+ * paths. Node's `relative` yields platform separators (`\` on Windows), so the
+ * POSIX rewrite keeps the result stable across platforms.
+ */
+export function relativePosixPath(from: string, to: string): string {
+  return toPosixPath(relative(from, to));
+}
 
 export interface ForEachUtf8LineSyncOptions {
   readonly chunkSize?: number;

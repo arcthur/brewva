@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import { sha256Hex } from "@brewva/brewva-std/hash";
+import { toPosixPath as normalizeRelativePath } from "@brewva/brewva-std/text";
 
 const DEFAULT_ARTIFACT_DIR = ".orchestrator/tool-output-artifacts";
 
@@ -15,10 +16,6 @@ function sanitizeFileSegment(value: string): string {
     .replaceAll(/[^a-z0-9._-]+/g, "-");
   const compact = normalized.replaceAll(/-+/g, "-").replaceAll(/^-+|-+$/g, "");
   return compact || "unknown";
-}
-
-function normalizeRelativePath(value: string): string {
-  return value.replaceAll("\\", "/");
 }
 
 export interface PersistToolOutputArtifactInput {

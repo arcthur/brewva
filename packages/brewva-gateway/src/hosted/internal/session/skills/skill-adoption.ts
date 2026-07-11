@@ -1,4 +1,4 @@
-import { readNonEmptyString } from "@brewva/brewva-std/text";
+import { readNonEmptyString, toPosixPath } from "@brewva/brewva-std/text";
 import { SKILL_SELECTION_RECORDED_EVENT_TYPE } from "@brewva/brewva-vocabulary/harness";
 import {
   relativizeToWorkspace,
@@ -40,7 +40,7 @@ interface RenderedSkillRef {
 }
 
 function normalizePath(value: string): string {
-  return value.replaceAll("\\", "/").replace(/^\.\//u, "");
+  return toPosixPath(value).replace(/^\.\//u, "");
 }
 
 /** Strip the URI schemes the brewva resource router accepts down to a path. */

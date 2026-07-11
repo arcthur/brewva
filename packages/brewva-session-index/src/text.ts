@@ -1,5 +1,7 @@
+import { compactWhitespace } from "@brewva/brewva-std/text";
+
 export function compactText(value: string, maxChars = 220): string {
-  const normalized = value.replace(/\s+/g, " ").trim();
+  const normalized = compactWhitespace(value);
   if (normalized.length <= maxChars) {
     return normalized;
   }
