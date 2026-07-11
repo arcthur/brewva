@@ -167,6 +167,10 @@ export class ManagedSessionRuntimeProviderFace implements RuntimeProviderFace {
     return this.#suppressedSelectors;
   }
 
+  clearSuppressedSelector(selector: string): void {
+    this.#suppressedSelectors.delete(selector);
+  }
+
   recordProviderFallbackSelection(input: {
     readonly providerFallback: Record<string, JsonValue>;
     readonly turnId?: string;

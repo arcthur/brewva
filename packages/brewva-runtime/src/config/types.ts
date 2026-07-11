@@ -161,18 +161,12 @@ export interface BrewvaConfig {
     /**
      * Surface language-server diagnostics in the `source_patch_apply` result so
      * type errors introduced by an edit are seen immediately, without a separate
-     * `lsp_diagnostics` call. TypeScript-family files only today.
+     * `lsp_diagnostics` call. TypeScript-family files only. Opt-in: it adds a
+     * short bounded wait to a successful apply and injects model-facing tokens,
+     * so it defaults off (the internal wait/size budgets are gateway policy, not
+     * config, until per-deployment tuning is proven necessary).
      */
     diagnosticsOnApply: boolean;
-    /** Max milliseconds the apply result blocks waiting for diagnostics inline. */
-    inlineBudgetMs: number;
-    /**
-     * Max milliseconds a slow diagnostics fetch may run in the background before
-     * its result is delivered as a next-turn advisory instead of inline.
-     */
-    deferredBudgetMs: number;
-    /** Max diagnostic messages rendered in a single diagnostics block or advisory. */
-    maxMessages: number;
   };
   security: {
     mode: "permissive" | "standard" | "strict";

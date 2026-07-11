@@ -92,6 +92,11 @@ export interface ManagedSessionModelSelectionControllerOptions {
     previousModel?: { provider: string; id: string };
     source: "preset" | "set";
   }) => Promise<void>;
+  /**
+   * Clear the provider cooldown for an explicitly (re-)selected model, so the
+   * recovery loop honors the choice next turn instead of skipping it as cooling.
+   */
+  clearModelCooldown?: (selector: string) => void;
 }
 
 export class ManagedSessionModelSelectionController {
@@ -106,6 +111,7 @@ export class ManagedSessionModelSelectionController {
   readonly #appendModelPresetSelection: ManagedSessionModelSelectionControllerOptions["appendModelPresetSelection"];
   readonly #appendModelChange: ManagedSessionModelSelectionControllerOptions["appendModelChange"];
   readonly #emitModelSelect: ManagedSessionModelSelectionControllerOptions["emitModelSelect"];
+  readonly #clearModelCooldown: ManagedSessionModelSelectionControllerOptions["clearModelCooldown"];
   #state: BrewvaModelPresetState;
 
   constructor(options: ManagedSessionModelSelectionControllerOptions) {
@@ -117,6 +123,7 @@ export class ManagedSessionModelSelectionController {
     this.#setCurrentModel = options.setCurrentModel;
     this.#setSelectedModelPreference = options.setSelectedModelPreference;
     this.#applyThinkingLevel = options.applyThinkingLevel;
+    this.#clearModelCooldown = options.clearModelCooldown;
     this.#clearProviderCacheSessionState = options.clearProviderCacheSessionState;
     this.#appendModelPresetSelection = options.appendModelPresetSelection;
     this.#appendModelChange = options.appendModelChange;
@@ -186,6 +193,7 @@ export class ManagedSessionModelSelectionController {
     if (selection) {
       await this.#compactBeforeModelDownshiftIfNeeded(previousModel, selection.model);
       this.#setCurrentModel(selection.model);
+      this.#clearModelCooldown?.(`${selection.model.provider}/${selection.model.id}`);
       this.#applyThinkingLevel(selection.thinkingLevel ?? this.#getCurrentThinkingLevel(), {
         persistDefault: false,
       });
@@ -224,6 +232,7 @@ export class ManagedSessionModelSelectionController {
     const previousModel = this.#getCurrentModel();
     await this.#compactBeforeModelDownshiftIfNeeded(previousModel, resolved);
     this.#setCurrentModel(resolved);
+    this.#clearModelCooldown?.(`${resolved.provider}/${resolved.id}`);
     this.#applyThinkingLevel(this.#getCurrentThinkingLevel(), { persistDefault: true });
     this.#setSelectedModelPreference?.({ provider: resolved.provider, id: resolved.id });
 

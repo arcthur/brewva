@@ -93,6 +93,12 @@ export interface RuntimeProviderFace {
   suppressSelector?(selector: string, untilMs: number): void;
   /** Currently-cooling selectors, expired entries swept against `now`. */
   getSuppressedSelectors?(now: number): ReadonlyMap<string, number>;
+  /**
+   * Clear a selector's cooldown. Called when the user explicitly (re-)selects a
+   * model, so an explicit choice is honored on the next turn instead of being
+   * skipped as still-cooling.
+   */
+  clearSuppressedSelector?(selector: string): void;
   getVerificationGateManifests(): readonly VerificationGateManifest[];
   getVerificationGateEvidence(sessionId: string): readonly VerificationGateEvidence[];
   getVerificationGateNow?(): number;

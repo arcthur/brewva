@@ -832,23 +832,38 @@ export function createHostedRuntimeProviderPort(
           if (cooldownMs > 0 && (reason === "rate_limit" || reason === "quota")) {
             face.suppressSelector?.(modelKey(activeModel), Date.now() + cooldownMs);
           }
-          // Context overflow: promote to a strictly-larger-context sibling and
-          // retry before falling back to a generic (possibly smaller) model or
-          // compacting. Pre-first-frame (`NoFrame`), so this is request-time
-          // recovery, not a mid-stream switch. Bounded by `attempted`: a repeated
-          // overflow excludes the promoted model and picks a yet-larger one, or
-          // none — then control falls through to the generic fallback.
+          // Context overflow: promote to a strictly-larger-context model before
+          // falling back to a generic (possibly smaller) model or compacting.
+          // Pre-first-frame (`NoFrame`), so this is request-time recovery, not a
+          // mid-stream switch. The configured fallback chain is hard priority
+          // (per the model-fallback-replay-visible solution: role chain → default
+          // chain): prefer the first chain candidate whose context window is
+          // strictly larger — a smaller one would just re-overflow — and only if
+          // the chain offers nothing larger fall to the heuristic same-provider
+          // larger sibling. Promotion therefore never bypasses an operator-
+          // approved route. Bounded by `attempted`: a repeated overflow excludes
+          // the promoted model and picks a yet-larger one, or none.
           if (reason === "context") {
-            const promoted = selectLargerContextModel({
+            const chainCandidates = fallbackCandidates({
+              face,
               currentModel: activeModel,
-              availableModels: face.getModelCatalog().getAll(),
-              excludeModelKeys: new Set<string>([
-                modelKey(activeModel),
-                ...attempted,
-                ...(face.getUnavailableProviderModels?.()?.keys() ?? []),
-                ...(face.getSuppressedSelectors?.(Date.now())?.keys() ?? []),
-              ]),
+              attemptedModelKeys: attempted,
+              activeRole,
             });
+            const promoted =
+              chainCandidates.find(
+                (candidate) => candidate.contextWindow > activeModel.contextWindow,
+              ) ??
+              selectLargerContextModel({
+                currentModel: activeModel,
+                availableModels: face.getModelCatalog().getAll(),
+                excludeModelKeys: new Set<string>([
+                  modelKey(activeModel),
+                  ...attempted,
+                  ...(face.getUnavailableProviderModels?.()?.keys() ?? []),
+                  ...(face.getSuppressedSelectors?.(Date.now())?.keys() ?? []),
+                ]),
+              });
             if (promoted) {
               fallbackMetadata = providerFallbackMetadata({
                 active: true,

@@ -169,8 +169,22 @@ function closestToolName(target: string, names: readonly string[]): string | und
   return bestDistance <= threshold ? best : undefined;
 }
 
+/**
+ * Gateway-owned post-result transform: rewrites a tool's {@link BrewvaToolResult}
+ * before it becomes the canonical, tape-committed result — so any appended content
+ * (e.g. write-after LSP diagnostics) is identical across the tape, replay, and what
+ * the model sees. Best-effort by contract: it must never throw a successful tool
+ * into failure. Runs entirely in the gateway; the runtime kernel is unaware of it.
+ */
+export type HostedToolResultTransform = (input: {
+  readonly toolName: string;
+  readonly result: BrewvaToolResult;
+  readonly signal?: AbortSignal;
+}) => Promise<BrewvaToolResult>;
+
 export function createHostedRuntimeToolExecutorPort(
   session: CollectSessionPromptOutputSession,
+  options: { readonly transformResult?: HostedToolResultTransform } = {},
 ): RuntimeToolExecutorPort {
   if (!isRuntimeToolSession(session)) {
     throw new Error("hosted_runtime_tool_executor_session_incompatible");
@@ -213,7 +227,10 @@ export function createHostedRuntimeToolExecutorPort(
           : undefined,
         session.createRuntimeToolContext(),
       );
-      return toolExecutionResultFromHostedResult(tool, result);
+      const finalResult = options.transformResult
+        ? await options.transformResult({ toolName: tool.name, result, signal: input.signal })
+        : result;
+      return toolExecutionResultFromHostedResult(tool, finalResult);
     },
   };
 }

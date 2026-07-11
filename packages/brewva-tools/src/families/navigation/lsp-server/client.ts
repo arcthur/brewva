@@ -92,7 +92,16 @@ function readContentLength(header: string): number | undefined {
 export class StdioLspClient {
   private readonly child: ChildProcessWithoutNullStreams;
   private readonly pending = new Map<number, PendingRequest>();
-  private readonly diagnostics = new Map<string, unknown[]>();
+  // Diagnostics are stored with the document version they were published for, so
+  // a reused client does not return a prior edit's cached diagnostics. Sending a
+  // didOpen/didChange invalidates the stale entry and records the expected
+  // version; waitForDiagnostics then blocks until the server republishes for that
+  // version (or later).
+  private readonly diagnostics = new Map<
+    string,
+    { readonly version: number | null; readonly items: readonly unknown[] }
+  >();
+  private readonly expectedVersion = new Map<string, number>();
   private nextId = 1;
   private stdoutBuffer = Buffer.alloc(0);
   private stderrText = "";
@@ -172,6 +181,8 @@ export class StdioLspClient {
   }
 
   didOpen(document: LspOpenDocument): void {
+    this.expectedVersion.set(document.uri, document.version);
+    this.diagnostics.delete(document.uri);
     this.notify("textDocument/didOpen", {
       textDocument: {
         uri: document.uri,
@@ -183,6 +194,8 @@ export class StdioLspClient {
   }
 
   didChange(document: Pick<LspOpenDocument, "uri" | "version" | "text">): void {
+    this.expectedVersion.set(document.uri, document.version);
+    this.diagnostics.delete(document.uri);
     this.notify("textDocument/didChange", {
       textDocument: {
         uri: document.uri,
@@ -229,19 +242,23 @@ export class StdioLspClient {
   }
 
   diagnosticsFor(uri: string): readonly unknown[] {
-    return this.diagnostics.get(uri) ?? [];
+    return this.diagnostics.get(uri)?.items ?? [];
   }
 
   async waitForDiagnostics(uri: string, timeoutMs = 800): Promise<readonly unknown[]> {
     const startedAt = Date.now();
+    const expected = this.expectedVersion.get(uri) ?? 0;
     while (Date.now() - startedAt < timeoutMs) {
       const current = this.diagnostics.get(uri);
-      if (current) {
-        return current;
+      // Accept only diagnostics published for the current (or a later) document
+      // version. A server that omits the version (null) is trusted, since the
+      // stale entry was already invalidated on didChange.
+      if (current && (current.version === null || current.version >= expected)) {
+        return current.items;
       }
       await new Promise((resolve) => setTimeout(resolve, 25));
     }
-    return this.diagnostics.get(uri) ?? [];
+    return this.diagnostics.get(uri)?.items ?? [];
   }
 
   async close(options: { readonly graceful?: boolean } = {}): Promise<void> {
@@ -313,9 +330,10 @@ export class StdioLspClient {
     if (message.method === "textDocument/publishDiagnostics") {
       const params = asRecord(message.params);
       const uri = typeof params?.uri === "string" ? params.uri : undefined;
-      const diagnostics = Array.isArray(params?.diagnostics) ? params.diagnostics : [];
+      const items = Array.isArray(params?.diagnostics) ? params.diagnostics : [];
+      const version = typeof params?.version === "number" ? params.version : null;
       if (uri) {
-        this.diagnostics.set(uri, diagnostics);
+        this.diagnostics.set(uri, { version, items });
       }
     }
   }

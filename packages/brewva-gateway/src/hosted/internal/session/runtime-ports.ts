@@ -36,6 +36,7 @@ import {
 import { createVerificationGateRuntimeProviderPort } from "../turn/runtime-turn-verification-gates.js";
 import type { HostedRuntimeOpsPort } from "./runtime-ops-port.js";
 import { createHostedRuntimeOps } from "./runtime-ops.js";
+import { createLspWriteAfterTransform } from "./tools/lsp-write-after-diagnostics.js";
 
 type HostedTurnSessionPorts = {
   readonly provider: RuntimeProviderPort;
@@ -283,7 +284,9 @@ export function createHostedRuntimeAdapter(
         createHostedRuntimeProviderPort(session, providerFace),
         providerFace,
       ),
-      toolExecutor: createHostedRuntimeToolExecutorPort(session),
+      toolExecutor: createHostedRuntimeToolExecutorPort(session, {
+        transformResult: createLspWriteAfterTransform(runtime),
+      }),
       authority: createHostedRuntimeToolAuthorityResolver(session, {
         actionAdmissionOverrides: runtime.config.security.actionAdmissionOverrides,
       }),

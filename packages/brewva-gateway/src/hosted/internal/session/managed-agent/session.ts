@@ -384,6 +384,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
       setCurrentModel: (model) => this.#agent.setModel(model),
       setSelectedModelPreference: (model) => input.settings.setSelectedModelPreference?.(model),
       applyThinkingLevel: (level, options) => this.applyThinkingLevel(level, options),
+      clearModelCooldown: (selector) => this.#runtimeProviderFace.clearSuppressedSelector(selector),
       clearProviderCacheSessionState: () => this.clearProviderCacheSessionState(),
       appendModelPresetSelection: (selection) =>
         this.sessionManager.appendModelPresetSelection(selection),

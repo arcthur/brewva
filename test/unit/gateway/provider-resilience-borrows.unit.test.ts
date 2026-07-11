@@ -234,6 +234,42 @@ describe("context promotion (reason=context)", () => {
       clearApiProviders();
     }
   });
+
+  test("prefers the configured fallback chain's larger model over a bigger heuristic sibling", async () => {
+    const sourceId = "ctx-chain";
+    const api = "ctx-chain-api";
+    const primary = createRuntimeModel("primary", api, 8192);
+    // In the configured chain, and strictly larger — this must win.
+    const chainBig = createRuntimeModel("chain-big", api, 32000);
+    // Bigger, but NOT in the chain: promotion must not bypass the operator route.
+    const heuristicBig = createRuntimeModel("heuristic-big", api, 200000);
+    const attempts = registerModelBehavior(api, sourceId, (id) =>
+      id === "primary" ? CONTEXT_OVERFLOW : null,
+    );
+    try {
+      const face = createRuntimeProviderFaceFixture({
+        model: primary,
+        getModelCatalog() {
+          return catalogOf([primary, chainBig, heuristicBig]);
+        },
+        getModelRoutingSettings() {
+          return {
+            fallbackChains: { default: ["unit-provider/chain-big"] },
+            credentialRotation: { enabled: false, cooldownMs: 0 },
+            rateLimitBackoff: { maxRetries: 0, baseDelayMs: 1, maxDelayMs: 5 },
+          };
+        },
+      });
+      const frames = await driveTurn(face, "ctx-chain-1");
+      expect(frames).toEqual([]);
+      expect(attempts.primary).toBe(1);
+      expect(attempts["chain-big"]).toBe(1);
+      expect(attempts["heuristic-big"] ?? 0).toBe(0);
+    } finally {
+      unregisterApiProviders(sourceId);
+      clearApiProviders();
+    }
+  });
 });
 
 describe("cross-turn cooldown suppression", () => {
@@ -430,6 +466,14 @@ describe("ManagedSessionRuntimeProviderFace cooldown store", () => {
     expect(face.getSuppressedSelectors(150).get("m2")).toBe(200);
     face.suppressSelector("m2", 300); // later → replaces
     expect(face.getSuppressedSelectors(250).get("m2")).toBe(300);
+  });
+
+  test("clearSuppressedSelector drops a cooldown, so an explicit re-selection is honored", () => {
+    const face = makeFace();
+    face.suppressSelector("provider/m", 1000);
+    expect(face.getSuppressedSelectors(500).has("provider/m")).toBe(true);
+    face.clearSuppressedSelector("provider/m");
+    expect(face.getSuppressedSelectors(500).has("provider/m")).toBe(false);
   });
 
   test("delegates getRetrySettings to the settings port", () => {

@@ -14,11 +14,9 @@ export {
 } from "./lsp.js";
 export { createOutputSearchTool } from "./output-search.js";
 export {
-  bumpFileMutationVersion,
   createResourceReadTool,
   createSourcePatchTools,
   createSourceReadTool,
-  getFileMutationVersion,
   type SourceReadToolDetails,
 } from "./source-patch.js";
 export { createSourceIntelligenceTools } from "./source-intelligence/tools.js";

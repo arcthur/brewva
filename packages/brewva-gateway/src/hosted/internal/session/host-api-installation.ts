@@ -35,7 +35,6 @@ import {
   type HostedToolExecutionCoordinator,
   wrapToolDefinitionsWithHostedExecutionTraits,
 } from "./tools/execution-traits.js";
-import { registerLspWriteAfterDiagnostics } from "./tools/lsp-write-after-diagnostics.js";
 import { createQualityGateLifecycle } from "./tools/quality-gate.js";
 import { registerToolResultDistiller } from "./tools/tool-result-distiller.js";
 import { createToolSurfaceLifecycle, type ToolSurfaceRuntime } from "./tools/tool-surface.js";
@@ -274,7 +273,6 @@ function installHostedBehavior(
   });
   registerLedgerWriter(hostApi, runtime);
   registerToolResultDistiller(hostApi, runtime);
-  registerLspWriteAfterDiagnostics(hostApi, runtime);
   registerProviderRequestRecovery(hostApi, runtime);
   registerProviderRequestReduction(hostApi, runtime);
   registerTurnLifecyclePorts(hostApi, {

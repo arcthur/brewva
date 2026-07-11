@@ -1,95 +1,38 @@
-import { relative, resolve } from "node:path";
-import type { InternalHostPluginApi } from "@brewva/brewva-substrate/host-api";
+import { relative } from "node:path";
+import { isRecord } from "@brewva/brewva-std/unknown";
+import type { BrewvaToolResult } from "@brewva/brewva-substrate/tools";
 import {
-  getFileMutationVersion,
   runLspWriteAfterDiagnostics,
   type LspWriteAfterDiagnostic,
-  type LspWriteAfterDiagnosticsResult,
 } from "@brewva/brewva-tools/navigation";
-import type { HostedRuntimeAdapterPort } from "../runtime-ports.js";
+import type { HostedToolResultTransform } from "../../turn/runtime-turn-tool-executor.js";
+
+/** The minimal runtime surface the transform reads: the opt-in flag and the workspace cwd. */
+interface LspWriteAfterRuntime {
+  readonly config: { readonly lsp: { readonly diagnosticsOnApply: boolean } };
+  readonly identity: { readonly cwd: string };
+}
 
 // Write-after diagnostics: after a successful `source_patch_apply`, run the
-// language server over the files it just wrote and surface type errors in the
-// same tool result, so a bad edit is caught immediately instead of on the next
-// explicit `lsp_diagnostics` call. Borrowed from omp's "LSP wired into every
-// write" (runLspWritethrough), adapted to brewva's tool-result interceptor +
-// in-memory next-turn injection substrate. Noise control, mirroring omp:
-//  - inline budget: block the result only briefly; warm server wins, cold
-//    server hands off to a next-turn advisory.
-//  - staleness drop: a slow background result is discarded for any file a newer
-//    apply superseded (per-file mutation version).
-//  - cross-turn ledger: report only diagnostics not already reported this
-//    session, so re-applying a file does not re-flood known errors.
+// language server over the files it just wrote and append an [LspDiagnostics]
+// block to the SAME tool result, so a type error introduced by an edit surfaces
+// immediately instead of on the next explicit `lsp_diagnostics` call. Borrowed
+// from omp's "LSP wired into every write", adapted to brewva as a synchronous
+// post-result transform in the hosted tool executor: the diagnostics become part
+// of the canonical tool result BEFORE it is committed, so the tape, replay, and
+// what the model sees are identical (no out-of-band next-turn injection, which
+// would not survive replay). Opt-in via `lsp.diagnosticsOnApply`.
+//
+// Cost is bounded: the diagnostics fetch races a hard budget, so a cold server
+// (first apply after idle) never blocks the turn — it simply yields no block that
+// time and warms the pool for next time.
 
-/** kebab customType for the out-of-band next-turn diagnostics advisory. */
-export const LSP_WRITE_AFTER_DIAGNOSTICS_MESSAGE_TYPE = "brewva-lsp-diagnostics";
+/** Max ms the apply result blocks waiting for diagnostics (cold server → no block). */
+const INLINE_BUDGET_MS = 400;
+/** Max diagnostic messages rendered in a single block. */
+const MAX_MESSAGES = 20;
 
-function asRecord(value: unknown): Record<string, unknown> | undefined {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined;
-}
-
-function diagnosticIdentity(diagnostic: LspWriteAfterDiagnostic): string {
-  // Line/column are excluded so an error that merely shifted lines is not
-  // re-reported; severity + code + message identify the finding itself.
-  return `${diagnostic.severity}\u0000${diagnostic.code ?? ""}\u0000${diagnostic.message}`;
-}
-
-/**
- * Session-scoped "only-new" filter, keyed per file. Reports a diagnostic once
- * per session; a re-apply of the same file re-flags nothing already seen. Reset
- * on compaction/session switch so a summarized-away error can legitimately
- * re-surface. Mirrors omp's `DiagnosticsLedger`.
- */
-export class DiagnosticsLedger {
-  readonly #seenByPath = new Map<string, Set<string>>();
-
-  reduce(diagnostics: readonly LspWriteAfterDiagnostic[]): LspWriteAfterDiagnostic[] {
-    const fresh: LspWriteAfterDiagnostic[] = [];
-    for (const diagnostic of diagnostics) {
-      const key = resolve(diagnostic.path);
-      let seen = this.#seenByPath.get(key);
-      if (!seen) {
-        seen = new Set<string>();
-        this.#seenByPath.set(key, seen);
-      }
-      const identity = diagnosticIdentity(diagnostic);
-      if (seen.has(identity)) {
-        continue;
-      }
-      seen.add(identity);
-      fresh.push(diagnostic);
-    }
-    return fresh;
-  }
-
-  reset(): void {
-    this.#seenByPath.clear();
-  }
-}
-
-/**
- * Drop diagnostics for any file whose mutation version advanced since the
- * versions were snapshotted at apply-dispatch time — a newer apply superseded
- * that file, so late diagnostics for the older content are stale.
- */
-export function dropStaleDiagnostics(
-  diagnostics: readonly LspWriteAfterDiagnostic[],
-  appliedPaths: readonly string[],
-  versionsAtDispatch: readonly number[],
-): LspWriteAfterDiagnostic[] {
-  const stale = new Set<string>();
-  appliedPaths.forEach((path, index) => {
-    if (getFileMutationVersion(path) !== versionsAtDispatch[index]) {
-      stale.add(resolve(path));
-    }
-  });
-  if (stale.size === 0) {
-    return [...diagnostics];
-  }
-  return diagnostics.filter((diagnostic) => !stale.has(resolve(diagnostic.path)));
-}
+const BUDGET_EXCEEDED = Symbol("lsp-write-after-budget-exceeded");
 
 function displayPath(absPath: string, cwd: string): string {
   const rel = relative(cwd, absPath);
@@ -112,11 +55,13 @@ function severityCounts(diagnostics: readonly LspWriteAfterDiagnostic[]): {
   return { errors, warnings };
 }
 
-function renderDiagnosticLines(
+/** Inline block appended to the `source_patch_apply` tool result content. */
+export function formatDiagnosticsBlock(
   diagnostics: readonly LspWriteAfterDiagnostic[],
   cwd: string,
-  maxMessages: number,
-): string[] {
+  maxMessages: number = MAX_MESSAGES,
+): string {
+  const { errors, warnings } = severityCounts(diagnostics);
   const shown = diagnostics.slice(0, Math.max(1, maxMessages));
   const lines = shown.map((diagnostic) => {
     const code = diagnostic.code ? ` [${diagnostic.code}]` : "";
@@ -125,164 +70,83 @@ function renderDiagnosticLines(
   if (diagnostics.length > shown.length) {
     lines.push(`- … ${diagnostics.length - shown.length} more`);
   }
-  return lines;
-}
-
-/** Inline block appended to the `source_patch_apply` tool result content. */
-export function formatDiagnosticsBlock(
-  diagnostics: readonly LspWriteAfterDiagnostic[],
-  cwd: string,
-  maxMessages: number,
-): string {
-  const { errors, warnings } = severityCounts(diagnostics);
   return [
     "",
     `[LspDiagnostics] errors=${errors} warnings=${warnings} — from files you just edited`,
-    ...renderDiagnosticLines(diagnostics, cwd, maxMessages),
+    ...lines,
   ].join("\n");
-}
-
-/** Out-of-band next-turn advisory for diagnostics that arrived after the result. */
-export function formatDiagnosticsNotice(
-  diagnostics: readonly LspWriteAfterDiagnostic[],
-  cwd: string,
-  maxMessages: number,
-): string {
-  const { errors, warnings } = severityCounts(diagnostics);
-  return [
-    `[LspDiagnostics] errors=${errors} warnings=${warnings} — diagnostics for files you edited last turn`,
-    "(arrived after the tool result; advisory, verify against current source before acting)",
-    ...renderDiagnosticLines(diagnostics, cwd, maxMessages),
-  ].join("\n");
-}
-
-/** Sentinel returned by the inline race when the diagnostics fetch outran its budget. */
-const INLINE_TIMEOUT = "timeout" as const;
-
-export type RaceInlineDiagnostics = (
-  fetchPromise: Promise<LspWriteAfterDiagnosticsResult>,
-  budgetMs: number,
-) => Promise<LspWriteAfterDiagnosticsResult | typeof INLINE_TIMEOUT>;
-
-function defaultRaceInline(
-  fetchPromise: Promise<LspWriteAfterDiagnosticsResult>,
-  budgetMs: number,
-): Promise<LspWriteAfterDiagnosticsResult | typeof INLINE_TIMEOUT> {
-  const timeout = new Promise<typeof INLINE_TIMEOUT>((resolveTimeout) => {
-    const timer = setTimeout(() => resolveTimeout(INLINE_TIMEOUT), budgetMs);
-    if (timer && typeof timer === "object" && "unref" in timer) {
-      (timer as { unref(): void }).unref();
-    }
-  });
-  return Promise.race([fetchPromise, timeout]);
 }
 
 interface LspWriteAfterDeps {
   readonly runDiagnostics?: typeof runLspWriteAfterDiagnostics;
-  /** Injectable inline-vs-deferred race. Test seam; default races fetch against a timer. */
-  readonly raceInline?: RaceInlineDiagnostics;
+  /** Budget override (ms). Test seam; production uses {@link INLINE_BUDGET_MS}. */
+  readonly budgetMs?: number;
 }
 
 /**
- * Register the write-after-diagnostics interceptor on the internal
- * `hosted_behavior` plugin. Reuses its existing `tool_result.write` and
- * `assistant_message.enqueue` capabilities — no new capability, no new tape
- * event (the inline block rides the tool-result content; the slow-path advisory
- * is an in-memory next-turn custom message).
+ * Build the hosted-tool-result transform for write-after diagnostics, or
+ * `undefined` when the feature is off (opt-in). The transform runs in the hosted
+ * tool executor; a non-`source_patch_apply` or non-applied result passes through
+ * untouched. Best-effort: any failure returns the original result — diagnostics
+ * never break a successful apply.
  */
-export function registerLspWriteAfterDiagnostics(
-  extensionApi: InternalHostPluginApi,
-  runtime: HostedRuntimeAdapterPort,
+export function createLspWriteAfterTransform(
+  runtime: LspWriteAfterRuntime,
   deps: LspWriteAfterDeps = {},
-): void {
-  const config = runtime.config.lsp;
-  const ledger = new DiagnosticsLedger();
+): HostedToolResultTransform | undefined {
+  if (!runtime.config.lsp.diagnosticsOnApply) {
+    return undefined;
+  }
+  const cwd = runtime.identity.cwd;
   const runDiagnostics = deps.runDiagnostics ?? runLspWriteAfterDiagnostics;
-  const raceInline = deps.raceInline ?? defaultRaceInline;
+  const budgetMs = deps.budgetMs ?? INLINE_BUDGET_MS;
 
-  extensionApi.on("session_compact", () => {
-    ledger.reset();
-    return undefined;
-  });
-  extensionApi.on("session_shutdown", () => {
-    ledger.reset();
-    return undefined;
-  });
-
-  extensionApi.on("tool_result", async (event, ctx) => {
-    if (!config.diagnosticsOnApply) {
-      return undefined;
+  return async ({ toolName, result, signal }): Promise<BrewvaToolResult> => {
+    if (toolName !== "source_patch_apply" || result.outcome.kind !== "ok") {
+      return result;
     }
-    if (event.toolName !== "source_patch_apply" || event.isError) {
-      return undefined;
+    const value = result.outcome.value;
+    if (!isRecord(value) || value.status !== "applied") {
+      return result;
     }
-    const details = asRecord(event.details);
-    if (!details || details.status !== "applied") {
-      return undefined;
-    }
-    const appliedPaths = Array.isArray(details.appliedPaths)
-      ? details.appliedPaths.filter((path): path is string => typeof path === "string")
+    const appliedPaths = Array.isArray(value.appliedPaths)
+      ? value.appliedPaths.filter((path): path is string => typeof path === "string")
       : [];
     if (appliedPaths.length === 0) {
-      return undefined;
+      return result;
     }
 
-    const cwd = ctx.cwd || runtime.identity.cwd;
-    const versionsAtDispatch = appliedPaths.map((path) => getFileMutationVersion(path));
     const fetchPromise = runDiagnostics({
       cwd,
       absPaths: appliedPaths,
-      timeoutMs: config.deferredBudgetMs,
-      signal: ctx.signal,
+      timeoutMs: budgetMs,
+      signal,
+    });
+    // Race the whole fetch (server spawn included) against the budget so a cold
+    // server never blocks the turn. An abandoned fetch just warms the pool.
+    fetchPromise.catch(() => undefined);
+    const timeout = new Promise<typeof BUDGET_EXCEEDED>((resolveTimeout) => {
+      const timer = setTimeout(() => resolveTimeout(BUDGET_EXCEEDED), budgetMs);
+      if (timer && typeof timer === "object" && "unref" in timer) {
+        (timer as { unref(): void }).unref();
+      }
     });
 
-    const inline = await raceInline(fetchPromise, config.inlineBudgetMs);
-    if (inline !== INLINE_TIMEOUT) {
-      const result = inline;
-      if (!result.available || result.diagnostics.length === 0) {
-        return undefined;
-      }
-      const fresh = ledger.reduce(result.diagnostics);
-      if (fresh.length === 0) {
-        return undefined;
-      }
-      return {
-        content: [
-          ...event.content,
-          { type: "text" as const, text: formatDiagnosticsBlock(fresh, cwd, config.maxMessages) },
-        ],
-      };
+    let outcome: Awaited<ReturnType<typeof runDiagnostics>> | typeof BUDGET_EXCEEDED;
+    try {
+      outcome = await Promise.race([fetchPromise, timeout]);
+    } catch {
+      return result;
     }
-
-    // Slow server: hand off. The result is delivered as a next-turn advisory,
-    // after dropping any file a newer apply superseded and filtering already-
-    // reported findings.
-    void fetchPromise
-      .then((result) => {
-        if (!result.available || result.diagnostics.length === 0) {
-          return;
-        }
-        const currentPaths = dropStaleDiagnostics(
-          result.diagnostics,
-          appliedPaths,
-          versionsAtDispatch,
-        );
-        const fresh = ledger.reduce(currentPaths);
-        if (fresh.length === 0) {
-          return;
-        }
-        extensionApi.sendMessage(
-          {
-            customType: LSP_WRITE_AFTER_DIAGNOSTICS_MESSAGE_TYPE,
-            content: formatDiagnosticsNotice(fresh, cwd, config.maxMessages),
-            display: false,
-          },
-          { deliverAs: "nextTurn" },
-        );
-      })
-      .catch(() => {
-        // Best-effort: diagnostics never gate a turn.
-      });
-    return undefined;
-  });
+    if (outcome === BUDGET_EXCEEDED || !outcome.available || outcome.diagnostics.length === 0) {
+      return result;
+    }
+    return {
+      ...result,
+      content: [
+        ...result.content,
+        { type: "text" as const, text: formatDiagnosticsBlock(outcome.diagnostics, cwd) },
+      ],
+    };
+  };
 }

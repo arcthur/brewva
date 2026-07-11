@@ -315,6 +315,21 @@ their old semantics stay disabled. This includes the old flat
 `compaction.summaryMaxOutputRatio`, `compaction.minCompactionShrinkRatio`, and
 `compaction.minCompactionShrinkAttempts` surfaces.
 
+## LSP Diagnostics
+
+`lsp.diagnosticsOnApply` (default `false`) surfaces language-server diagnostics
+inline in a successful `source_patch_apply` result, so a type error introduced by
+an edit is seen immediately instead of on a separate `lsp_diagnostics` call. It is
+opt-in because it adds a short, bounded wait to every successful apply (a cold
+server yields no block that time and warms the pool for next time) and injects
+model-facing tokens; the default leaves the edit hot path and prompt budget
+untouched. TypeScript-family files only (`.ts/.tsx/.js/.jsx`); other applied files
+are ignored, and nothing is emitted when no language server resolves. The
+diagnostics are appended to the canonical tool result before it is committed, so
+the tape, replay, and what the model sees are identical (no out-of-band next-turn
+injection). The inline wait and message-size limits are gateway-internal policy,
+not config, until per-deployment tuning is proven necessary.
+
 ## Schema Maintenance
 
 Regenerate the JSON schema after config type/default changes:
