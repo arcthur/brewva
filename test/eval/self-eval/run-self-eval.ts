@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { driveSelfEvalRun, requireUnattendedApprovalCarrier } from "./driver.js";
+import { driveSelfEvalRun, requireOperatorApprovalPolicy } from "./driver.js";
 import { SELF_EVAL_FIXTURES } from "./fixtures.js";
 import { buildSelfEvalReport, formatSelfEvalReport, persistSelfEvalReport } from "./report.js";
 import type { SelfEvalFixture, SelfEvalRunResult } from "./types.js";
@@ -63,10 +63,10 @@ async function main(): Promise<void> {
   if (values.list) {
     console.log(`Self-eval fixtures (${fixtures.length}):`);
     for (const fixture of fixtures) {
-      // Actually validate (fail-closed) that each fixture carries the Phase-1
-      // unattended envelope, so --list delivers on its "validate" promise
+      // Actually validate (fail-closed) that each fixture declares the Phase-1
+      // operator approval envelope, so --list delivers on its "validate" promise
       // without a provider.
-      requireUnattendedApprovalCarrier(fixture);
+      requireOperatorApprovalPolicy(fixture);
       console.log(`- ${fixture.id} [${fixture.kind}] — ${fixture.description}`);
     }
     return;
@@ -78,7 +78,8 @@ async function main(): Promise<void> {
       const result = await driveSelfEvalRun({ fixture, model: values.model });
       results.push(result);
       console.error(
-        `[self-eval] ${fixture.id} ${run}/${runsPerFixture}: ${result.metrics.terminalOutcome} — ` +
+        `[self-eval] ${fixture.id} ${run}/${runsPerFixture}: ${result.taskOutcome} ` +
+          `(turn ${result.timedOut ? "timed_out" : result.metrics.terminalOutcome}) — ` +
           `tools=[${result.metrics.distinctTools.join(",") || "none"}] ` +
           `turns=${result.metrics.turnCount} calls=${result.metrics.toolCallCount}`,
       );

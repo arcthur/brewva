@@ -25,7 +25,7 @@ const suspendedCompaction = {
 describe("resumeApprovalsWithinEnvelope (default accept-all envelope)", () => {
   test("a completed turn returns immediately without touching approvals", async () => {
     let accepts = 0;
-    const output = await resumeApprovalsWithinEnvelope({
+    const { output } = await resumeApprovalsWithinEnvelope({
       initial: completed,
       sessionId: "s",
       listPendingApprovals: () => {
@@ -45,7 +45,7 @@ describe("resumeApprovalsWithinEnvelope (default accept-all envelope)", () => {
   test("an approval-suspended turn auto-accepts pending and resumes to completion", async () => {
     const accepted: string[] = [];
     let resumeCalls = 0;
-    const output = await resumeApprovalsWithinEnvelope({
+    const { output } = await resumeApprovalsWithinEnvelope({
       initial: suspendedApproval,
       sessionId: "child-1",
       listPendingApprovals: () => [{ requestId: "req-a" }],
@@ -65,7 +65,7 @@ describe("resumeApprovalsWithinEnvelope (default accept-all envelope)", () => {
 
   test("a compaction suspension is left for the caller, never auto-approved", async () => {
     let listed = false;
-    const output = await resumeApprovalsWithinEnvelope({
+    const { output } = await resumeApprovalsWithinEnvelope({
       initial: suspendedCompaction,
       sessionId: "s",
       listPendingApprovals: () => {
@@ -81,7 +81,7 @@ describe("resumeApprovalsWithinEnvelope (default accept-all envelope)", () => {
 
   test("every pending approval in a round is accepted before resuming", async () => {
     const accepted: string[] = [];
-    const output = await resumeApprovalsWithinEnvelope({
+    const { output } = await resumeApprovalsWithinEnvelope({
       initial: suspendedApproval,
       sessionId: "s",
       listPendingApprovals: () => [{ requestId: "r1" }, { requestId: "r2" }],
@@ -96,7 +96,7 @@ describe("resumeApprovalsWithinEnvelope (default accept-all envelope)", () => {
 
   test("no pending approvals breaks the loop instead of spinning", async () => {
     let resumeCalls = 0;
-    const output = await resumeApprovalsWithinEnvelope({
+    const { output } = await resumeApprovalsWithinEnvelope({
       initial: suspendedApproval,
       sessionId: "s",
       listPendingApprovals: () => [], // suspended-on-approval but nothing pending
@@ -110,9 +110,9 @@ describe("resumeApprovalsWithinEnvelope (default accept-all envelope)", () => {
     expect(resumeCalls).toBe(0);
   });
 
-  test("the resume loop is bounded so a tool re-requesting approval forever cannot spin", async () => {
+  test("the resume loop is bounded and reports cap exhaustion when a tool re-requests forever", async () => {
     let resumeCalls = 0;
-    const output = await resumeApprovalsWithinEnvelope({
+    const { output, capExhausted } = await resumeApprovalsWithinEnvelope({
       initial: suspendedApproval,
       sessionId: "s",
       listPendingApprovals: () => [{ requestId: "req" }],
@@ -124,6 +124,66 @@ describe("resumeApprovalsWithinEnvelope (default accept-all envelope)", () => {
     });
     expect(output.status).toBe("suspended");
     expect(resumeCalls).toBe(32); // bounded at MAX_APPROVAL_RESUMES
+    expect(capExhausted).toBe(true); // surfaced so a caller can exit non-zero
+  });
+
+  test("a converged turn reports capExhausted:false", async () => {
+    const { capExhausted } = await resumeApprovalsWithinEnvelope({
+      initial: suspendedApproval,
+      sessionId: "s",
+      listPendingApprovals: () => [{ requestId: "req" }],
+      acceptApproval: () => {},
+      resumeTurn: async () => completed,
+    });
+    expect(capExhausted).toBe(false);
+  });
+
+  test("scopes to the current turn: an approval pending before the turn is never decided", async () => {
+    const accepted: string[] = [];
+    let resumeCalls = 0;
+    const { output } = await resumeApprovalsWithinEnvelope({
+      initial: suspendedApproval,
+      sessionId: "reused-session",
+      // Two pending: one carried over from a prior turn, one created by this turn.
+      listPendingApprovals: () => [
+        { requestId: "prior-human-reserved" },
+        { requestId: "this-turn" },
+      ],
+      preexistingRequestIds: new Set(["prior-human-reserved"]),
+      acceptApproval: (_sessionId, requestId) => {
+        accepted.push(requestId);
+      },
+      resumeTurn: async ({ requestId }) => {
+        resumeCalls += 1;
+        expect(requestId).toBe("this-turn");
+        return completed;
+      },
+    });
+    // Only this turn's approval is auto-accepted; the prior human-reserved one is
+    // left pending, never swept by the reused session's unattended run.
+    expect(accepted).toEqual(["this-turn"]);
+    expect(accepted).not.toContain("prior-human-reserved");
+    expect(resumeCalls).toBe(1);
+    expect(output.status).toBe("completed");
+  });
+
+  test("only pre-existing approvals remain: the loop leaves them and returns suspended", async () => {
+    let resumeCalls = 0;
+    const { output } = await resumeApprovalsWithinEnvelope({
+      initial: suspendedApproval,
+      sessionId: "reused-session",
+      listPendingApprovals: () => [{ requestId: "prior-only" }],
+      preexistingRequestIds: new Set(["prior-only"]),
+      acceptApproval: () => {
+        throw new Error("must not decide a pre-existing approval");
+      },
+      resumeTurn: async () => {
+        resumeCalls += 1;
+        return completed;
+      },
+    });
+    expect(output.status).toBe("suspended");
+    expect(resumeCalls).toBe(0);
   });
 });
 
@@ -131,7 +191,7 @@ describe("resumeApprovalsWithinEnvelope (effect-class decision predicate)", () =
   test("a `suspend` decision halts fail-closed: nothing accepted, turn stays suspended", async () => {
     let accepts = 0;
     let resumeCalls = 0;
-    const output = await resumeApprovalsWithinEnvelope({
+    const { output } = await resumeApprovalsWithinEnvelope({
       initial: suspendedApproval,
       sessionId: "s",
       listPendingApprovals: () => [{ requestId: "req", effects: ["external_network"] }],
@@ -153,7 +213,7 @@ describe("resumeApprovalsWithinEnvelope (effect-class decision predicate)", () =
   test("a `deny` decision denies (not accepts) and resumes so the run continues", async () => {
     const accepted: string[] = [];
     const denied: string[] = [];
-    const output = await resumeApprovalsWithinEnvelope({
+    const { output } = await resumeApprovalsWithinEnvelope({
       initial: suspendedApproval,
       sessionId: "s",
       listPendingApprovals: () => [{ requestId: "req", effects: ["external_network"] }],
@@ -170,7 +230,7 @@ describe("resumeApprovalsWithinEnvelope (effect-class decision predicate)", () =
   test("a `deny` decision with no deny sink falls closed instead of silently accepting", async () => {
     let accepts = 0;
     let resumeCalls = 0;
-    const output = await resumeApprovalsWithinEnvelope({
+    const { output } = await resumeApprovalsWithinEnvelope({
       initial: suspendedApproval,
       sessionId: "s",
       listPendingApprovals: () => [{ requestId: "req", effects: ["external_network"] }],
@@ -193,7 +253,7 @@ describe("resumeApprovalsWithinEnvelope (effect-class decision predicate)", () =
     let accepts = 0;
     let denies = 0;
     let resumeCalls = 0;
-    const output = await resumeApprovalsWithinEnvelope({
+    const { output } = await resumeApprovalsWithinEnvelope({
       initial: suspendedApproval,
       sessionId: "s",
       listPendingApprovals: () => [

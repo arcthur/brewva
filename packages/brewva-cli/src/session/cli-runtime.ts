@@ -210,6 +210,13 @@ async function runCliTurn(
         parts: structuredClone(parts) as unknown as SessionPromptSnapshot["parts"],
       },
     });
+    // Snapshot approvals already pending BEFORE this turn (a reused `--session`
+    // may carry tool commitments a prior turn left for a human). The unattended
+    // envelope must only auto-decide approvals THIS turn creates, never sweep
+    // those.
+    const preexistingApprovals = new Set(
+      options.inspect.proposals.listPending(sessionId).map((approval) => approval.requestId),
+    );
     let output = await runHostedPromptTurn({
       session,
       parts,
@@ -218,17 +225,21 @@ async function runCliTurn(
       sessionId,
     });
     // Unattended (`--print`) runs have no interactive approver. When the operator
-    // has declared an effect-class envelope in deep-readonly config, auto-decide
-    // approvals within it and resume; an uncovered class still suspends
-    // fail-closed. Interactive sessions never reach here (they answer approvals
-    // through the operator). The policy is read from config, never from the
-    // prompt/model, so the model cannot widen its own authority.
+    // has declared an effect-class envelope, auto-decide approvals within it and
+    // resume; an uncovered class still suspends fail-closed. Interactive sessions
+    // never reach here (they answer approvals through the operator). The policy is
+    // honored only from an operator source outside the model-writable workspace
+    // (the loader's operator-source barrier) and its resolved snapshot is
+    // immutable, so a model cannot widen its own envelope by editing workspace
+    // state. (Granting `local_exec` remains host execution, a separate boundary.)
+    let approvalCapExhausted = false;
     if (output.status === "suspended" && output.reason === "approval") {
       const policy = options.runtime.config.security.unattendedApproval;
       if (unattendedApprovalPolicyIsActive(policy)) {
-        output = await resumeApprovalsWithinEnvelope({
+        const resumed = await resumeApprovalsWithinEnvelope({
           initial: output,
           sessionId,
+          preexistingRequestIds: preexistingApprovals,
           listPendingApprovals: (id) => options.inspect.proposals.listPending(id),
           decide: buildUnattendedApprovalDecider(policy),
           acceptApproval: (id, requestId) =>
@@ -254,10 +265,23 @@ async function runCliTurn(
               resolveApproval,
             }),
         });
+        output = resumed.output;
+        approvalCapExhausted = resumed.capExhausted;
       }
     }
     if (output.status === "failed") {
       throw output.error instanceof Error ? output.error : new Error(String(output.error));
+    }
+    if (output.status === "suspended") {
+      // A `--print` run that ends still suspended did not finish its work; surface
+      // it as a non-zero failure (matching the worker path, which projects an
+      // unconverged turn as failed) rather than exiting 0 on incomplete work.
+      const detail = approvalCapExhausted
+        ? "it exhausted the approval-resume cap"
+        : output.reason === "approval"
+          ? "an approval was left unresolved (an uncovered effect class fail-closed, or no unattended policy is active)"
+          : `it suspended (${output.reason ?? "unknown reason"})`;
+      throw new Error(`unattended print run did not converge: ${detail}`);
     }
     if (output.status === "completed" && emittedText.length === 0) {
       emittedText = output.assistantText;

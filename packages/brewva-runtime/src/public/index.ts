@@ -1,5 +1,12 @@
 export { DEFAULT_BREWVA_CONFIG } from "../config/defaults.js";
 export type { BrewvaConfig } from "../config/types.js";
+// The calibration parameter registry is exported here (not behind a `/governance`
+// subpath): the runtime package's semantic-ports architecture forbids a
+// governance subpath (runtime-promoted-architecture fitness), and a script
+// consumer cannot deep-import package internals (TS6307), so the root is the
+// sanctioned home. It is pure legibility DATA — a `const` plus two types whose
+// SHAPE never changes as entries are retuned — so it does not destabilize the
+// four-port contract.
 export {
   CALIBRATION_PARAMETER_REGISTRY,
   type CalibrationParameter,

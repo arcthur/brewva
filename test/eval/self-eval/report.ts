@@ -33,14 +33,38 @@ function sumCost(runs: readonly SelfEvalRunResult[]): SelfEvalCostObservation | 
 function aggregateRuns(runs: readonly SelfEvalRunResult[]): SelfEvalAggregate {
   const distinct = new Set<string>();
   const perFamily = new Map<string, number>();
+  // Task-success headline (oracle): every run lands in exactly one of these.
+  let taskPassedRuns = 0;
+  let taskFailedRuns = 0;
+  let terminalIncompleteRuns = 0;
+  // Turn-liveness breakdown (diagnostic): every run lands in exactly one, with
+  // timed_out taking precedence over the (partial) tape signal, and unknown its
+  // own visible bucket rather than being silently dropped.
   let completedRuns = 0;
   let suspendedRuns = 0;
   let incompleteRuns = 0;
+  let timedOutRuns = 0;
+  let unknownRuns = 0;
 
   for (const run of runs) {
     for (const tool of run.metrics.distinctTools) distinct.add(tool);
     for (const [family, count] of Object.entries(run.metrics.perFamilyCounts)) {
       perFamily.set(family, (perFamily.get(family) ?? 0) + count);
+    }
+    switch (run.taskOutcome) {
+      case "task_passed":
+        taskPassedRuns += 1;
+        break;
+      case "task_failed":
+        taskFailedRuns += 1;
+        break;
+      case "terminal_incomplete":
+        terminalIncompleteRuns += 1;
+        break;
+    }
+    if (run.timedOut) {
+      timedOutRuns += 1;
+      continue;
     }
     switch (run.metrics.terminalOutcome) {
       case "completed":
@@ -52,7 +76,8 @@ function aggregateRuns(runs: readonly SelfEvalRunResult[]): SelfEvalAggregate {
       case "incomplete":
         incompleteRuns += 1;
         break;
-      default:
+      case "unknown":
+        unknownRuns += 1;
         break;
     }
   }
@@ -61,9 +86,14 @@ function aggregateRuns(runs: readonly SelfEvalRunResult[]): SelfEvalAggregate {
   return {
     fixtureCount: new Set(runs.map((run) => run.fixtureId)).size,
     runCount: runs.length,
+    taskPassedRuns,
+    taskFailedRuns,
+    terminalIncompleteRuns,
     completedRuns,
     suspendedRuns,
     incompleteRuns,
+    timedOutRuns,
+    unknownRuns,
     distinctToolsUnion: [...distinct].toSorted((left, right) => left.localeCompare(right)),
     perFamilyCounts: Object.fromEntries(
       [...perFamily.entries()].toSorted((left, right) => left[0].localeCompare(right[0])),
@@ -116,30 +146,41 @@ export function formatSelfEvalReport(report: SelfEvalReport): string {
     `Generated: ${report.generatedAt}`,
     `Runs per fixture: ${report.runsPerFixture}`,
     "",
-    "## Summary",
+    "## Task Outcome (post-run oracle — the utility signal)",
     "",
-    "| Metric | Value |",
-    "|--------|-------|",
-    `| Fixtures | ${agg.fixtureCount} |`,
-    `| Total runs | ${agg.runCount} |`,
+    "| Outcome | Runs |",
+    "|---------|------|",
+    `| Task passed | ${agg.taskPassedRuns} |`,
+    `| Task failed | ${agg.taskFailedRuns} |`,
+    `| Terminal incomplete (turn never completed) | ${agg.terminalIncompleteRuns} |`,
+    `| Total runs | ${agg.runCount} (${agg.fixtureCount} fixtures) |`,
+    "",
+    "## Turn Liveness (diagnostic — how the turn ended, not task success)",
+    "",
+    "| Liveness | Runs |",
+    "|----------|------|",
     `| Completed | ${agg.completedRuns} |`,
     `| Suspended (fail-closed) | ${agg.suspendedRuns} |`,
     `| Incomplete | ${agg.incompleteRuns} |`,
-    `| Distinct tools exercised | ${agg.distinctToolsUnion.length} (${agg.distinctToolsUnion.join(", ") || "none"}) |`,
-    `| Cost (aggregate) | ${formatCost(agg.cost)} |`,
+    `| Timed out | ${agg.timedOutRuns} |`,
+    `| Unknown (no tape signal) | ${agg.unknownRuns} |`,
     "",
     "## Tool-Surface Exercise Profile (per family, committed)",
+    "",
+    `Distinct tools exercised: ${agg.distinctToolsUnion.length} (${agg.distinctToolsUnion.join(", ") || "none"}). ` +
+      `Cost (aggregate): ${formatCost(agg.cost)}.`,
     "",
     ...formatFamilyTable(agg.perFamilyCounts),
     "## Per-Fixture",
     "",
-    "| Fixture | Kind | Outcome | Turns | Tool calls | Distinct tools | Cost |",
-    "|---------|------|---------|-------|------------|----------------|------|",
+    "| Fixture | Kind | Task | Turn | Turns | Tool calls | Distinct tools | Cost |",
+    "|---------|------|------|------|-------|------------|----------------|------|",
   ];
   for (const run of report.runs) {
     const metrics = run.metrics;
+    const liveness = run.timedOut ? "timed_out" : metrics.terminalOutcome;
     lines.push(
-      `| ${run.fixtureId} | ${run.kind} | ${metrics.terminalOutcome} | ${metrics.turnCount} | ` +
+      `| ${run.fixtureId} | ${run.kind} | ${run.taskOutcome} | ${liveness} | ${metrics.turnCount} | ` +
         `${metrics.toolCallCount} | ${metrics.distinctTools.join(", ") || "none"} | ` +
         `${formatCost(metrics.cost)} |`,
     );

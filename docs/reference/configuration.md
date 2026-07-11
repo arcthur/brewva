@@ -145,11 +145,22 @@ otherwise suspend on. Reach for `actionAdmissionOverrides` to change what is
 callable at all; reach for `unattendedApproval` to let a headless run
 auto-clear the approvals it would otherwise wait on.
 
-The policy is read once from configuration at process start and is never
-influenced by prompt, skill, or model output, so a model cannot widen its own
-approval envelope. Each auto-decision records the normal approval receipt on the
-tape with the actor `unattended-config-policy`, so the auto-approval stays
-auditable.
+The policy is honored only from an OPERATOR source outside the workspace — a
+global config, or an explicit `--config` outside the project tree. An
+`unattendedApproval` found in a workspace-internal config is stripped with a
+warning, because a model with workspace-write could otherwise edit it (and a
+child `brewva` it spawns would re-read the widened file) to widen its own
+envelope. Within a process the resolved policy is read once at start and is never
+influenced by prompt, skill, or model output. Each auto-decision records the
+normal approval receipt on the tape with the actor `unattended-config-policy`, so
+the auto-approval stays auditable.
+
+One residual trust boundary the source barrier does NOT close: granting
+`local_exec` grants host command execution, which is broader than any brewva
+tool-effect gate — a model with a shell can already reach effects the approval
+envelope would gate. Do not put `local_exec` in an unattended envelope for a
+model you would not trust with a shell, and prefer a sandboxed execution backend
+for untrusted runs.
 
 Unattended approval is answered in-process by the embedded print backend. A
 `--print` run that declares a non-empty policy is therefore routed to the

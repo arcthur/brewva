@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { writeFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import {
@@ -514,30 +515,51 @@ describe("Brewva config loader normalization", () => {
     );
   });
 
-  test("loads a valid security.unattendedApproval effect-class envelope", () => {
-    const workspace = createTestWorkspace("unattended-approval-valid");
+  test("honors a valid unattendedApproval envelope from a config OUTSIDE the workspace", () => {
+    const workspace = createTestWorkspace("unattended-approval-operator-source");
+    // The operator config lives OUTSIDE the model-writable workspace, so the
+    // operator-source barrier honors it.
+    const operatorDir = mkdtempSync(join(tmpdir(), "brewva-operator-config-"));
+    const operatorConfigPath = join(operatorDir, "brewva.json");
     writeFileSync(
-      join(workspace, ".brewva/brewva.json"),
+      operatorConfigPath,
       JSON.stringify(
-        {
-          security: {
-            unattendedApproval: {
-              local_exec: "allow",
-              external_network: "deny",
-            },
-          },
-        },
+        { security: { unattendedApproval: { local_exec: "allow", external_network: "deny" } } },
         null,
         2,
       ),
       "utf8",
     );
 
-    const loaded = loadBrewvaConfig({ cwd: workspace, configPath: ".brewva/brewva.json" });
+    const loaded = loadBrewvaConfig({ cwd: workspace, configPath: operatorConfigPath });
     expect(loaded.security.unattendedApproval).toEqual({
       local_exec: "allow",
       external_network: "deny",
     });
+  });
+
+  test("strips a workspace-internal unattendedApproval as model-writable (operator-source barrier)", () => {
+    const workspace = createTestWorkspace("unattended-approval-workspace-internal");
+    writeFileSync(
+      join(workspace, ".brewva/brewva.json"),
+      JSON.stringify(
+        { security: { unattendedApproval: { local_exec: "allow", external_network: "deny" } } },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const resolution = loadBrewvaConfigResolution({
+      cwd: workspace,
+      configPath: ".brewva/brewva.json",
+    });
+    // A model with workspace-write could otherwise widen its own envelope; the
+    // in-workspace policy is dropped to empty (suspend-everything) with a warning.
+    expect(resolution.config.security.unattendedApproval).toEqual({});
+    expect(resolution.warnings.map((warning) => warning.code)).toContain(
+      "config_workspace_unattended_approval_stripped",
+    );
   });
 
   test("defaults security.unattendedApproval to an empty (suspend-everything) policy", () => {
@@ -546,10 +568,14 @@ describe("Brewva config loader normalization", () => {
     expect(loaded.security.unattendedApproval).toEqual({});
   });
 
-  test("fails fast on an unknown security.unattendedApproval effect class", () => {
+  test("an operator-source unattendedApproval still fails fast on an unknown effect class", () => {
     const workspace = createTestWorkspace("unattended-approval-bad-class");
+    // Out-of-workspace (operator) source, so the barrier does not strip it and
+    // normalization's fail-loud-on-typo guard is reached.
+    const operatorDir = mkdtempSync(join(tmpdir(), "brewva-operator-config-"));
+    const operatorConfigPath = join(operatorDir, "brewva.json");
     writeFileSync(
-      join(workspace, ".brewva/brewva.json"),
+      operatorConfigPath,
       JSON.stringify(
         { security: { unattendedApproval: { not_an_effect_class: "allow" } } },
         null,
@@ -558,7 +584,7 @@ describe("Brewva config loader normalization", () => {
       "utf8",
     );
 
-    expect(() => loadBrewvaConfig({ cwd: workspace, configPath: ".brewva/brewva.json" })).toThrow(
+    expect(() => loadBrewvaConfig({ cwd: workspace, configPath: operatorConfigPath })).toThrow(
       /unattendedApproval/,
     );
   });

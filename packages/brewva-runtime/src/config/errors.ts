@@ -10,7 +10,8 @@ export type BrewvaForensicConfigWarningCode =
   | "config_unknown_fields_stripped"
   | "config_removed_fields_stripped"
   | "config_schema_skipped"
-  | "config_normalize_skipped";
+  | "config_normalize_skipped"
+  | "config_workspace_unattended_approval_stripped";
 
 export interface BrewvaForensicConfigWarning {
   code: BrewvaForensicConfigWarningCode;

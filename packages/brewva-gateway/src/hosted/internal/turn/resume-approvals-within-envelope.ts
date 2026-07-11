@@ -46,9 +46,26 @@ export interface EnvelopePendingApproval {
  * `deny` must supply `denyApproval`. Any `suspend` decision halts the loop
  * fail-closed, leaving every request pending for a human.
  *
+ * `preexistingRequestIds` scopes the envelope to approvals THIS turn created:
+ * any request already pending when the turn began is left untouched for a human,
+ * never auto-decided. This matters when a `--session` is reused — a fresh
+ * unattended run must not sweep tool commitments a prior turn deliberately left
+ * for manual review. Omit it (the delegation/schedule lanes) to decide every
+ * pending request, the prior behavior.
+ *
  * Only `reason === "approval"` suspensions are auto-resolved; a compaction
  * suspension is left for the caller, and any non-suspended status returns as-is.
+ *
+ * Returns the final turn plus `capExhausted`: true when the loop stopped because
+ * it hit `MAX_APPROVAL_RESUMES` while still approval-suspended (a tool that keeps
+ * re-requesting). A caller that treats "did not converge" as failure can then
+ * distinguish cap exhaustion from a fail-closed decline.
  */
+export interface EnvelopeResumeResult<TResult extends EnvelopeTurnResult> {
+  readonly output: TResult;
+  readonly capExhausted: boolean;
+}
+
 export async function resumeApprovalsWithinEnvelope<TResult extends EnvelopeTurnResult>(input: {
   readonly initial: TResult;
   readonly sessionId: string;
@@ -56,16 +73,24 @@ export async function resumeApprovalsWithinEnvelope<TResult extends EnvelopeTurn
   readonly acceptApproval: (sessionId: string, requestId: string) => void;
   readonly denyApproval?: (sessionId: string, requestId: string) => void;
   readonly decide?: (approval: EnvelopePendingApproval) => EnvelopeApprovalDecision;
+  readonly preexistingRequestIds?: ReadonlySet<string>;
   readonly resumeTurn: (resolveApproval: { readonly requestId: string }) => Promise<TResult>;
-}): Promise<TResult> {
+}): Promise<EnvelopeResumeResult<TResult>> {
   const decide = input.decide ?? ((): EnvelopeApprovalDecision => "accept");
+  const preexisting = input.preexistingRequestIds ?? new Set<string>();
   let output = input.initial;
-  for (
-    let resumes = 0;
-    output.status === "suspended" && output.reason === "approval" && resumes < MAX_APPROVAL_RESUMES;
-    resumes += 1
-  ) {
-    const pending = input.listPendingApprovals(input.sessionId);
+  let resumes = 0;
+  while (output.status === "suspended" && output.reason === "approval") {
+    if (resumes >= MAX_APPROVAL_RESUMES) {
+      // Hit the resume ceiling while still suspended: report cap exhaustion so a
+      // caller can surface it as a non-zero, non-converged outcome.
+      return { output, capExhausted: true };
+    }
+    // Only approvals this turn created are the envelope's to answer; a request
+    // pending before the turn began stays pending for a human.
+    const pending = input
+      .listPendingApprovals(input.sessionId)
+      .filter((approval) => !preexisting.has(approval.requestId));
     const [firstPending] = pending;
     if (!firstPending) {
       break;
@@ -92,6 +117,7 @@ export async function resumeApprovalsWithinEnvelope<TResult extends EnvelopeTurn
       }
     }
     output = await input.resumeTurn({ requestId: firstPending.requestId });
+    resumes += 1;
   }
-  return output;
+  return { output, capExhausted: false };
 }

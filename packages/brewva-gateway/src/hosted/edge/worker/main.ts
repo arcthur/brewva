@@ -571,7 +571,7 @@ async function runTurn(input: {
     // auto-approval stays auditable. The daemon only ever sets this mode for
     // the config-identity intent — model-minted intents cannot reach it.
     if (input.source === "schedule" && input.approvalMode === "auto_within_envelope") {
-      const resumeOutput = await resumeApprovalsWithinEnvelope({
+      const { output: resumeOutput } = await resumeApprovalsWithinEnvelope({
         initial: output,
         sessionId: input.agentSessionId,
         listPendingApprovals: (sessionId) =>

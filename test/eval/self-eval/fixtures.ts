@@ -1,30 +1,26 @@
-import { SCENARIO_CARRIED_CONFIG_KEY } from "../capability-premise.js";
 import type { SelfEvalFixture } from "./types.js";
 
-// The declared unattended envelope every fixture carries: local development
-// classes (read/write/exec) auto-approve so the task finishes unattended, while
-// the external classes stay uncovered and fail-closed suspend — the Phase-1
-// chain, and the operator-declared envelope the RFC's provenance model requires.
-// `local_exec` is the class the only approval-gated primitive (`exec`) projects.
-const LOCAL_DEV_ENVELOPE = `${JSON.stringify(
-  {
-    security: {
-      unattendedApproval: {
-        workspace_read: "allow",
-        workspace_write: "allow",
-        local_exec: "allow",
-      },
-    },
-  },
-  null,
-  2,
-)}\n`;
+// The operator-declared unattended envelope every fixture runs under: local
+// development classes (read/write/exec) auto-approve so the task finishes
+// unattended, while external classes stay uncovered and fail-closed suspend —
+// the Phase-1 chain. `local_exec` is the class the only approval-gated primitive
+// (`exec`) projects. The driver delivers this OUTSIDE the model-writable
+// workspace (the operator-source barrier), so a model cannot widen the envelope
+// it runs under by editing a workspace file.
+const LOCAL_DEV_APPROVAL_POLICY = {
+  workspace_read: "allow",
+  workspace_write: "allow",
+  local_exec: "allow",
+} as const satisfies Readonly<Record<string, "allow" | "deny">>;
 
 /**
  * The frozen self-eval fixture set (D6 evaluator definitions), seeded from the
  * n=12 tool-surface recipe's five fresh build/comprehension tasks. Each is small
  * and self-contained (runs under `bun test` with zero external deps) so the
- * exercised tool-surface profile — not scaffolding — is what the metrics read.
+ * exercised tool-surface profile — not scaffolding — is what the metrics read,
+ * and each carries a post-run oracle so task SUCCESS (not just turn liveness) is
+ * scored: the build/debug tasks pass their own test; the comprehension task must
+ * honor its do-not-modify constraint.
  *
  * These are DATA the candidate materializer never touches (they are not on the
  * optimizable prompt/skill allowlist), so a harness candidate can never retune
@@ -39,8 +35,9 @@ export const SELF_EVAL_FIXTURES: readonly SelfEvalFixture[] = [
       "The test in `sum.test.ts` fails because `sum` in `sum.ts` is wrong.",
       "Fix `sum.ts` so the test passes, then run `bun test sum.test.ts` to verify.",
     ].join("\n"),
+    operatorApprovalPolicy: LOCAL_DEV_APPROVAL_POLICY,
+    oracle: { kind: "command", command: ["bun", "test", "sum.test.ts"] },
     workspaceFiles: {
-      [SCENARIO_CARRIED_CONFIG_KEY]: LOCAL_DEV_ENVELOPE,
       "sum.ts": `export function sum(a: number, b: number): number {
   return a - b;
 }
@@ -63,8 +60,9 @@ test("sum adds its operands", () => {
       "`math.ts` has two unimplemented functions (`factorial`, `gcd`) that throw.",
       "Implement both so `math.test.ts` passes, then run `bun test math.test.ts`.",
     ].join("\n"),
+    operatorApprovalPolicy: LOCAL_DEV_APPROVAL_POLICY,
+    oracle: { kind: "command", command: ["bun", "test", "math.test.ts"] },
     workspaceFiles: {
-      [SCENARIO_CARRIED_CONFIG_KEY]: LOCAL_DEV_ENVELOPE,
       "math.ts": `export function factorial(n: number): number {
   throw new Error("not implemented");
 }
@@ -96,8 +94,9 @@ test("gcd", () => {
       "`slug.ts`'s `slugify` mishandles inputs with multiple spaces, so",
       "`slug.test.ts` fails. Diagnose and fix the regex, then run `bun test slug.test.ts`.",
     ].join("\n"),
+    operatorApprovalPolicy: LOCAL_DEV_APPROVAL_POLICY,
+    oracle: { kind: "command", command: ["bun", "test", "slug.test.ts"] },
     workspaceFiles: {
-      [SCENARIO_CARRIED_CONFIG_KEY]: LOCAL_DEV_ENVELOPE,
       "slug.ts": `export function slugify(input: string): string {
   return input.toLowerCase().replace(/ /, "-");
 }
@@ -120,8 +119,15 @@ test("slugify collapses whitespace runs into single dashes", () => {
       "Summarize the architecture of the package under `src/`: list each module,",
       "what it does, and how the modules depend on one another. Do not modify files.",
     ].join("\n"),
+    operatorApprovalPolicy: LOCAL_DEV_APPROVAL_POLICY,
+    // A comprehension task's checkable constraint is "do not modify"; the four
+    // source files must be byte-identical after the run. Summary quality beyond
+    // the constraint is not oracle-scored (a documented limit).
+    oracle: {
+      kind: "readonly_unchanged",
+      paths: ["src/types.ts", "src/store.ts", "src/format.ts", "src/index.ts"],
+    },
     workspaceFiles: {
-      [SCENARIO_CARRIED_CONFIG_KEY]: LOCAL_DEV_ENVELOPE,
       "src/types.ts": `export interface Task {
   readonly id: string;
   readonly title: string;
@@ -163,8 +169,9 @@ export function render(): string {
       "Add a `chunk<T>(items: T[], size: number): T[][]` function to `utils.ts`",
       "and a test in `utils.test.ts` covering it, then run `bun test utils.test.ts`.",
     ].join("\n"),
+    operatorApprovalPolicy: LOCAL_DEV_APPROVAL_POLICY,
+    oracle: { kind: "command", command: ["bun", "test", "utils.test.ts"] },
     workspaceFiles: {
-      [SCENARIO_CARRIED_CONFIG_KEY]: LOCAL_DEV_ENVELOPE,
       "utils.ts": `export function range(n: number): number[] {
   return Array.from({ length: n }, (_, index) => index);
 }

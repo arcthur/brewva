@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { isRecord, toErrorMessage } from "@brewva/brewva-std/unknown";
 import { DEFAULT_BREWVA_CONFIG } from "./defaults.js";
 import type { BrewvaConfig } from "./types.js";
@@ -22,6 +22,7 @@ import {
   resolveGlobalBrewvaConfigPath,
   resolvePathInput,
   resolveProjectBrewvaConfigPath,
+  resolveWorkspaceRootDir,
 } from "./paths.js";
 
 export interface LoadConfigOptions {
@@ -283,6 +284,46 @@ function emitBrewvaConfigWarningsToStderr(warnings: readonly BrewvaForensicConfi
   }
 }
 
+function isPathInsideDir(childPath: string, dir: string): boolean {
+  const rel = relative(dir, childPath);
+  return rel !== "" && !rel.startsWith("..") && !isAbsolute(rel);
+}
+
+/**
+ * The operator-source barrier. `security.unattendedApproval` grants a headless
+ * run authority to auto-answer approvals, so it must originate from the OPERATOR,
+ * not from state the model can rewrite. A config file INSIDE the workspace tree
+ * is model-writable (a model with workspace-write could widen its own envelope,
+ * and a child brewva it spawns would read the widened file), so its
+ * `unattendedApproval` is stripped here — honored only from an operator source
+ * outside the workspace (the global config, or an explicit `--config` outside the
+ * project). Mutates `parsed` in place and returns a warning when a non-empty
+ * in-workspace policy was dropped. (Granting `local_exec` remains host execution,
+ * a separate trust boundary this barrier does not close.)
+ */
+function stripWorkspaceUnattendedApproval(
+  parsed: Partial<BrewvaConfig>,
+  configPath: string,
+  workspaceRoot: string,
+): BrewvaForensicConfigWarning | undefined {
+  if (!isPathInsideDir(configPath, workspaceRoot)) return undefined;
+  const security = parsed.security;
+  if (!isRecord(security)) return undefined;
+  const policy = (security as Record<string, unknown>).unattendedApproval;
+  if (!isRecord(policy) || Object.keys(policy).length === 0) return undefined;
+  delete (security as Record<string, unknown>).unattendedApproval;
+  return {
+    code: "config_workspace_unattended_approval_stripped",
+    configPath,
+    message:
+      "security.unattendedApproval was ignored: an approval envelope must come from an operator " +
+      "source OUTSIDE the workspace (a global config, or an explicit --config outside the project). " +
+      "A workspace config file is model-writable, so honoring it would let a model widen its own " +
+      "authority. Move the policy out of the workspace to activate it.",
+    fields: Object.keys(policy).map((key) => `security.unattendedApproval.${key}`),
+  };
+}
+
 export function loadBrewvaConfig(options: LoadConfigOptions = {}): BrewvaConfig {
   const resolution = loadBrewvaConfigResolution(options);
   emitBrewvaConfigWarningsToStderr(resolution.warnings);
@@ -299,6 +340,7 @@ export function loadBrewvaConfigResolution(
     ? [resolve(cwd, options.configPath)]
     : [resolveGlobalBrewvaConfigPath(), resolveProjectBrewvaConfigPath(cwd)];
 
+  const workspaceRoot = resolveWorkspaceRootDir(cwd);
   let merged = defaults;
   let metadata = createDefaultBrewvaConfigMetadata();
   const warnings: BrewvaForensicConfigWarning[] = [];
@@ -306,6 +348,8 @@ export function loadBrewvaConfigResolution(
     const read = readConfigFile(configPath);
     if (!read) continue;
     warnings.push(...read.warnings);
+    const stripped = stripWorkspaceUnattendedApproval(read.parsed, configPath, workspaceRoot);
+    if (stripped) warnings.push(stripped);
     merged = deepMerge(merged, read.parsed);
     metadata = mergeBrewvaConfigMetadata(metadata, collectBrewvaConfigMetadata(read.parsed));
   }
@@ -326,6 +370,7 @@ export function loadBrewvaInspectConfigResolution(
     ? [resolve(cwd, options.configPath)]
     : [resolveGlobalBrewvaConfigPath(), resolveProjectBrewvaConfigPath(cwd)];
 
+  const workspaceRoot = resolveWorkspaceRootDir(cwd);
   let merged = defaults;
   let metadata = createDefaultBrewvaConfigMetadata();
   const warnings: BrewvaForensicConfigWarning[] = [];
@@ -335,6 +380,12 @@ export function loadBrewvaInspectConfigResolution(
     if (!forensicRead.parsed) {
       continue;
     }
+    const stripped = stripWorkspaceUnattendedApproval(
+      forensicRead.parsed,
+      configPath,
+      workspaceRoot,
+    );
+    if (stripped) warnings.push(stripped);
     merged = deepMerge(merged, forensicRead.parsed);
     metadata = mergeBrewvaConfigMetadata(metadata, forensicRead.metadata);
   }

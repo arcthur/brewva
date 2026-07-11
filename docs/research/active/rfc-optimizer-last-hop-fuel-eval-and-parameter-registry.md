@@ -125,11 +125,11 @@ Shape as built:
 - **Provenance / receipt.** Each auto-decision records the existing approval
   receipt through `kernel.recordApprovalDecision` with actor
   `unattended-config-policy` — no new persisted field, mirroring the
-  `schedule-envelope` / `delegation-envelope` actors. Unforgeability is
-  **structural**: the policy is read from `runtime.config` (deep-readonly after
-  construction) with no prompt/skill/tape input channel, so the model cannot
-  widen its own envelope — a stronger guarantee than the schedule lane's runtime
-  ingress guard, achieved by construction rather than a check.
+  `schedule-envelope` / `delegation-envelope` actors. The RUNNING snapshot is
+  unforgeable by construction: the resolved policy is read from `runtime.config`
+  (deep-readonly) with no prompt/skill/tape input channel, so the model cannot
+  mutate the policy in flight. But that protects the snapshot, not its SOURCE —
+  the hardening below closes the source gap.
 - **Backend routing.** The in-loop approval seam lives in the embedded print
   runner (`runCliTurn`). A `--print` run defaults to `--backend auto` and
   prefers a running gateway daemon, whose worker only auto-resolves the schedule
@@ -143,6 +143,23 @@ Shape as built:
   through to the worker's envelope gate; the daemon does not track client mode
   today, so it is a separate, larger surface deferred out of Phase 1 rather than
   a silent gap.
+- **Operator-source barrier + turn scope + non-zero on unconverged (review
+  hardening).** The "model cannot widen" guarantee protects only the running
+  snapshot, not its source: an `unattendedApproval` in a workspace-internal
+  config is model-writable (and a child `brewva` the model spawns re-reads it).
+  So the config loader now STRIPS `unattendedApproval` contributed by any config
+  source inside the workspace (with a diagnostic), honoring it only from an
+  operator source outside it — a global config, or an explicit `--config` outside
+  the project tree. The envelope also scopes its auto-decisions to approvals THIS
+  turn created (`preexistingRequestIds`), so a reused `--session` never sweeps a
+  commitment a prior turn left for a human. And a `--print` run that ends still
+  suspended (cap-exhausted — now surfaced as `capExhausted` — or fail-closed)
+  exits non-zero, matching the worker path that projects an unconverged turn as
+  failed, rather than exiting 0 on incomplete work. One residual the barrier does
+  NOT close: granting `local_exec` is host command execution, broader than any
+  brewva tool-effect gate — do not put it in an unattended envelope for a model
+  you would not trust with a shell, and prefer a sandboxed backend for untrusted
+  runs.
 
 This is the Weng constraint made concrete: the loop may contain approval
 **execution**, never approval **policy authorship**. It is also the first real
@@ -169,6 +186,11 @@ definitions). Shape as built:
   the status, absent on success, is the real signal) and an unresolved
   `runtime.suspended{approval_pending}` — separating `completed` /
   `suspended_for_approval` / `incomplete`, the Phase-1 chain made observable.
+  This is TURN LIVENESS — how the turn ended, not whether the task succeeded; a
+  `completed` turn only means the model stopped cleanly. Task SUCCESS is a
+  separate signal from the post-run oracle (below), so a model that ends its turn
+  without fixing the bug, with a wrong fix, or claiming a success it did not
+  achieve scores `task_failed`, not `completed`.
 - **Driver.** `driveSelfEvalRun` (`test/eval/self-eval/driver.ts`) spawns one
   hermetic `brewva --json --backend embedded` turn per fixture (JSON mode so the
   per-run cost summary lands on stdout as a `brewva_event_bundle`), through the
@@ -184,12 +206,26 @@ definitions). Shape as built:
   the tape does not carry per-run cost).
 - **Fixtures (frozen, D6).** Five build/debug/comprehension tasks
   (`test/eval/self-eval/fixtures.ts`) seeded from the n=12 recipe, each small
-  and self-contained (`bun test`, zero external deps). Each carries a
-  `.brewva/brewva.json` with a local-dev `security.unattendedApproval` envelope
-  (`workspace_read`/`workspace_write`/`local_exec` allow; external classes
-  uncovered → fail-closed) — the Phase-1 chain riding the eval harness's
-  scenario-carried-config seam. They are DATA off the candidate optimizable
-  allowlist, so the yardstick is not candidate-mutable.
+  and self-contained (`bun test`, zero external deps). Each DECLARES an
+  `operatorApprovalPolicy` (local-dev
+  `workspace_read`/`workspace_write`/`local_exec` allow; external classes
+  uncovered → fail-closed) that the driver delivers from OUTSIDE the workspace —
+  the operator-source barrier, since a workspace-internal policy is model-writable
+  and would be stripped — plus a post-run `oracle`. They are DATA off the
+  candidate optimizable allowlist, so the yardstick is not candidate-mutable.
+- **Post-run oracle (task success).** `runFixtureOracle`
+  (`test/eval/self-eval/oracle.ts`) decides `task_passed` / `task_failed` over the
+  run's FINAL workspace — the build/debug fixtures run their own test (exit 0 =
+  passed), the comprehension fixture checks its do-not-modify constraint. It runs
+  ONLY on a `completed` turn; a timed-out / suspended / incomplete / unknown run
+  is `terminal_incomplete` and never oracle-scored, because task success is
+  undefined on a run that never finished. The driver also preserves the spawn's
+  `timedOut` as a distinct outcome, so the report's task tally
+  (`task_passed`/`task_failed`/`terminal_incomplete`) and liveness tally
+  (`completed`/`suspended`/`incomplete`/`timed_out`/`unknown`) each sum to the run
+  count — no run silently dropped. This is what turns the tool-exercise PROFILE
+  into a task-success signal: without it, self-eval measured only that the turn
+  ended, not that the work was done.
 - **Report.** `buildSelfEvalReport` / `formatSelfEvalReport` /
   `persistSelfEvalReport` emit a dated
   `.brewva/reports/self-eval/<YYYY-MM-DD>.{md,json}` (sibling of the calibration
@@ -254,13 +290,18 @@ Three uses, none of which changes any rule automatically:
 1. The calibration report names `asserted` and `contested` parameters
    explicitly instead of leaving them implicit in code.
 2. It is the EVOLVE-BLOCK equivalent for any future optimizer: the registry
-   is the _only_ candidate-tunable surface; everything outside it stays
-   frozen by default. It fences the NAMES, not admissible ranges — there is
-   no per-parameter bound and `evidenceSource` is prose, so bounding each
-   parameter's domain and making `evidenceSource` a runnable grader are the
-   extension a proposer needs before it could "propose within the fence."
-   Naming the membership now is what makes a later optimizer phase reviewable
-   instead of open-ended.
+   is the _only_ CALIBRATION-eligible surface (behavior constants a human
+   retunes in source when evidence grades them); everything outside it stays
+   frozen by default. This is a different axis from the harness candidate
+   MATERIALIZATION seam (`materialize.ts`, today `provider.model`) — the two do
+   not overlap: registry parameters are calibration-eligible but not
+   materializable, and `provider.model` is materializable but not a calibration
+   constant, so there are not two competing tunable lists. It fences the NAMES,
+   not admissible ranges — there is no per-parameter bound and `evidenceSource`
+   is prose, so bounding each parameter's domain and making `evidenceSource` a
+   runnable grader are the extension a proposer needs before it could "propose
+   within the fence." Naming the membership now is what makes a later optimizer
+   phase reviewable instead of open-ended.
 3. It is the ledger where the audit's parameter-honesty debts get worked off:
    the divergent freshness scales either earn their difference or converge,
    and the standalone `DEFAULT_COMPACTION_THRESHOLD_RATIO = 0.8` compaction

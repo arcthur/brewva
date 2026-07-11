@@ -1,9 +1,9 @@
 #!/usr/bin/env bun
 // Print the calibration parameter registry — the code-owned list of
-// calibration-eligible behavior constants (the only candidate-tunable surface;
-// everything else is frozen). The calibration-report cycle cites this so the
-// asserted/contested parameters are named explicitly instead of left implicit
-// in code. Derives a view; changes nothing (axiom 18).
+// calibration-eligible behavior constants (the only CALIBRATION-eligible
+// surface; everything else is frozen). The calibration-report cycle cites this
+// so the asserted/contested parameters are named explicitly instead of left
+// implicit in code. Derives a view; changes nothing (axiom 18).
 import {
   CALIBRATION_PARAMETER_REGISTRY,
   type CalibrationParameter,
@@ -27,7 +27,8 @@ const lines: string[] = [
   "# Calibration Parameter Registry",
   "",
   `${CALIBRATION_PARAMETER_REGISTRY.length} calibration-eligible parameters — the only ` +
-    "candidate-tunable surface; every behavior constant not listed here is frozen. " +
+    "surface a human may recalibrate in source; every behavior constant not listed here " +
+    "is frozen. Distinct from the harness materialization seam (provider.model). " +
     "Values change only as reviewed code.",
   "",
 ];

@@ -84,7 +84,7 @@ describe("config policy drives the unattended approval envelope", () => {
       {}, // completed
     ]);
 
-    const output = await resumeApprovalsWithinEnvelope({
+    const { output } = await resumeApprovalsWithinEnvelope({
       initial: turn.initial,
       sessionId: "s",
       listPendingApprovals: turn.listPendingApprovals,
@@ -110,7 +110,7 @@ describe("config policy drives the unattended approval envelope", () => {
       {},
     ]);
 
-    const output = await resumeApprovalsWithinEnvelope({
+    const { output } = await resumeApprovalsWithinEnvelope({
       initial: turn.initial,
       sessionId: "s",
       listPendingApprovals: turn.listPendingApprovals,

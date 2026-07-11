@@ -67,11 +67,17 @@ export async function spawnPrintTurn(input: PrintTurnSpawnInput): Promise<PrintT
     env: { ...process.env, ...input.env },
   });
   let timedOut = false;
+  let sigkillTimer: ReturnType<typeof setTimeout> | undefined;
   const killTimer = setTimeout(() => {
     timedOut = true;
     child.kill();
-    setTimeout(() => child.kill("SIGKILL"), SIGKILL_ESCALATION_MS);
+    sigkillTimer = setTimeout(() => child.kill("SIGKILL"), SIGKILL_ESCALATION_MS);
   }, timeoutMs);
+  // The hard deadline must be cleared on EVERY exit path: on a clean child exit
+  // the race resolves via the Promise.all arm, leaving this timer pending. An
+  // uncleared timer keeps the Bun event loop alive for its full delay, so each
+  // successful eval would otherwise hang report:self-eval up to timeoutMs+slack.
+  let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
   const deadlineSentinel = Symbol("print-turn-deadline");
   try {
     const raced = await Promise.race([
@@ -81,7 +87,10 @@ export async function spawnPrintTurn(input: PrintTurnSpawnInput): Promise<PrintT
         child.exited,
       ]),
       new Promise<typeof deadlineSentinel>((resolveDeadline) => {
-        setTimeout(() => resolveDeadline(deadlineSentinel), timeoutMs + HARD_DEADLINE_SLACK_MS);
+        deadlineTimer = setTimeout(
+          () => resolveDeadline(deadlineSentinel),
+          timeoutMs + HARD_DEADLINE_SLACK_MS,
+        );
       }),
     ]);
     if (raced === deadlineSentinel) {
@@ -96,5 +105,7 @@ export async function spawnPrintTurn(input: PrintTurnSpawnInput): Promise<PrintT
     return { stdout, stderr, exitCode: timedOut ? null : exitCode, timedOut };
   } finally {
     clearTimeout(killTimer);
+    if (deadlineTimer !== undefined) clearTimeout(deadlineTimer);
+    if (sigkillTimer !== undefined) clearTimeout(sigkillTimer);
   }
 }

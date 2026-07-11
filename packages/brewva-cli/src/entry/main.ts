@@ -14,7 +14,7 @@ import {
   unattendedApprovalPolicyIsActive,
 } from "@brewva/brewva-gateway/hosted";
 import { createBrewvaRuntime } from "@brewva/brewva-runtime";
-import { loadBrewvaConfig } from "@brewva/brewva-runtime/config";
+import { type BrewvaConfig, loadBrewvaConfig } from "@brewva/brewva-runtime/config";
 import type { RuntimeResult } from "@brewva/brewva-runtime/core";
 import { projectDelegationInspectionState } from "@brewva/brewva-session-index";
 import { toErrorMessage, isRecord } from "@brewva/brewva-std/unknown";
@@ -641,20 +641,25 @@ export async function runCliRootOperation(): Promise<void> {
     return;
   }
 
+  // Resolve the config ONCE at process start (immutable), used for BOTH backend
+  // routing and the runtime adapter below — so "read once at process start" holds
+  // literally rather than peeking here and re-reading in the runtime. A malformed
+  // config leaves this undefined; routing then conservatively treats it as no
+  // active policy, and the runtime adapter re-loads to surface the real error
+  // when it builds.
+  let resolvedConfig: BrewvaConfig | undefined;
+  try {
+    resolvedConfig = loadBrewvaConfig({ cwd: parsed.cwd, configPath: parsed.configPath });
+  } catch {
+    resolvedConfig = undefined;
+  }
   // Unattended approval is answered in-process by the embedded print seam
   // (`runCliTurn`); the gateway worker only auto-resolves the config-authored
   // schedule lane, so a `--print` run with an active policy must use embedded or
-  // it would suspend forever. Peek at the config (cheap, cached, idempotent — the
-  // embedded runtime re-reads it) to route correctly; a malformed config surfaces
-  // its real error later when the runtime builds.
-  const unattendedApprovalActive = ((): boolean => {
-    try {
-      const peeked = loadBrewvaConfig({ cwd: parsed.cwd, configPath: parsed.configPath });
-      return unattendedApprovalPolicyIsActive(peeked.security.unattendedApproval);
-    } catch {
-      return false;
-    }
-  })();
+  // it would suspend forever.
+  const unattendedApprovalActive =
+    resolvedConfig !== undefined &&
+    unattendedApprovalPolicyIsActive(resolvedConfig.security.unattendedApproval);
 
   if (parsed.backend === "gateway") {
     if (parsed.undo || parsed.redo || parsed.replay) {
@@ -745,6 +750,10 @@ export async function runCliRootOperation(): Promise<void> {
     cwd: parsed.cwd,
     configPath: parsed.configPath,
     agentId: parsed.agentId,
+    // Reuse the single startup resolution when it succeeded; on a malformed
+    // config (undefined) fall back to the adapter's own load so it throws the
+    // real error.
+    ...(resolvedConfig ? { config: resolvedConfig } : {}),
   });
   const runtime = runtimeInstance;
   const operatorRuntime = runtimeInstance;

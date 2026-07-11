@@ -764,7 +764,7 @@ export function createHostedSubagentAdapter(
         const approvalChildRuntime = child.runtime;
         const approvalChildSession = child.session;
         const approvalChildSessionId = childSessionId;
-        output = await resumeApprovalsWithinEnvelope({
+        ({ output } = await resumeApprovalsWithinEnvelope({
           initial: output,
           sessionId: approvalChildSessionId,
           listPendingApprovals: (sessionId) =>
@@ -784,7 +784,7 @@ export function createHostedSubagentAdapter(
               source: "subagent",
               resolveApproval,
             }),
-        });
+        }));
         if (output.status !== "completed") {
           throw new Error(`subagent_thread_loop_${output.status}`);
         }

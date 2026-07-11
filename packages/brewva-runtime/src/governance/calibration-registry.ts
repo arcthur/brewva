@@ -5,10 +5,21 @@
  *
  * It grants NO authority and auto-tunes nothing (axiom 18; the
  * advisory-receipt-and-calibration-standard decision). It adds legibility as the
- * MEMBERSHIP fence: it names WHICH constants are candidate-tunable — the only
- * such surface; every behavior constant NOT listed stays frozen by default. It
- * fences the NAMES, not admissible ranges: there is no per-parameter bound, and
- * `evidenceSource` is prose, not a runnable grader. Bounding each parameter's
+ * CALIBRATION membership fence: it names WHICH behavior constants a human may
+ * retune in source when evidence grades them; every constant NOT listed stays
+ * frozen by default.
+ *
+ * This is a DIFFERENT axis from the harness candidate MATERIALIZATION surface
+ * (`materialize.ts` `classifyField`, today exactly `provider.model`) — that seam
+ * is the per-run execution override an A/B trial applies, not a behavior constant
+ * a human recalibrates over time. The two do not overlap today: every registry
+ * parameter is calibration-eligible but NON-materializable (no harness seam maps
+ * to it), and `provider.model` is materializable but not a calibration constant.
+ * So "candidate-tunable" here means calibration-eligible, never "materializable
+ * by the harness candidate executor"; there are not two competing tunable lists.
+ *
+ * It fences the NAMES, not admissible ranges: there is no per-parameter bound,
+ * and `evidenceSource` is prose, not a runnable grader. Bounding each parameter's
  * domain and resolving `evidenceSource` to a check are the extension a future
  * optimizer would need before it could "propose within the fence"; naming the
  * membership now is what keeps that later phase reviewable instead of open-ended.

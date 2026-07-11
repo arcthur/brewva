@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { SCENARIO_CARRIED_CONFIG_KEY } from "../../eval/capability-premise.js";
 import { SELF_EVAL_FIXTURES } from "../../eval/self-eval/fixtures.js";
 
 const VALID_KINDS = new Set(["build", "debug", "comprehension"]);
@@ -41,24 +40,41 @@ describe("self-eval fixtures (frozen evaluator definitions)", () => {
     expect(kinds.has("comprehension")).toBe(true);
   });
 
-  test("every fixture carries a valid unattendedApproval config (the Phase-1 chain)", () => {
+  test("every fixture declares a valid operatorApprovalPolicy (the Phase-1 chain)", () => {
     for (const fixture of SELF_EVAL_FIXTURES) {
-      const raw = fixture.workspaceFiles[SCENARIO_CARRIED_CONFIG_KEY];
-      expect(typeof raw).toBe("string");
-      const config = JSON.parse(raw as string) as {
-        security?: { unattendedApproval?: Record<string, unknown> };
-      };
-      const policy = config.security?.unattendedApproval;
+      const policy = fixture.operatorApprovalPolicy;
       expect(typeof policy).toBe("object");
-      const entries = Object.entries(policy ?? {});
+      const entries = Object.entries(policy);
       expect(entries.length).toBeGreaterThan(0);
       for (const [effectClass, decision] of entries) {
         expect(VALID_EFFECT_CLASSES.has(effectClass)).toBe(true);
-        expect(VALID_DECISIONS.has(decision as string)).toBe(true);
+        expect(VALID_DECISIONS.has(decision)).toBe(true);
       }
       // The class that the only approval-gated primitive (exec) projects must be
       // allowed, or exec-needing tasks would never finish unattended.
-      expect(policy?.local_exec).toBe("allow");
+      expect(policy.local_exec).toBe("allow");
+    }
+  });
+
+  test("the approval policy is NOT staged into the model-writable workspace", () => {
+    // The operator-source barrier: a policy inside the workspace would be stripped
+    // as model-writable, so fixtures must not smuggle one in via workspaceFiles.
+    for (const fixture of SELF_EVAL_FIXTURES) {
+      for (const path of Object.keys(fixture.workspaceFiles)) {
+        expect(path.includes("brewva.json")).toBe(false);
+      }
+    }
+  });
+
+  test("every fixture declares a post-run oracle", () => {
+    for (const fixture of SELF_EVAL_FIXTURES) {
+      const oracle = fixture.oracle;
+      if (oracle.kind === "command") {
+        expect(oracle.command.length).toBeGreaterThan(0);
+      } else {
+        expect(oracle.kind).toBe("readonly_unchanged");
+        expect(oracle.paths.length).toBeGreaterThan(0);
+      }
     }
   });
 
