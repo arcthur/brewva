@@ -28,6 +28,7 @@ export type EnvelopeApprovalDecision = "accept" | "deny" | "suspend";
  */
 export interface EnvelopePendingApproval {
   readonly requestId: string;
+  readonly turnId?: string;
   readonly effects?: readonly string[];
 }
 
@@ -46,12 +47,11 @@ export interface EnvelopePendingApproval {
  * `deny` must supply `denyApproval`. Any `suspend` decision halts the loop
  * fail-closed, leaving every request pending for a human.
  *
- * `preexistingRequestIds` scopes the envelope to approvals THIS turn created:
- * any request already pending when the turn began is left untouched for a human,
- * never auto-decided. This matters when a `--session` is reused — a fresh
- * unattended run must not sweep tool commitments a prior turn deliberately left
- * for manual review. Omit it (the delegation/schedule lanes) to decide every
- * pending request, the prior behavior.
+ * `turnId` scopes an envelope to approvals created by one exact turn. A scoped
+ * unattended print run never decides a prior, concurrent, or legacy request
+ * without a turn id; missing correlation fails closed. Omit it only for the
+ * capability-scoped delegation/schedule lanes, whose boundary is the session's
+ * grants and whose existing behavior is to decide every pending request.
  *
  * Only `reason === "approval"` suspensions are auto-resolved; a compaction
  * suspension is left for the caller, and any non-suspended status returns as-is.
@@ -73,11 +73,10 @@ export async function resumeApprovalsWithinEnvelope<TResult extends EnvelopeTurn
   readonly acceptApproval: (sessionId: string, requestId: string) => void;
   readonly denyApproval?: (sessionId: string, requestId: string) => void;
   readonly decide?: (approval: EnvelopePendingApproval) => EnvelopeApprovalDecision;
-  readonly preexistingRequestIds?: ReadonlySet<string>;
+  readonly turnId?: string;
   readonly resumeTurn: (resolveApproval: { readonly requestId: string }) => Promise<TResult>;
 }): Promise<EnvelopeResumeResult<TResult>> {
   const decide = input.decide ?? ((): EnvelopeApprovalDecision => "accept");
-  const preexisting = input.preexistingRequestIds ?? new Set<string>();
   let output = input.initial;
   let resumes = 0;
   while (output.status === "suspended" && output.reason === "approval") {
@@ -86,11 +85,12 @@ export async function resumeApprovalsWithinEnvelope<TResult extends EnvelopeTurn
       // caller can surface it as a non-zero, non-converged outcome.
       return { output, capExhausted: true };
     }
-    // Only approvals this turn created are the envelope's to answer; a request
-    // pending before the turn began stays pending for a human.
+    // A scoped unattended print lane owns only approvals from its exact turn.
+    // The projection carries turnId directly; do not reverse-engineer it from a
+    // request-id encoding, and never accept legacy requests without the proof.
     const pending = input
       .listPendingApprovals(input.sessionId)
-      .filter((approval) => !preexisting.has(approval.requestId));
+      .filter((approval) => input.turnId === undefined || approval.turnId === input.turnId);
     const [firstPending] = pending;
     if (!firstPending) {
       break;

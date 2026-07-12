@@ -7,7 +7,7 @@ import type {
   SelfEvalRunResult,
 } from "./types.js";
 
-const REPORT_SCHEMA = "brewva.self-eval.report.v1" as const;
+const REPORT_SCHEMA = "brewva.self-eval.report.v2" as const;
 // Sibling of the calibration report's `.brewva/reports/calibration/<date>.md`,
 // so every report the calibration cycle ingests lives under one root.
 const REPORTS_DIR_SEGMENTS = [".brewva", "reports", "self-eval"] as const;

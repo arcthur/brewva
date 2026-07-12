@@ -23,8 +23,18 @@ function stageTape(workspace: string, lines: readonly unknown[]): void {
 // collectRunOutcome's taskOutcome LOGIC (does it run the oracle, and only on a
 // completed turn?) rather than on the oracle mechanism, which is unit-tested
 // separately over staged workspaces.
-const PASS_ORACLE: SelfEvalOracle = { kind: "command", command: ["true"] };
-const FAIL_ORACLE: SelfEvalOracle = { kind: "command", command: ["false"] };
+const PASS_ORACLE: SelfEvalOracle = {
+  kind: "command",
+  command: ["true"],
+  subjectFiles: [],
+  verifierFiles: {},
+};
+const FAIL_ORACLE: SelfEvalOracle = {
+  kind: "command",
+  command: ["false"],
+  subjectFiles: [],
+  verifierFiles: {},
+};
 
 function fixtureRef(oracle: SelfEvalOracle) {
   return { id: "fix-arithmetic-bug", kind: "build" as const, oracle, workspaceFiles: {} };
@@ -211,6 +221,51 @@ describe("self-eval driver run-outcome collection (no live provider)", () => {
     expect(result.metrics.toolCallCount).toBe(0);
     expect(result.taskOutcome).toBe("terminal_incomplete");
   });
+
+  test("scores a comprehension task from the final durable assistant response", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "self-eval-collect-"));
+    mkdirSync(join(workspace, "src"), { recursive: true });
+    const source = "export interface Task {}\n";
+    writeFileSync(join(workspace, "src", "types.ts"), source, "utf8");
+    stageTape(workspace, [
+      { type: "turn.started", payload: { mode: "text" }, timestamp: 1 },
+      {
+        type: "msg.committed",
+        payload: {
+          text: JSON.stringify({
+            modules: [
+              {
+                path: "src/types.ts",
+                responsibility: "Defines the Task interface.",
+                dependsOn: [],
+              },
+            ],
+          }),
+        },
+        timestamp: 2,
+      },
+      { type: "turn.ended", payload: { cause: "terminal_commit" }, timestamp: 3 },
+    ]);
+
+    const result = await collectRunOutcome({
+      fixture: {
+        id: "summarize-architecture",
+        kind: "comprehension",
+        workspaceFiles: { "src/types.ts": source },
+        oracle: {
+          kind: "architecture_response",
+          readonlyPaths: ["src/types.ts"],
+          modules: [{ path: "src/types.ts", dependsOn: [], responsibilityTerms: ["task"] }],
+        },
+      },
+      workspace,
+      stdout: "",
+      exitCode: 0,
+      timedOut: false,
+    });
+
+    expect(result.taskOutcome).toBe("task_passed");
+  });
 });
 
 describe("operator config outside-workspace guard (fail loud, not silent)", () => {
@@ -221,8 +276,14 @@ describe("operator config outside-workspace guard (fail loud, not silent)", () =
     const workspace = mkdtempSync(join(tmpdir(), "self-eval-guard-"));
     writeFileSync(join(workspace, ".git"), "", "utf8");
     const insideConfig = join(workspace, "operator", "brewva.json");
+    mkdirSync(join(workspace, "operator"), { recursive: true });
+    writeFileSync(
+      insideConfig,
+      JSON.stringify({ security: { unattendedApproval: { local_exec: "allow" } } }),
+      "utf8",
+    );
     expect(() => assertOperatorConfigOutsideWorkspace(insideConfig, workspace)).toThrow(
-      /operator-source barrier would strip/,
+      /operator-source barrier stripped/,
     );
   });
 
@@ -230,6 +291,12 @@ describe("operator config outside-workspace guard (fail loud, not silent)", () =
     const parent = mkdtempSync(join(tmpdir(), "self-eval-guard-parent-"));
     const workspace = mkdtempSync(join(parent, "ws-"));
     const outsideConfig = join(parent, "operator-xyz", "brewva.json");
+    mkdirSync(join(parent, "operator-xyz"), { recursive: true });
+    writeFileSync(
+      outsideConfig,
+      JSON.stringify({ security: { unattendedApproval: { local_exec: "allow" } } }),
+      "utf8",
+    );
     let rejected = false;
     try {
       assertOperatorConfigOutsideWorkspace(outsideConfig, workspace);

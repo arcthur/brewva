@@ -1,13 +1,15 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import {
   loadBrewvaConfig,
+  loadBrewvaInspectConfigResolution,
   loadBrewvaConfigResolution,
   resolveGlobalBrewvaConfigPath,
 } from "@brewva/brewva-runtime/config";
+import { patchProcessEnv } from "../../helpers/global-state.js";
 import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
@@ -560,6 +562,118 @@ describe("Brewva config loader normalization", () => {
     expect(resolution.warnings.map((warning) => warning.code)).toContain(
       "config_workspace_unattended_approval_stripped",
     );
+  });
+
+  test("strips a policy from another workspace even when the caller uses a different cwd", () => {
+    const modelWorkspace = createTestWorkspace("unattended-approval-cross-cwd-source");
+    const callerCwd = mkdtempSync(join(tmpdir(), "brewva-unattended-approval-caller-"));
+    const modelConfigPath = join(modelWorkspace, ".brewva", "brewva.json");
+    writeFileSync(
+      modelConfigPath,
+      JSON.stringify({ security: { unattendedApproval: { local_exec: "allow" } } }, null, 2),
+      "utf8",
+    );
+
+    const resolution = loadBrewvaConfigResolution({
+      cwd: callerCwd,
+      configPath: modelConfigPath,
+    });
+
+    expect(resolution.config.security.unattendedApproval).toEqual({});
+    expect(resolution.warnings.map((warning) => warning.code)).toContain(
+      "config_workspace_unattended_approval_stripped",
+    );
+  });
+
+  test("strips a policy when an outside config symlink resolves into a workspace", () => {
+    const modelWorkspace = createTestWorkspace("unattended-approval-symlink-source");
+    const callerCwd = mkdtempSync(join(tmpdir(), "brewva-unattended-approval-caller-"));
+    const modelConfigPath = join(modelWorkspace, ".brewva", "brewva.json");
+    writeFileSync(
+      modelConfigPath,
+      JSON.stringify({ security: { unattendedApproval: { local_exec: "allow" } } }, null, 2),
+      "utf8",
+    );
+    const operatorDir = mkdtempSync(join(tmpdir(), "brewva-operator-config-link-"));
+    const operatorConfigPath = join(operatorDir, "brewva.json");
+    symlinkSync(modelConfigPath, operatorConfigPath);
+
+    const resolution = loadBrewvaConfigResolution({
+      cwd: callerCwd,
+      configPath: operatorConfigPath,
+    });
+
+    expect(resolution.config.security.unattendedApproval).toEqual({});
+    expect(resolution.warnings.map((warning) => warning.code)).toContain(
+      "config_workspace_unattended_approval_stripped",
+    );
+  });
+
+  test("strips a workspace symlink to an outside policy in both runtime and inspect resolution", () => {
+    const modelWorkspace = createTestWorkspace("unattended-approval-workspace-symlink");
+    const callerCwd = mkdtempSync(join(tmpdir(), "brewva-unattended-approval-caller-"));
+    // Establish the workspace marker without placing the policy itself there.
+    writeFileSync(join(modelWorkspace, ".brewva", "brewva.json"), "{}\n", "utf8");
+    const operatorDir = mkdtempSync(join(tmpdir(), "brewva-operator-config-target-"));
+    const operatorConfigPath = join(operatorDir, "brewva.json");
+    writeFileSync(
+      operatorConfigPath,
+      JSON.stringify({ security: { unattendedApproval: { local_exec: "allow" } } }, null, 2),
+      "utf8",
+    );
+    const modelControlledLink = join(modelWorkspace, "operator-policy.json");
+    symlinkSync(operatorConfigPath, modelControlledLink);
+
+    const runtimeResolution = loadBrewvaConfigResolution({
+      cwd: callerCwd,
+      configPath: modelControlledLink,
+    });
+    const inspectResolution = loadBrewvaInspectConfigResolution({
+      cwd: callerCwd,
+      configPath: modelControlledLink,
+    });
+
+    expect(runtimeResolution.config.security.unattendedApproval).toEqual({});
+    expect(inspectResolution.config.security.unattendedApproval).toEqual({});
+    expect(runtimeResolution.warnings.map((warning) => warning.code)).toContain(
+      "config_workspace_unattended_approval_stripped",
+    );
+    expect(inspectResolution.warnings.map((warning) => warning.code)).toContain(
+      "config_workspace_unattended_approval_stripped",
+    );
+  });
+
+  test("honors a global config policy even when the operator's config dir is git-tracked", () => {
+    // An operator who version-controls their ~/.config (a dotfiles repo) has a
+    // `.git` marker at the XDG config root. The auto-resolved global config is an
+    // operator source by construction, so the operator-source barrier must NOT
+    // strip its policy just because the config directory lives in a git tree —
+    // only an explicit, caller-steerable `--config` is scanned that broadly.
+    const xdgHome = mkdtempSync(join(tmpdir(), "brewva-operator-xdg-"));
+    writeFileSync(join(xdgHome, ".git"), "", "utf8");
+    const restoreEnv = patchProcessEnv({
+      XDG_CONFIG_HOME: xdgHome,
+      BREWVA_CODING_AGENT_DIR: undefined,
+    });
+    try {
+      const globalConfigPath = resolveGlobalBrewvaConfigPath();
+      mkdirSync(dirname(globalConfigPath), { recursive: true });
+      writeFileSync(
+        globalConfigPath,
+        JSON.stringify({ security: { unattendedApproval: { local_exec: "allow" } } }, null, 2),
+        "utf8",
+      );
+      const projectCwd = mkdtempSync(join(tmpdir(), "brewva-operator-project-"));
+
+      const resolution = loadBrewvaConfigResolution({ cwd: projectCwd });
+
+      expect(resolution.config.security.unattendedApproval).toEqual({ local_exec: "allow" });
+      expect(resolution.warnings.map((warning) => warning.code)).not.toContain(
+        "config_workspace_unattended_approval_stripped",
+      );
+    } finally {
+      restoreEnv();
+    }
   });
 
   test("defaults security.unattendedApproval to an empty (suspend-everything) policy", () => {

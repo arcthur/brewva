@@ -138,18 +138,19 @@ describe("resumeApprovalsWithinEnvelope (default accept-all envelope)", () => {
     expect(capExhausted).toBe(false);
   });
 
-  test("scopes to the current turn: an approval pending before the turn is never decided", async () => {
+  test("scopes to the exact current turn, never a prior, concurrent, or legacy approval", async () => {
     const accepted: string[] = [];
     let resumeCalls = 0;
     const { output } = await resumeApprovalsWithinEnvelope({
       initial: suspendedApproval,
       sessionId: "reused-session",
-      // Two pending: one carried over from a prior turn, one created by this turn.
+      turnId: "print-current",
       listPendingApprovals: () => [
-        { requestId: "prior-human-reserved" },
-        { requestId: "this-turn" },
+        { requestId: "prior-human-reserved", turnId: "print-prior" },
+        { requestId: "concurrent-turn", turnId: "print-concurrent" },
+        { requestId: "legacy-without-turn" },
+        { requestId: "this-turn", turnId: "print-current" },
       ],
-      preexistingRequestIds: new Set(["prior-human-reserved"]),
       acceptApproval: (_sessionId, requestId) => {
         accepted.push(requestId);
       },
@@ -159,23 +160,26 @@ describe("resumeApprovalsWithinEnvelope (default accept-all envelope)", () => {
         return completed;
       },
     });
-    // Only this turn's approval is auto-accepted; the prior human-reserved one is
-    // left pending, never swept by the reused session's unattended run.
     expect(accepted).toEqual(["this-turn"]);
     expect(accepted).not.toContain("prior-human-reserved");
+    expect(accepted).not.toContain("concurrent-turn");
+    expect(accepted).not.toContain("legacy-without-turn");
     expect(resumeCalls).toBe(1);
     expect(output.status).toBe("completed");
   });
 
-  test("only pre-existing approvals remain: the loop leaves them and returns suspended", async () => {
+  test("leaves a scoped envelope suspended when no approval belongs to its turn", async () => {
     let resumeCalls = 0;
     const { output } = await resumeApprovalsWithinEnvelope({
       initial: suspendedApproval,
       sessionId: "reused-session",
-      listPendingApprovals: () => [{ requestId: "prior-only" }],
-      preexistingRequestIds: new Set(["prior-only"]),
+      turnId: "print-current",
+      listPendingApprovals: () => [
+        { requestId: "other-turn", turnId: "print-other" },
+        { requestId: "legacy-without-turn" },
+      ],
       acceptApproval: () => {
-        throw new Error("must not decide a pre-existing approval");
+        throw new Error("must not decide an approval outside the current turn");
       },
       resumeTurn: async () => {
         resumeCalls += 1;

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import process from "node:process";
 import { runEdgeOperation } from "@brewva/brewva-effect";
 import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
@@ -203,26 +204,24 @@ async function runCliTurn(
       throw new Error("cli_print_session_missing_session_id");
     }
     const parts = [{ type: "text" as const, text: prompt }];
+    // This identity binds the checkpoint, every turn receipt, and the
+    // unattended approval envelope. A reused session can contain requests from
+    // other turns, so a time snapshot is insufficient authority correlation.
+    const turnId = `print:${randomUUID()}`;
     options.operator.session.recordCheckpoint(sessionId, {
-      turnId: `print:${Date.now()}`,
+      turnId,
       prompt: {
         text: prompt,
         parts: structuredClone(parts) as unknown as SessionPromptSnapshot["parts"],
       },
     });
-    // Snapshot approvals already pending BEFORE this turn (a reused `--session`
-    // may carry tool commitments a prior turn left for a human). The unattended
-    // envelope must only auto-decide approvals THIS turn creates, never sweep
-    // those.
-    const preexistingApprovals = new Set(
-      options.inspect.proposals.listPending(sessionId).map((approval) => approval.requestId),
-    );
     let output = await runHostedPromptTurn({
       session,
       parts,
       source: "print",
       runtime: options.runtime,
       sessionId,
+      turnId,
     });
     // Unattended (`--print`) runs have no interactive approver. When the operator
     // has declared an effect-class envelope, auto-decide approvals within it and
@@ -239,7 +238,7 @@ async function runCliTurn(
         const resumed = await resumeApprovalsWithinEnvelope({
           initial: output,
           sessionId,
-          preexistingRequestIds: preexistingApprovals,
+          turnId,
           listPendingApprovals: (id) => options.inspect.proposals.listPending(id),
           decide: buildUnattendedApprovalDecider(policy),
           acceptApproval: (id, requestId) =>
@@ -262,6 +261,7 @@ async function runCliTurn(
               source: "print",
               runtime: options.runtime,
               sessionId,
+              turnId,
               resolveApproval,
             }),
         });

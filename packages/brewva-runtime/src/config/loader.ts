@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { isRecord, toErrorMessage } from "@brewva/brewva-std/unknown";
 import { DEFAULT_BREWVA_CONFIG } from "./defaults.js";
@@ -19,6 +19,7 @@ import {
   validateLoadedBrewvaConfigObject,
 } from "./object-validation.js";
 import {
+  findWorkspaceRootDir,
   resolveGlobalBrewvaConfigPath,
   resolvePathInput,
   resolveProjectBrewvaConfigPath,
@@ -174,12 +175,15 @@ function readConfigFile(configPath: string):
   | {
       parsed: Partial<BrewvaConfig>;
       warnings: BrewvaForensicConfigWarning[];
+      canonicalPath: string;
     }
   | undefined {
   if (!existsSync(configPath)) return undefined;
+  let canonicalPath: string;
   let parsed: unknown;
   try {
-    const raw = readFileSync(configPath, "utf8");
+    canonicalPath = realpathSync.native(configPath);
+    const raw = readFileSync(canonicalPath, "utf8");
     parsed = parseJsonc(raw);
   } catch (error) {
     const message = toErrorMessage(error);
@@ -194,6 +198,7 @@ function readConfigFile(configPath: string):
   return {
     parsed: resolveConfigRelativePaths(cleaned.value as Partial<BrewvaConfig>, configPath),
     warnings: cleaned.warnings,
+    canonicalPath,
   };
 }
 
@@ -201,6 +206,7 @@ function readConfigFileForInspect(configPath: string): {
   parsed?: Partial<BrewvaConfig>;
   metadata: BrewvaConfigMetadata;
   warnings: BrewvaForensicConfigWarning[];
+  canonicalPath?: string;
 } {
   const metadata = createDefaultBrewvaConfigMetadata();
   if (!existsSync(configPath)) {
@@ -208,8 +214,10 @@ function readConfigFileForInspect(configPath: string): {
   }
 
   let parsed: unknown;
+  let canonicalPath: string;
   try {
-    parsed = parseJsonc(readFileSync(configPath, "utf8"));
+    canonicalPath = realpathSync.native(configPath);
+    parsed = parseJsonc(readFileSync(canonicalPath, "utf8"));
   } catch (error) {
     const message = toErrorMessage(error);
     return {
@@ -269,6 +277,7 @@ function readConfigFileForInspect(configPath: string): {
     ),
     metadata: collectBrewvaConfigMetadata(forensicValidation.parsed),
     warnings: forensicValidation.warnings,
+    canonicalPath,
   };
 }
 
@@ -289,6 +298,49 @@ function isPathInsideDir(childPath: string, dir: string): boolean {
   return rel !== "" && !rel.startsWith("..") && !isAbsolute(rel);
 }
 
+function canonicalizePath(path: string): string {
+  try {
+    return realpathSync.native(path);
+  } catch {
+    return resolve(path);
+  }
+}
+
+function configSourceIsWorkspaceBound(input: {
+  readonly logicalPath: string;
+  readonly canonicalPath: string;
+  readonly activeWorkspaceRoot: string;
+  /** True only for an explicit, caller-supplied `--config` (see below). */
+  readonly explicitConfigSource: boolean;
+}): boolean {
+  const activeWorkspaceRoot = canonicalizePath(input.activeWorkspaceRoot);
+  if (
+    isPathInsideDir(input.logicalPath, input.activeWorkspaceRoot) ||
+    isPathInsideDir(input.canonicalPath, activeWorkspaceRoot)
+  ) {
+    return true;
+  }
+
+  // The any-workspace-tree scan applies ONLY to an explicit `--config`, the one
+  // caller-steerable source: a child process can point it at a DIFFERENT
+  // (model-writable) workspace than the caller's cwd — or an outside symlink
+  // resolving there — so an explicit source is trustworthy only when neither
+  // spelling lives in a discovered workspace tree. The auto-resolved paths are
+  // not caller-steerable and must not be scanned: the project config is already
+  // caught by the active-workspace containment above, and the global config is
+  // operator-owned by construction. Scanning it would strip a legitimate global
+  // policy merely because the operator version-controls their config directory
+  // (e.g. a git-tracked ~/.config), contradicting "a global config is an
+  // operator source".
+  if (!input.explicitConfigSource) {
+    return false;
+  }
+  return (
+    findWorkspaceRootDir(dirname(input.logicalPath)) !== undefined ||
+    findWorkspaceRootDir(dirname(input.canonicalPath)) !== undefined
+  );
+}
+
 /**
  * The operator-source barrier. `security.unattendedApproval` grants a headless
  * run authority to auto-answer approvals, so it must originate from the OPERATOR,
@@ -304,9 +356,20 @@ function isPathInsideDir(childPath: string, dir: string): boolean {
 function stripWorkspaceUnattendedApproval(
   parsed: Partial<BrewvaConfig>,
   configPath: string,
+  canonicalConfigPath: string,
   workspaceRoot: string,
+  explicitConfigSource: boolean,
 ): BrewvaForensicConfigWarning | undefined {
-  if (!isPathInsideDir(configPath, workspaceRoot)) return undefined;
+  if (
+    !configSourceIsWorkspaceBound({
+      logicalPath: configPath,
+      canonicalPath: canonicalConfigPath,
+      activeWorkspaceRoot: workspaceRoot,
+      explicitConfigSource,
+    })
+  ) {
+    return undefined;
+  }
   const security = parsed.security;
   if (!isRecord(security)) return undefined;
   const policy = (security as Record<string, unknown>).unattendedApproval;
@@ -317,9 +380,10 @@ function stripWorkspaceUnattendedApproval(
     configPath,
     message:
       "security.unattendedApproval was ignored: an approval envelope must come from an operator " +
-      "source OUTSIDE the workspace (a global config, or an explicit --config outside the project). " +
-      "A workspace config file is model-writable, so honoring it would let a model widen its own " +
-      "authority. Move the policy out of the workspace to activate it.",
+      "source OUTSIDE every workspace tree (a global config, or an explicit --config outside any " +
+      "project). Workspace config sources and symlinks resolving into them are model-writable, so " +
+      "honoring one would let a model widen its own authority. Move the policy to an operator-owned " +
+      "non-workspace path to activate it.",
     fields: Object.keys(policy).map((key) => `security.unattendedApproval.${key}`),
   };
 }
@@ -348,7 +412,13 @@ export function loadBrewvaConfigResolution(
     const read = readConfigFile(configPath);
     if (!read) continue;
     warnings.push(...read.warnings);
-    const stripped = stripWorkspaceUnattendedApproval(read.parsed, configPath, workspaceRoot);
+    const stripped = stripWorkspaceUnattendedApproval(
+      read.parsed,
+      configPath,
+      read.canonicalPath,
+      workspaceRoot,
+      options.configPath !== undefined,
+    );
     if (stripped) warnings.push(stripped);
     merged = deepMerge(merged, read.parsed);
     metadata = mergeBrewvaConfigMetadata(metadata, collectBrewvaConfigMetadata(read.parsed));
@@ -383,7 +453,9 @@ export function loadBrewvaInspectConfigResolution(
     const stripped = stripWorkspaceUnattendedApproval(
       forensicRead.parsed,
       configPath,
+      forensicRead.canonicalPath ?? configPath,
       workspaceRoot,
+      options.configPath !== undefined,
     );
     if (stripped) warnings.push(stripped);
     merged = deepMerge(merged, forensicRead.parsed);

@@ -2,11 +2,8 @@ import type { SelfEvalFixture } from "./types.js";
 
 // The operator-declared unattended envelope every fixture runs under: local
 // development classes (read/write/exec) auto-approve so the task finishes
-// unattended, while external classes stay uncovered and fail-closed suspend —
-// the Phase-1 chain. `local_exec` is the class the only approval-gated primitive
-// (`exec`) projects. The driver delivers this OUTSIDE the model-writable
-// workspace (the operator-source barrier), so a model cannot widen the envelope
-// it runs under by editing a workspace file.
+// unattended, while external classes stay uncovered and fail-closed suspend.
+// The driver supplies this outside the model-writable workspace.
 const LOCAL_DEV_APPROVAL_POLICY = {
   workspace_read: "allow",
   workspace_write: "allow",
@@ -14,35 +11,27 @@ const LOCAL_DEV_APPROVAL_POLICY = {
 } as const satisfies Readonly<Record<string, "allow" | "deny">>;
 
 /**
- * The frozen self-eval fixture set (D6 evaluator definitions), seeded from the
- * n=12 tool-surface recipe's five fresh build/comprehension tasks. Each is small
- * and self-contained (runs under `bun test` with zero external deps) so the
- * exercised tool-surface profile — not scaffolding — is what the metrics read,
- * and each carries a post-run oracle so task SUCCESS (not just turn liveness) is
- * scored: the build/debug tasks pass their own test; the comprehension task must
- * honor its do-not-modify constraint.
- *
- * These are DATA the candidate materializer never touches (they are not on the
- * optimizable prompt/skill allowlist), so a harness candidate can never retune
- * the yardstick it is graded against.
+ * Frozen self-eval fixtures. The model receives only `workspaceFiles`; command
+ * verifier files are materialized in a fresh directory after its process exits.
+ * This makes task success independent of any workspace test the model creates or
+ * rewrites during the run.
  */
 export const SELF_EVAL_FIXTURES: readonly SelfEvalFixture[] = [
   {
     id: "fix-arithmetic-bug",
     kind: "build",
-    description: "Fix an off-by-operator arithmetic bug so its unit test passes.",
+    description: "Fix an off-by-operator arithmetic bug so sum returns addition.",
     prompt: [
-      "The test in `sum.test.ts` fails because `sum` in `sum.ts` is wrong.",
-      "Fix `sum.ts` so the test passes, then run `bun test sum.test.ts` to verify.",
+      "`sum` in `sum.ts` has an off-by-operator arithmetic bug.",
+      "Fix it so `sum(a, b)` returns the arithmetic sum of its operands, then verify the result.",
     ].join("\n"),
     operatorApprovalPolicy: LOCAL_DEV_APPROVAL_POLICY,
-    oracle: { kind: "command", command: ["bun", "test", "sum.test.ts"] },
-    workspaceFiles: {
-      "sum.ts": `export function sum(a: number, b: number): number {
-  return a - b;
-}
-`,
-      "sum.test.ts": `import { expect, test } from "bun:test";
+    oracle: {
+      kind: "command",
+      command: ["bun", "test", "sum.test.ts"],
+      subjectFiles: ["sum.ts"],
+      verifierFiles: {
+        "sum.test.ts": `import { expect, test } from "bun:test";
 import { sum } from "./sum.ts";
 
 test("sum adds its operands", () => {
@@ -50,28 +39,30 @@ test("sum adds its operands", () => {
   expect(sum(10, 5)).toBe(15);
 });
 `,
+      },
+    },
+    workspaceFiles: {
+      "sum.ts": `export function sum(a: number, b: number): number {
+  return a - b;
+}
+`,
     },
   },
   {
     id: "implement-missing-functions",
     kind: "build",
-    description: "Implement two stubbed functions so their tests pass.",
+    description: "Implement factorial and gcd from their declared contracts.",
     prompt: [
       "`math.ts` has two unimplemented functions (`factorial`, `gcd`) that throw.",
-      "Implement both so `math.test.ts` passes, then run `bun test math.test.ts`.",
+      "Implement both: factorial(5) is 120, factorial(0) is 1, and gcd returns the greatest common divisor.",
     ].join("\n"),
     operatorApprovalPolicy: LOCAL_DEV_APPROVAL_POLICY,
-    oracle: { kind: "command", command: ["bun", "test", "math.test.ts"] },
-    workspaceFiles: {
-      "math.ts": `export function factorial(n: number): number {
-  throw new Error("not implemented");
-}
-
-export function gcd(a: number, b: number): number {
-  throw new Error("not implemented");
-}
-`,
-      "math.test.ts": `import { expect, test } from "bun:test";
+    oracle: {
+      kind: "command",
+      command: ["bun", "test", "math.test.ts"],
+      subjectFiles: ["math.ts"],
+      verifierFiles: {
+        "math.test.ts": `import { expect, test } from "bun:test";
 import { factorial, gcd } from "./math.ts";
 
 test("factorial", () => {
@@ -84,6 +75,17 @@ test("gcd", () => {
   expect(gcd(17, 5)).toBe(1);
 });
 `,
+      },
+    },
+    workspaceFiles: {
+      "math.ts": `export function factorial(n: number): number {
+  throw new Error("not implemented");
+}
+
+export function gcd(a: number, b: number): number {
+  throw new Error("not implemented");
+}
+`,
     },
   },
   {
@@ -91,23 +93,29 @@ test("gcd", () => {
     kind: "debug",
     description: "Diagnose and fix a subtle regex bug in a slug helper.",
     prompt: [
-      "`slug.ts`'s `slugify` mishandles inputs with multiple spaces, so",
-      "`slug.test.ts` fails. Diagnose and fix the regex, then run `bun test slug.test.ts`.",
+      "`slug.ts`'s `slugify` mishandles inputs with multiple spaces.",
+      "Diagnose and fix the regex so whitespace runs collapse to one dash.",
     ].join("\n"),
     operatorApprovalPolicy: LOCAL_DEV_APPROVAL_POLICY,
-    oracle: { kind: "command", command: ["bun", "test", "slug.test.ts"] },
-    workspaceFiles: {
-      "slug.ts": `export function slugify(input: string): string {
-  return input.toLowerCase().replace(/ /, "-");
-}
-`,
-      "slug.test.ts": `import { expect, test } from "bun:test";
+    oracle: {
+      kind: "command",
+      command: ["bun", "test", "slug.test.ts"],
+      subjectFiles: ["slug.ts"],
+      verifierFiles: {
+        "slug.test.ts": `import { expect, test } from "bun:test";
 import { slugify } from "./slug.ts";
 
 test("slugify collapses whitespace runs into single dashes", () => {
   expect(slugify("Hello   World")).toBe("hello-world");
   expect(slugify("Foo Bar Baz")).toBe("foo-bar-baz");
 });
+`,
+      },
+    },
+    workspaceFiles: {
+      "slug.ts": `export function slugify(input: string): string {
+  return input.toLowerCase().replace(/ /, "-");
+}
 `,
     },
   },
@@ -116,16 +124,32 @@ test("slugify collapses whitespace runs into single dashes", () => {
     kind: "comprehension",
     description: "Summarize a small multi-module package's structure and dependencies.",
     prompt: [
-      "Summarize the architecture of the package under `src/`: list each module,",
-      "what it does, and how the modules depend on one another. Do not modify files.",
+      "Summarize the architecture of the package under `src/`. Do not modify files.",
+      'Return ONLY JSON: {"modules":[{"path":string,"responsibility":string,"dependsOn":string[]}]}',
+      "List exactly src/types.ts, src/store.ts, src/format.ts, and src/index.ts with direct dependencies.",
     ].join("\n"),
     operatorApprovalPolicy: LOCAL_DEV_APPROVAL_POLICY,
-    // A comprehension task's checkable constraint is "do not modify"; the four
-    // source files must be byte-identical after the run. Summary quality beyond
-    // the constraint is not oracle-scored (a documented limit).
     oracle: {
-      kind: "readonly_unchanged",
-      paths: ["src/types.ts", "src/store.ts", "src/format.ts", "src/index.ts"],
+      kind: "architecture_response",
+      readonlyPaths: ["src/types.ts", "src/store.ts", "src/format.ts", "src/index.ts"],
+      modules: [
+        { path: "src/types.ts", dependsOn: [], responsibilityTerms: ["task", "interface"] },
+        {
+          path: "src/store.ts",
+          dependsOn: ["src/types.ts"],
+          responsibilityTerms: ["addtask", "listtask"],
+        },
+        {
+          path: "src/format.ts",
+          dependsOn: ["src/types.ts"],
+          responsibilityTerms: ["formattask"],
+        },
+        {
+          path: "src/index.ts",
+          dependsOn: ["src/store.ts", "src/format.ts"],
+          responsibilityTerms: ["render"],
+        },
+      ],
     },
     workspaceFiles: {
       "src/types.ts": `export interface Task {
@@ -162,15 +186,29 @@ export function render(): string {
     },
   },
   {
-    id: "add-util-and-test",
+    id: "implement-chunk",
     kind: "build",
-    description: "Add a chunk() utility and a passing test at package scale.",
+    description: "Add a chunk() utility that partitions a list into fixed-size groups.",
     prompt: [
-      "Add a `chunk<T>(items: T[], size: number): T[][]` function to `utils.ts`",
-      "and a test in `utils.test.ts` covering it, then run `bun test utils.test.ts`.",
+      "Add a `chunk<T>(items: T[], size: number): T[][]` function to `utils.ts`.",
+      "It must preserve order and retain a final partial chunk.",
     ].join("\n"),
     operatorApprovalPolicy: LOCAL_DEV_APPROVAL_POLICY,
-    oracle: { kind: "command", command: ["bun", "test", "utils.test.ts"] },
+    oracle: {
+      kind: "command",
+      command: ["bun", "test", "utils.test.ts"],
+      subjectFiles: ["utils.ts"],
+      verifierFiles: {
+        "utils.test.ts": `import { expect, test } from "bun:test";
+import { chunk } from "./utils.ts";
+
+test("chunk preserves order and retains the final partial group", () => {
+  expect(chunk([1, 2, 3, 4, 5], 2)).toEqual([[1, 2], [3, 4], [5]]);
+  expect(chunk([], 3)).toEqual([]);
+});
+`,
+      },
+    },
     workspaceFiles: {
       "utils.ts": `export function range(n: number): number[] {
   return Array.from({ length: n }, (_, index) => index);

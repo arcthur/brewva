@@ -145,12 +145,16 @@ otherwise suspend on. Reach for `actionAdmissionOverrides` to change what is
 callable at all; reach for `unattendedApproval` to let a headless run
 auto-clear the approvals it would otherwise wait on.
 
-The policy is honored only from an OPERATOR source outside the workspace — a
-global config, or an explicit `--config` outside the project tree. An
-`unattendedApproval` found in a workspace-internal config is stripped with a
-warning, because a model with workspace-write could otherwise edit it (and a
-child `brewva` it spawns would re-read the widened file) to widen its own
-envelope. Within a process the resolved policy is read once at start and is never
+The policy is honored only from an OPERATOR source: the global config
+(operator-owned by construction — trusted even when the operator
+version-controls their config directory), or an explicit `--config` that is
+neither inside nor a symlink into any detected workspace tree. For an explicit
+`--config` the loader checks both the requested path and its canonical target,
+and rejects one that resolves into a workspace even if the caller changes cwd
+first. An `unattendedApproval` from a project config, a workspace file, or
+either form of workspace symlink is stripped with a warning: a model with
+workspace-write could otherwise edit it (and a child `brewva` it spawns would
+re-read the widened file) to widen its own envelope. Within a process the resolved policy is read once at start and is never
 influenced by prompt, skill, or model output. Each auto-decision records the
 normal approval receipt on the tape with the actor `unattended-config-policy`, so
 the auto-approval stays auditable.

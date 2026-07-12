@@ -87,10 +87,17 @@ function hasGitRootMarker(dir: string): boolean {
   return existsSync(join(dir, ".git"));
 }
 
+/**
+ * Return the enclosing workspace only when a real workspace marker exists.
+ * Unlike `resolveWorkspaceRootDir`, this intentionally has no cwd fallback: a
+ * caller needs it to distinguish an ordinary operator config directory from a
+ * config file that lives in a model-writable project tree.
+ */
+export function findWorkspaceRootDir(path: string): string | undefined {
+  return findAncestor(resolve(path), (dir) => hasBrewvaConfigRoot(dir) || hasGitRootMarker(dir));
+}
+
 export function resolveWorkspaceRootDir(cwd: string): string {
   const resolvedCwd = resolve(cwd);
-  return (
-    findAncestor(resolvedCwd, (dir) => hasBrewvaConfigRoot(dir) || hasGitRootMarker(dir)) ??
-    resolvedCwd
-  );
+  return findWorkspaceRootDir(resolvedCwd) ?? resolvedCwd;
 }

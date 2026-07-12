@@ -145,21 +145,27 @@ Shape as built:
   a silent gap.
 - **Operator-source barrier + turn scope + non-zero on unconverged (review
   hardening).** The "model cannot widen" guarantee protects only the running
-  snapshot, not its source: an `unattendedApproval` in a workspace-internal
-  config is model-writable (and a child `brewva` the model spawns re-reads it).
-  So the config loader now STRIPS `unattendedApproval` contributed by any config
-  source inside the workspace (with a diagnostic), honoring it only from an
-  operator source outside it — a global config, or an explicit `--config` outside
-  the project tree. The envelope also scopes its auto-decisions to approvals THIS
-  turn created (`preexistingRequestIds`), so a reused `--session` never sweeps a
-  commitment a prior turn left for a human. And a `--print` run that ends still
-  suspended (cap-exhausted — now surfaced as `capExhausted` — or fail-closed)
-  exits non-zero, matching the worker path that projects an unconverged turn as
-  failed, rather than exiting 0 on incomplete work. One residual the barrier does
-  NOT close: granting `local_exec` is host command execution, broader than any
-  brewva tool-effect gate — do not put it in an unattended envelope for a model
-  you would not trust with a shell, and prefer a sandboxed backend for untrusted
-  runs.
+  snapshot, not its source: an `unattendedApproval` in a model-writable config
+  is unsafe because a child `brewva` can re-read it. The loader strips policy
+  from any source whose logical path or canonical target is inside the active
+  workspace; for an explicit `--config` (the one caller-steerable source) it
+  additionally rejects any spelling that lives in **any detected workspace
+  tree**, closing both an outside symlink into a workspace and a child that
+  changes cwd before pointing `--config` at a different workspace. The
+  auto-resolved global config stays an operator source — operator-owned by
+  construction, so it is honored even when the operator version-controls their
+  config directory (a git-tracked `~/.config`). The embedded print lane mints
+  one UUID-backed `turnId`
+  for its checkpoint, initial run, and every resume; the envelope then decides
+  only pending approvals carrying that exact `turnId`, leaving prior, concurrent,
+  and legacy requests without correlation for a human. A `--print` run that ends
+  still suspended (cap-exhausted — now surfaced as `capExhausted` — or
+  fail-closed) exits non-zero, matching the worker path that projects an
+  unconverged turn as failed, rather than exiting 0 on incomplete work. One
+  residual the barrier does NOT close: granting `local_exec` is host command
+  execution, broader than any brewva tool-effect gate — do not put it in an
+  unattended envelope for a model you would not trust with a shell, and prefer a
+  sandboxed backend for untrusted runs.
 
 This is the Weng constraint made concrete: the loop may contain approval
 **execution**, never approval **policy authorship**. It is also the first real
@@ -213,19 +219,28 @@ definitions). Shape as built:
   the operator-source barrier, since a workspace-internal policy is model-writable
   and would be stripped — plus a post-run `oracle`. They are DATA off the
   candidate optimizable allowlist, so the yardstick is not candidate-mutable.
+  The model receives only task inputs: fixed command verifier files are materialized
+  in a fresh directory after its process exits, alongside only declared subject
+  files copied from the final workspace. A rewritten workspace test, a vacuous
+  model-authored test, symlinked subject, or undeclared support file cannot grade
+  the task.
 - **Post-run oracle (task success).** `runFixtureOracle`
-  (`test/eval/self-eval/oracle.ts`) decides `task_passed` / `task_failed` over the
-  run's FINAL workspace — the build/debug fixtures run their own test (exit 0 =
-  passed), the comprehension fixture checks its do-not-modify constraint. It runs
-  ONLY on a `completed` turn; a timed-out / suspended / incomplete / unknown run
-  is `terminal_incomplete` and never oracle-scored, because task success is
+  (`test/eval/self-eval/oracle.ts`) decides `task_passed` / `task_failed` from
+  this isolated verifier for build/debug tasks. The comprehension fixture now
+  requires a machine-readable final architecture response from the durable
+  `msg.committed` record, with exact module/dependency coverage and a frozen
+  responsibility-term contract, as well as unchanged source bytes. It runs ONLY
+  on a `completed` turn; a timed-out / suspended / incomplete / unknown run is
+  `terminal_incomplete` and never oracle-scored, because task success is
   undefined on a run that never finished. The driver also preserves the spawn's
   `timedOut` as a distinct outcome, so the report's task tally
   (`task_passed`/`task_failed`/`terminal_incomplete`) and liveness tally
   (`completed`/`suspended`/`incomplete`/`timed_out`/`unknown`) each sum to the run
-  count — no run silently dropped. This is what turns the tool-exercise PROFILE
-  into a task-success signal: without it, self-eval measured only that the turn
-  ended, not that the work was done.
+  count — no run silently dropped. The report schema is
+  `brewva.self-eval.report.v2`: v1 task-pass totals used model-writable tests and
+  are not comparable to the trusted-verifier baseline. This is what turns the
+  tool-exercise PROFILE into a task-success signal: without it, self-eval measured
+  only that the turn ended, not that the work was done.
 - **Report.** `buildSelfEvalReport` / `formatSelfEvalReport` /
   `persistSelfEvalReport` emit a dated
   `.brewva/reports/self-eval/<YYYY-MM-DD>.{md,json}` (sibling of the calibration

@@ -42,18 +42,34 @@ export type SelfEvalTaskOutcome = "task_passed" | "task_failed" | "terminal_inco
 
 /**
  * A per-fixture post-run oracle: the deterministic check of task success over the
- * run's FINAL workspace. `command` (build/debug): run it in the workspace, exit 0
- * = passed (the fixture's own test). `readonly_unchanged` (comprehension): every
- * listed file must be byte-identical to what was staged — the do-not-modify
- * constraint the task declares. The oracle never runs a provider and is
- * deterministic given the workspace, so it is unit-testable over staged
- * good/bad workspaces. (Comprehension summary QUALITY beyond the constraint is
- * not oracle-checked — a documented limit; the build/debug command oracles carry
- * the real task-success signal.)
+ * run's FINAL workspace. A `command` oracle stages only declared subject files
+ * plus fixture-owned verifier files into a fresh directory AFTER the model exits;
+ * it never runs a model-writable test. `architecture_response` checks both the
+ * untouched source contract and a machine-readable final answer from the durable
+ * tape. `readonly_unchanged` remains available for narrow constraint-only checks,
+ * but is not a task-success oracle for the comprehension fixture.
  */
 export type SelfEvalOracle =
-  | { readonly kind: "command"; readonly command: readonly string[] }
-  | { readonly kind: "readonly_unchanged"; readonly paths: readonly string[] };
+  | {
+      readonly kind: "command";
+      readonly command: readonly string[];
+      /** Final model-produced files copied into the isolated verifier. */
+      readonly subjectFiles: readonly string[];
+      /** Frozen test inputs written only after the model process has exited. */
+      readonly verifierFiles: Readonly<Record<string, string>>;
+    }
+  | { readonly kind: "readonly_unchanged"; readonly paths: readonly string[] }
+  | {
+      readonly kind: "architecture_response";
+      readonly readonlyPaths: readonly string[];
+      readonly modules: readonly SelfEvalArchitectureModuleExpectation[];
+    };
+
+export interface SelfEvalArchitectureModuleExpectation {
+  readonly path: string;
+  readonly dependsOn: readonly string[];
+  readonly responsibilityTerms: readonly string[];
+}
 
 /**
  * Non-structural per-run cost — an OBSERVATION sourced from the run's own
@@ -172,7 +188,8 @@ export interface SelfEvalAggregate {
  * (never read from a clock inside the builder) so the builder stays pure.
  */
 export interface SelfEvalReport {
-  readonly schema: "brewva.self-eval.report.v1";
+  /** v2 introduced an evaluator that the model cannot rewrite during a run. */
+  readonly schema: "brewva.self-eval.report.v2";
   readonly generatedAt: string;
   readonly model: string;
   readonly runsPerFixture: number;

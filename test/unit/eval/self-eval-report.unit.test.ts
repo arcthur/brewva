@@ -49,7 +49,7 @@ const runs: SelfEvalRunResult[] = [
   {
     // A timed-out run: terminal_incomplete task outcome, and its liveness lands
     // in the timed_out bucket (never silently folded into unknown).
-    fixtureId: "add-util-and-test",
+    fixtureId: "implement-chunk",
     kind: "build",
     taskOutcome: "terminal_incomplete",
     exitCode: null,
@@ -146,6 +146,6 @@ describe("self-eval report", () => {
     expect(existsSync(markdownPath)).toBe(true);
     expect(existsSync(jsonPath)).toBe(true);
     const persisted = JSON.parse(readFileSync(jsonPath, "utf8")) as { schema: string };
-    expect(persisted.schema).toBe("brewva.self-eval.report.v1");
+    expect(persisted.schema).toBe("brewva.self-eval.report.v2");
   });
 });

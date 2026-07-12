@@ -71,6 +71,19 @@ describe("self-eval fixtures (frozen evaluator definitions)", () => {
       const oracle = fixture.oracle;
       if (oracle.kind === "command") {
         expect(oracle.command.length).toBeGreaterThan(0);
+        expect(oracle.subjectFiles.length).toBeGreaterThan(0);
+        expect(Object.keys(oracle.verifierFiles).length).toBeGreaterThan(0);
+        for (const path of [...oracle.subjectFiles, ...Object.keys(oracle.verifierFiles)]) {
+          expect(path.startsWith("/")).toBe(false);
+          expect(path.includes("..")).toBe(false);
+        }
+      } else if (oracle.kind === "architecture_response") {
+        expect(oracle.readonlyPaths.length).toBeGreaterThan(0);
+        expect(oracle.modules.length).toBeGreaterThan(0);
+        for (const module of oracle.modules) {
+          expect(module.path.length).toBeGreaterThan(0);
+          expect(module.responsibilityTerms.length).toBeGreaterThan(0);
+        }
       } else {
         expect(oracle.kind).toBe("readonly_unchanged");
         expect(oracle.paths.length).toBeGreaterThan(0);

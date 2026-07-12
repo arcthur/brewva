@@ -1,7 +1,7 @@
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { isAbsolute, join, relative } from "node:path";
-import { resolveWorkspaceRootDir } from "@brewva/brewva-runtime/config";
+import { join } from "node:path";
+import { loadBrewvaConfigResolution } from "@brewva/brewva-runtime/config";
 import {
   findFinalBundle,
   latestCanonicalTapeFile,
@@ -24,6 +24,18 @@ function readCostObservation(stdout: string): SelfEvalCostObservation | undefine
     ...(totalTokens !== undefined ? { totalTokens } : {}),
     ...(totalCostUsd !== undefined ? { totalCostUsd } : {}),
   };
+}
+
+function readFinalAssistantText(
+  events: readonly { type?: string; payload?: Record<string, unknown> }[],
+): string | undefined {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    if (event?.type !== "msg.committed") continue;
+    const text = event.payload?.text;
+    if (typeof text === "string" && text.trim().length > 0) return text;
+  }
+  return undefined;
 }
 
 /**
@@ -66,6 +78,7 @@ export async function collectRunOutcome(input: {
           oracle: input.fixture.oracle,
           workspace: input.workspace,
           stagedFiles: input.fixture.workspaceFiles,
+          assistantText: readFinalAssistantText(events),
         });
   return {
     fixtureId: input.fixture.id,
@@ -154,15 +167,18 @@ export function assertOperatorConfigOutsideWorkspace(
   operatorConfigPath: string,
   workspace: string,
 ): void {
-  const workspaceRoot = resolveWorkspaceRootDir(workspace);
-  const rel = relative(workspaceRoot, operatorConfigPath);
-  const inside = rel !== "" && !rel.startsWith("..") && !isAbsolute(rel);
-  if (inside) {
+  const resolution = loadBrewvaConfigResolution({
+    cwd: workspace,
+    configPath: operatorConfigPath,
+  });
+  const stripped = resolution.warnings.some(
+    (warning) => warning.code === "config_workspace_unattended_approval_stripped",
+  );
+  if (stripped || Object.keys(resolution.config.security.unattendedApproval).length === 0) {
     throw new Error(
-      `Self-eval operator config ${operatorConfigPath} resolved INSIDE the workspace root ` +
-        `${workspaceRoot} — the operator-source barrier would strip its unattendedApproval and ` +
-        `every exec fixture would silently suspend. Use a workspaceParentDir outside any ` +
-        `git/.brewva repo (the default tmpdir is safe).`,
+      `Self-eval operator config ${operatorConfigPath} is not an active operator approval source ` +
+        `for workspace ${workspace} — the operator-source barrier stripped its unattendedApproval. ` +
+        `Use a non-workspace config path that does not resolve through a workspace symlink.`,
     );
   }
 }
