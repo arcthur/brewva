@@ -58,18 +58,18 @@ Some machinery is still real, but it is not the public runtime contract:
 Repo-owned code may still use product vocabulary in explicit
 `@brewva/brewva-vocabulary/*` subpaths, policy helpers in
 `@brewva/brewva-runtime/security`, and package-owned infrastructure ports such
-as `@brewva/brewva-gateway/recovery`.
+as `@brewva/brewva-gateway/harness`.
 These subpaths are not alternate runtime roots.
 
 Those subpaths and extension ports are controlled, allowlisted TypeScript ports.
-They do not preserve the removed `@brewva/brewva-runtime/internal` barrel, do
+They do not expose an `@brewva/brewva-runtime/internal` barrel, do
 not expose runtime capability tokens, and do not expose arbitrary service
 instance state.
 
 Inside `packages/brewva-runtime`, new implementation ownership follows the
 four-port folders under `runtime/tape`, `runtime/kernel`, `runtime/model`, and
-`runtime/turn`. Existing `domain/<name>/` slices were deleted and must not be
-used as a pattern to extend.
+`runtime/turn`. There are no `domain/<name>/` slices; new ownership follows the
+four-port folders.
 
 ## Replay And Durability
 
@@ -111,9 +111,9 @@ runtime contract.
 ## Shared Contract Surface
 
 Shared contracts are defined explicitly in
-`packages/brewva-runtime/src/public/index.ts` and the owner-scoped `types.ts`
-modules under `packages/brewva-runtime/src/runtime/` and
-`packages/brewva-runtime/src/runtime/tape/`, including:
+`packages/brewva-runtime/src/public/index.ts`, `runtime/runtime-api.ts`, and the
+owner-scoped `port.ts` modules under
+`packages/brewva-runtime/src/runtime/{kernel,model,tape,turn}/`, including:
 
 - task, truth, schedule, and evidence contracts
 - event, replay, receipt, and WAL contracts

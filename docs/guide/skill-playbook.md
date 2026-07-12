@@ -44,7 +44,7 @@ Vocabulary:
 - `posture`: the scope/timing stance inherited by downstream planning.
 
 Compatibility between skills is expressed by explicit handoff text and the
-current task state. The removed `composable_with` field must not be reintroduced
+current task state. The `composable_with` field is not valid and must not be introduced
 as a lifecycle gate or taxonomy coverage checklist.
 
 ## Manual Chains
@@ -92,7 +92,7 @@ when one of these is true:
   clear
 
 Do not add automatic cascade behavior. Do not infer a hidden chain from this
-document. Do not preserve old skill-name aliases.
+document. Do not introduce skill-name aliases.
 
 ## Delegation In Skills
 

@@ -26,7 +26,7 @@ Focus on Brewva-native artifacts and governance telemetry.
 
 ### Step 1: Start from canonical artifact paths
 
-Inspect event store, evidence ledger, projection artifacts, WAL, and schedule projection before ad hoc searches.
+Inspect event tape, evidence ledger, projection artifacts, WAL, and schedule projection before ad hoc searches.
 Use the Work Card as the first orientation view when available, then drill down
 to context, authority, skills, inbox, diff, timeline, raw replay, or diagnostic
 artifacts for claims that need forensic precision.
@@ -54,7 +54,7 @@ the same event evidence.
 
 | Excuse                                          | Reality                                                                                                                |
 | ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| "Log output is sufficient evidence"             | Logs are partial. The artifact graph (event store, WAL, projection) gives causal structure that logs cannot.           |
+| "Log output is sufficient evidence"             | Logs are partial. The artifact graph (event tape, WAL, projection) gives causal structure that logs cannot.            |
 | "Governance events are not relevant here"       | Control-plane behavior is invisible without governance events. Always check them for routing or workflow-state issues. |
 | "I can piece together the timeline from source" | Source tells you what could happen. Artifacts tell you what did happen. Start from artifacts.                          |
 

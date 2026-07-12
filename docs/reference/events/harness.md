@@ -40,7 +40,7 @@ It stores `brewva.harness.trace_snapshot.v1` JSON rows derived from:
 - context evidence and provider cache observations
 - cost, tool outcome, suspension, and turn-end events
 
-The table is rebuildable. Event tape remains authoritative. Schema version `7`
+The table is rebuildable. Event tape remains authoritative. Schema version `9`
 resets older session-index rows and rebuilds projections rather than migrating
 compatibility state.
 

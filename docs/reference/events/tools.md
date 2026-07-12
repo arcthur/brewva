@@ -92,7 +92,7 @@ target roots. Browser outputs remain workspace-root scoped.
 ## Implementation Anchors
 
 - `packages/brewva-runtime/src/runtime/kernel/impl.ts`
-- `packages/brewva-runtime/src/runtime/kernel/impl.ts`
-- `packages/brewva-runtime/src/runtime/kernel/impl.ts`
-- `packages/brewva-runtime/src/runtime/kernel/impl.ts`
-- `packages/brewva-runtime/src/runtime/kernel/impl.ts`
+- `packages/brewva-gateway/src/hosted/internal/session/runtime-ops-builders/tools.ts`
+- `packages/brewva-tools/src/families/navigation/source-patch.ts`
+- `packages/brewva-tools/src/runtime-port/verification.ts`
+- `packages/brewva-gateway/src/hosted/internal/session/runtime-ops-builders/delegation.ts`

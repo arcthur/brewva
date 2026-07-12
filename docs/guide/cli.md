@@ -19,7 +19,7 @@ complete generated subcommand and flag contract, use
   stdio through the gateway)
 
 Mode resolution is explicit and fail-fast. Incompatible flags return a parse
-error instead of reviving retired prompt-loop behavior.
+error.
 
 ## Interactive Shell
 
@@ -88,7 +88,7 @@ For Telegram/webhook ingress, see
 
 ## Config Loading
 
-`brewva config` has been removed. Enumerated removed fields left in the
+There is no `brewva config` command. Enumerated removed fields left in the
 selected config file are stripped at load with a `[config:warning]` line on
 stderr (their old semantics stay disabled) and startup proceeds; delete them at
 leisure. Unknown or type-invalid fields still fail startup during config load —

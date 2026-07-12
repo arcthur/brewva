@@ -25,7 +25,7 @@ executed, and recorded by the same kernel spine that governs built-in tools.
 
 The load-bearing fact: MCP integration is not a separate execution path. A
 discovered MCP tool becomes an ordinary registered tool in the same tool set as
-built-in tools, and is governed by the same `KernelToolAuthorizer`. There is no
+built-in tools, and is governed by the same `KernelToolAuthorityResolver`. There is no
 MCP-specific invocation spine and no MCP-specific governance bypass.
 
 ## In Scope
@@ -58,7 +58,7 @@ flowchart TD
   C --> D["Register each tool via defineBrewvaTool (mcp__server__tool, actionClass, surface)"]
   D --> E["Concatenate into session customTools (same array as built-in tools)"]
   E --> F["Turn time: authority resolver reads actionClass metadata"]
-  F --> G["KernelToolAuthorizer resolves governance descriptor (same path as built-ins)"]
+  F --> G["KernelToolAuthorityResolver resolves governance descriptor (same path as built-ins)"]
   G --> H{"Effect boundary"}
   H -->|Safe or read| I["Execute: adapter.callTool"]
   H -->|external_side_effect default| J["Create effect_commitment request -> approval"]
@@ -73,7 +73,7 @@ flowchart TD
    `servers[]` entry. The loader normalizes each entry: the server `id` must
    match a bounded identifier pattern, `transport` is `stdio` or
    `streamable_http`, and duplicate ids fail closed. For stdio servers
-   `inheritEnv` has been removed: child environment must be declared through
+   `inheritEnv` must be `false` (a truthy value is rejected): child environment must be declared through
    `envAllowlist`, so there is no implicit `process.env` inheritance.
 2. **Build sources.** `createHostedMcpToolSourcesFromConfig` filters enabled
    servers and acquires one pooled adapter per server. Adapters are pooled and
@@ -95,7 +95,7 @@ flowchart TD
    combined set throws.
 7. **Govern.** At turn time the hosted authority resolver looks up the
    registered tool, reads its `actionClass` metadata, and resolves the
-   governance descriptor through the same `KernelToolAuthorizer` path used for
+   governance descriptor through the same `KernelToolAuthorityResolver` path used for
    built-in tools. The MCP tool's action class drives boundary, approval,
    receipt, and recovery policy identically.
 8. **Invoke.** On admission the tool's `execute` calls `adapter.callTool` under
@@ -109,7 +109,7 @@ flowchart TD
 ## Execution Semantics
 
 - MCP tools are governed identically to built-in tools: same `customTools`
-  array, same hosted authority resolver, same `KernelToolAuthorizer`. There is
+  array, same hosted authority resolver, same `KernelToolAuthorityResolver`. There is
   no MCP-specific admission or execution path
 - the default MCP action class is `external_side_effect`, which is approval-bound
   and high-risk with no automatic undo: its admission default is `ask`, it
@@ -154,7 +154,7 @@ flowchart TD
 - adapter-level protocol events (internal, not operator-facing):
   `server_connected`, `server_disconnected`, `tool_list_refreshed`,
   `tool_call_failed`
-- hosted operational events (operator-facing, renamed from the adapter events):
+- hosted operational events (operator-facing, distinct from the adapter events):
   - `mcp_server_connected`
   - `mcp_server_disconnected`
   - `mcp_tool_list_refreshed` (carries `toolCount`)

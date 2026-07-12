@@ -146,14 +146,24 @@ flowchart LR
 
 ## Hosted Turn Gates
 
+A hosted turn advances forward-only through canonical tape events (invariant 11,
+turn lifecycle monotonicity); these canonical events are the turn's gates.
+
 ```mermaid
 flowchart LR
-  A["turn_input_recorded"] --> B["ingress_received"]
-  B --> C["admission_resolved"]
-  C --> D["effect_authorized"]
-  D --> E["execution_recorded"]
-  E --> F["recovery_settled"]
-  F --> G["terminal_recorded"]
+  START["turn.started"] --> MODEL["reason.committed / msg.committed"]
+  MODEL --> PROP["tool.proposed"]
+  PROP --> RUN["tool.started"]
+  RUN --> RESULT["tool.committed / tool.aborted"]
+  RESULT -->|"further model + tool steps"| MODEL
+  RESULT --> CKPT["checkpoint.committed"]
+  CKPT --> ANCHOR["anchor.committed (optional)"]
+  ANCHOR --> END["turn.ended"]
+
+  PROP -. "approval, context pressure, or retry" .-> SUSP["approval.requested / runtime.suspended"]
+  SUSP -. "resume" .-> DEC["approval.decided"]
+  DEC --> RUN
+  MODEL -. "usage accounting" .-> COST["cost.observed"]
 ```
 
 ## Recovery

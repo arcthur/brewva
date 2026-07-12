@@ -36,8 +36,8 @@ checks also run. World-changing rewind invalidates verification evidence
 structurally rather than through an authority-bearing event: patch-set rollback
 detaches the patch-set-keyed evidence the gate matches on (`containsAll` over
 `patchSetRefs`), so stale outcomes fall to a `stale`/`missing` posture by
-consequence. Requirement-fitness grading and a review-debt Work Card line now
-ship as a re-derived read-time view (see
+consequence. Requirement-fitness grading and a review-debt Work Card line ship
+as a re-derived read-time view (see
 `verification-and-independent-review`); a dedicated "verification debt created by
 recovery" annotation on that line remains an intended refinement. Read
 present-tense descriptions of the unchecked integrity dimensions as the intended
@@ -125,9 +125,9 @@ flowchart TD
 - `inspect` layers deterministic directory-scoped analysis on top of replayed
   state, so it serves both as a recovery entrypoint and as a code-review
   entrypoint
-- replay uses the V2 delegation vocabulary: public lifecycle no longer emits
-  `timeout` or `merged`; those meanings live in lifecycle reason and role
-  disposition respectively
+- replay uses the delegation vocabulary: public lifecycle does not emit
+  `timeout` or `merged` as statuses; those meanings live in lifecycle reason and
+  role disposition respectively
 - verifier evidence is advisory debt; it can enter inspect/workboard, but not
   worker merge/apply authority
 - checkpoint domains are distinct contracts and must not share an ambiguous

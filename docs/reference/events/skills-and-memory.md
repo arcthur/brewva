@@ -21,8 +21,8 @@ evidence for model attention, not authority receipts.
 
 ## Skill Budget
 
-Per-skill token and tool-call budgets have been removed. Cost, parallelism,
-and tool admission are owned by session-level budget and effect governance.
+There are no per-skill token or tool-call budgets. Cost, parallelism, and tool
+admission are owned by session-level budget and effect governance.
 
 ## Recall And Workbench Memory
 

@@ -39,7 +39,7 @@ effect commitment, explicit approval, exact resume, and rollback surfaces.
 
 ```mermaid
 flowchart TD
-  A["Tool invocation"] --> B["KernelToolAuthorizer classifies boundary"]
+  A["Tool invocation"] --> B["KernelToolAuthorityResolver classifies boundary"]
   B --> C{"Boundary result"}
   C -->|Safe| D["Execute directly"]
   C -->|Effectful with source patch preparation| E["source_patch_apply records mutation receipt"]

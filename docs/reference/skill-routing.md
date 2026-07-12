@@ -35,19 +35,18 @@ miss must never mean the model cannot know a skill exists.
 Skills are advisory context. External action authority goes through capability
 selection, durable selection receipts, and runtime governance.
 
-## Deleted Runtime Concept
+## No Hosted Skill Gate
 
-The former hosted skill gate has been removed:
+There is no hosted skill gate:
 
 - no explicit activation envelope
 - no completion reminder lifecycle
 - no runtime tool-surface narrowing based on active skill state
 - no channel policy that requires loading a channel skill
 
-This deletion is intentional. It keeps the default execution path
-model-operated: available SkillCards guide attention, while the model decides
-which documents to read and which tools to call, and the runtime governs
-consequences.
+This keeps the default execution path model-operated: available SkillCards guide
+attention, while the model decides which documents to read and which tools to
+call, and the runtime governs consequences.
 
 ## Advisory Shortlist
 
@@ -58,12 +57,11 @@ Skill routing is model-native and bounded by prompt context:
   prompt, `selection.path_globs` against recently touched tool paths
   (`recent_path`, from committed `tool.committed` receipts — the work's location
   counts even when the prompt names no path), and whole-word `name` match
-- the selector does no fuzzy prose matching. The former tokenized `text_match`
-  (the stop-word list, discriminative-token rules) and the Chinese keyword bridge
-  were removed: surfacing a skill by `description` / `selection.when_to_use`
-  overlap is now `discover_skills`' explicit, model-invoked job. The selector
-  fires only on the deterministic triggers above, and the always-visible catalog
-  guarantees a scorer miss can never hide a skill's existence
+- the selector does no fuzzy prose matching. Surfacing a skill by `description` /
+  `selection.when_to_use` overlap is `discover_skills`' explicit, model-invoked
+  job. The selector fires only on the deterministic triggers above, and the
+  always-visible catalog guarantees a scorer miss can never hide a skill's
+  existence
 - shortlisted entries render with `name`, `category`, `filePath`,
   `selectionReasons`, `description`, and any available `whenToUse` or
   `pathGlobs`
@@ -115,7 +113,7 @@ targets are relativized against the invocation's own `cwd` so workspace-scoped
 `path_globs` match absolute tool targets. The message is visible only when a
 shortlist is rendered or an explicit mention is present; no-candidate receipts
 stay hidden.
-`tool_surface_resolved` mirrors these as
+`tool.surface.resolved` mirrors these as
 `explicitSkillMentionNames`, `skillSelectionId`, and `skillSelectionMode`.
 These fields are trace evidence, not gates.
 
@@ -185,16 +183,15 @@ a capability, no SaaS, CLI, MCP, or operator authority is exposed. This is a
 stricter fail-closed behavior than the RFC fallback path and prevents write
 authority from appearing because a model guessed the route.
 
-## Migration Guidance
+## Routing Model
 
-When old docs or tests describe mandatory skill activation, rewrite the flow as:
+The skill routing model is:
 
 1. the model reads whichever local instructions are useful
 2. the model records important decisions in the workbench
 3. the runtime records effects, verification, and receipts
 4. recovery uses tape and workbench baselines rather than an active skill slot
 
-Do not replace the removed gate with another hidden authority router. If a
-workflow needs external authority, put it behind a manifest-backed capability
-and deterministic policy gate. If it only needs extra context, make it a
-SkillCard, readable file, or advisory tool.
+Do not add a hidden authority router. If a workflow needs external authority,
+put it behind a manifest-backed capability and deterministic policy gate. If it
+only needs extra context, make it a SkillCard, readable file, or advisory tool.

@@ -68,10 +68,13 @@ would suspend the run. `approvalMode` controls that hop:
   An unrecognized explicit value also fails CLOSED to `"suspend"` — garbage
   never grants the envelope.
 
-Authorization comes from CONFIG IDENTITY, never from intent records: the daemon
-grants the envelope only to the intent whose `intentId` and `parentSessionId`
-match the config-authored `schedule.selfImprove` entry with the mode explicitly
-set. Intents minted by the model-facing `schedule_intent` / `follow_up` tools
+Authorization comes from an unforgeable PROVENANCE stamp, never from intent
+records: the daemon grants the envelope only to an intent carrying
+`origin: "config_policy"` (stamped by the daemon's own reconcile path), and whose
+`intentId` and `parentSessionId` also match the config-authored
+`schedule.selfImprove` entry with the mode explicitly set. The `origin` check
+comes first, so a model that mints a colliding `intentId` cannot forge the
+envelope. Intents minted by the model-facing `schedule_intent` / `follow_up` tools
 always run with `"suspend"`, whatever fields their records carry — a model must
 never be able to schedule itself a future auto-approved session.
 

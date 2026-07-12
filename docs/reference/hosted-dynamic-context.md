@@ -135,8 +135,8 @@ It is descriptive, not imperative, and its character budget is
 
 The compaction ask rides the `[RuntimeBrief]` context-pressure posture: when the
 runtime advises or forces compaction, the posture `line` carries both the state and
-the `workbench_compact` call-to-action. This replaces the old per-session full/brief
-nudge cadence with a persistent ask — under sustained pressure the imperative shows
+the `workbench_compact` call-to-action. This is a persistent ask — under
+sustained pressure the imperative shows
 every turn, demoting to the state-only stub only when the RuntimeBrief's own char
 budget is crowded by other sections. The hard-limit host soft-cut is unaffected:
 that physics fires whether or not the model reads the line.

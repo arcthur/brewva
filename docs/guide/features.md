@@ -71,7 +71,7 @@ orchestration is enabled. They are not part of the default bundle.
 
 Skills are readable semantic guidance documents. Delegated workers define
 execution envelopes. The parent session owns task truth, effect receipts,
-verification evidence, and patch adoption; it no longer owns an active skill
+verification evidence, and patch adoption; it does not own an active skill
 slot or skill completion state.
 
 External authority comes from capability manifests and deterministic selection
@@ -96,8 +96,8 @@ fan-out planner (see `docs/guide/orchestration.md`).
 - Read generated blocks in reference docs for exact names.
 - Use `brewva inspect` for persisted session truth.
 - Use `docs/guide/category-and-skills.md` for skill category orientation.
-- Use `docs/reference/skill-routing.md` for advisory skill selection,
-  removed active-skill gates, capability-selection priority, and continuation
+- Use `docs/reference/skill-routing.md` for advisory skill selection, the
+  no-hosted-skill-gate model, capability-selection priority, and continuation
   semantics.
 
 ## Related Docs

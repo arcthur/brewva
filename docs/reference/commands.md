@@ -83,8 +83,7 @@ Primary modes:
 - scheduler daemon mode
 - channel gateway mode
 
-Mode resolution is fail-fast. Incompatible input surfaces return a parse error
-instead of reviving retired prompt-loop behavior.
+Mode resolution is fail-fast. Incompatible input surfaces return a parse error.
 
 ## Input Contract
 

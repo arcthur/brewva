@@ -209,8 +209,7 @@ flowchart TD
 ## Observability
 
 - context / compaction events:
-  - `context_compaction_requested`
-  - `context_compaction_gate_blocked_tool`
+  - `context.critical_without_compact`
   - `context_compaction_gate_armed`
   - `context_compaction_gate_cleared`
   - `context_compaction_auto_requested`

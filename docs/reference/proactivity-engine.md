@@ -1,8 +1,8 @@
-# Reference: Proactivity (Removed)
+# Reference: Proactivity
 
-The repository no longer ships a cognition-driven `ProactivityEngine`.
-
-What remains is an explicit control-plane heartbeat path.
+Proactivity is an explicit, operator-authored control-plane heartbeat path. The
+runtime does not infer when to wake from cognition signals; operators author the
+trigger and the model receives it.
 
 ## Current Trigger Path
 
@@ -37,19 +37,6 @@ Semantics:
   `heartbeat:<id>`
 - the file path itself is control-plane configuration; `brewva gateway
 --state-dir` / `--heartbeat` may relocate it without changing rule semantics
-
-## Removed Semantics
-
-The following concepts are gone from the default product path:
-
-- wake-vs-skip planning
-- cognition-driven wake suppression
-- `wakeMode`
-- `staleAfterMinutes`
-- `heartbeat.skipped`
-- `proactivity_wakeup_prepared`
-- wake-context assembly from summary signals
-- heartbeat-specific `objective` / `contextHints` side fields
 
 ## Boundary Rules
 

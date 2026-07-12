@@ -216,7 +216,7 @@ flowchart TD
   `block-accumulator.ts`, `tool-call-folder.ts`, `assistant-message.ts`)
 - Contracts and catalog: `packages/brewva-provider-core/src/contracts/`
   (`stream.ts`, `event.ts`, `cache.ts`), `catalog/index.ts`,
-  `registry/builtins.ts`, `auth/index.ts`
+  `registry/builtins.ts`
 - Cache policy and capability:
   `packages/brewva-provider-core/src/cache/policy.ts`,
   `packages/brewva-provider-core/src/cache/capability.ts`

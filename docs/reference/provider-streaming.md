@@ -26,8 +26,8 @@ for observability.
 
 `ProviderAssistantMessageStream` is an Effect stream:
 `Stream.Stream<AssistantMessageEvent, ProviderStreamError, ProviderRuntime>`.
-The old Promise-first `AssistantMessageEventStream` compatibility class has
-been removed.
+There is no separate `AssistantMessageEventStream` compatibility class; the
+provider stream surface stays Promise-friendly through the types above.
 
 The stable event families are:
 

@@ -10,7 +10,6 @@ Session and turn events define the observable lifecycle of a runtime session:
 - session start and shutdown
 - user input and turn start/end
 - render commit and assistant message completion
-- hosted transition snapshots
 - compaction request, compaction attempt, and compaction result
 
 These events support replay-first inspection. They do not imply that the
@@ -19,12 +18,11 @@ drives turns and records runtime receipts.
 
 ## Hosted Lifecycle
 
-Hosted transition events are rebuildable lifecycle snapshots for inspection.
-They summarize the current phase and recovery posture without persisting every
-transient host diagnostic.
-
-Detailed recovery history stays process-local unless it changes durable replay
-or operator-visible recovery truth.
+Hosted lifecycle and recovery posture are a rebuildable read-model
+(`SessionLifecycleSnapshot`) derived from canonical events and tape projections,
+not a separate persisted event family. Detailed recovery history stays
+process-local unless it changes durable replay or operator-visible recovery
+truth.
 
 Hosted provider credential rotation is recorded as a redacted lifecycle event
 named `provider_credential_rotated`. Its payload is exactly

@@ -6,16 +6,11 @@ Constitution:
 
 `Model owns attention. Kernel owns consequence. Tape owns truth. Runtime owns physics.`
 
-Implementation reading:
-
-`Model curates working memory. Kernel authorizes effects. Tape preserves
-committed facts and compact baselines. Runtime enforces context-window, cache,
-cost, provider, durability, and recovery constraints.`
-
 This page is the overall architecture entry. Use it for authority ownership,
 state taxonomy, and package-level boundaries. Use `docs/architecture/design-axioms.md`
-for philosophy and `docs/architecture/invariants-and-reliability.md` for
-non-negotiable safety properties.
+for philosophy — including the implementation-grade reading of the constitution —
+and `docs/architecture/invariants-and-reliability.md` for non-negotiable safety
+properties.
 
 ## Interpretation Order
 
@@ -55,9 +50,8 @@ budget, model routing, sandbox bypass, approval, adoption, or kernel admission.
 
 ## Authority Rings And Their Projections
 
-Rings are the authority detail of the four-owner constitution (`Model owns
-attention. Kernel owns consequence. Tape owns truth. Runtime owns physics.`):
-they refine who owns what beneath those four owners. Rings are an explanatory
+Rings are the authority detail of the four-owner constitution: they refine who
+owns what beneath those four owners. Rings are an explanatory
 layer under the constitution, not a top-level axis above it; within that layer
 they are the single coordinate system for authority, and projections are views
 over them. This page carries the canonical, complete ring topology;
@@ -168,7 +162,8 @@ probing optional methods on the managed session.
 
 Runtime implementation ownership now lives under four semantic roots:
 `runtime/tape`, `runtime/kernel`, `runtime/model`, and `runtime/turn`, with
-read-only projections under `tape-views`. The former `domain/<name>/` seven-file
+read-only projections under a sibling `read-models/` root
+(`read-models/projection/`). The former `domain/<name>/` seven-file
 lattice is not a valid pattern for new runtime work.
 
 ## Effect Infrastructure Island
@@ -282,6 +277,11 @@ open-ended; the runtime holds no promotion authority.
   observability adapters, and test utilities. Its root entrypoint is
   boundary-oriented, while Effect primitive aliases remain explicit through the
   `@brewva/brewva-effect/primitives` subpath.
+- `@brewva/brewva-std`: dependency-free standard primitives shared across
+  packages — the async bridge and bounded backpressure
+  (`@brewva/brewva-std/async` `createAsyncBridge`), backoff, hashing, JSON, math,
+  text, collections, and the `Durable`/`Lossy`/`Advisory` honesty brands. It is
+  foundation utility, not authority, replay, or provider mechanism.
 - `@brewva/brewva-substrate`: contract-only root vocabulary plus explicit
   mechanism subpaths for session lifecycle vocabulary, prompt/resource loading,
   pure context-budget derivation, token-aware compaction cut-point selection,
@@ -292,9 +292,15 @@ open-ended; the runtime holds no promotion authority.
   compaction trigger or recovery policy. Host adapters use these mechanisms for
   `Substrate Ring` coordination between turns; `runtime.turn` remains the sole
   implementation of `Runtime Turn Ring` execution.
+- `@brewva/brewva-vocabulary`: shared product vocabulary contracts used across
+  hosted, tools, recall, session-index, and channel packages. It is contract-only
+  naming, not runtime authority.
 - `@brewva/brewva-provider-core`: provider contracts, model catalog lookup,
   provider registration, stream normalization, cache rendering, and driver
   adapters. It is mechanism, not replay or credential authority.
+- `@brewva/brewva-token-estimation`: model token-estimation primitives for
+  context-budget and request sizing. It is estimation mechanism, not budget or
+  context authority.
 - `@brewva/brewva-search`: shared search normalization, CJK segmentation, and
   semantic query/content tokenization policy. It does not own event evidence,
   session-index state, or recall ranking.
@@ -318,7 +324,8 @@ open-ended; the runtime holds no promotion authority.
 - `docs/solutions/**` and knowledge tools: repository precedent and
   compounding knowledge surfaces. Deliberation remains an architecture ring, not
   a standalone package.
-- channel and ingress packages: external transport adapters.
+- channel, ingress, and MCP adapter packages: external transport and protocol
+  adapters.
 
 ## Reading Guide
 

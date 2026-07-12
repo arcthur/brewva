@@ -216,11 +216,7 @@ flowchart TD
   - `recovery.wal.status.changed`
   - `recovery.wal.compacted`
   - `recovery.wal.recovery.completed`
-- channel-scoped WAL telemetry inputs:
-  - `channel_recovery_wal_appended`
-  - `channel_recovery_wal_status_changed`
-  - `channel_recovery_wal_compacted`
-  - `channel_recovery_wal_recovery_completed`
+- the channel path reuses the same dotted `recovery.wal.*` vocabulary above.
 - primary operator surface: the `brewva inspect` `recoveryWal` block, which
   reports `enabled`, `filePath`, `pendingCount`, `pendingSessionCount`, and
   `pendingRows` (each with `walId`, `source`, `status`, `turnId`, `channel`,

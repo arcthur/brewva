@@ -8,7 +8,7 @@ Boundary contract sources:
 - Effect-commitment admission: `packages/brewva-runtime/src/runtime/kernel/policy/effect-posture.ts`
 - Operator desk: `packages/brewva-runtime/src/runtime/kernel/impl.ts`
 
-The public proposal boundary is now intentionally small.
+The public proposal boundary is intentionally small.
 
 This page owns approval-bearing commitment semantics and replay-visible receipt
 flow. Public runtime surface listing stays in `docs/reference/runtime.md`, and
@@ -120,7 +120,7 @@ Current flow:
 - operator approval is recorded through the effect-commitment desk
 - the caller must then resume the exact request through the capability-scoped
   hosted adapter tool invocation path:
-  `HostedRuntimeAdapterPort.ops.tools.invocation.start({ ..., effectCommitmentRequestId })`
+  `HostedRuntimeAdapterPort.ops.tools.invocation.start(...)`
 - exact resume binds to the approved `requestId`, original `toolCallId`, and
   canonical `argsDigest`
 - exact resume reuses the original manifest authority basis; it does not
@@ -243,37 +243,23 @@ The proposal boundary exists only for approval-bearing effect commitment.
 
 ## Tape Mapping
 
-Every proposal round leaves this replayable shape:
+Every proposal round records:
 
-- `proposal_received`
-- `proposal_decided`
-- `decision_receipt_recorded`
-
-Approval state is layered on top through:
-
-- `effect_commitment_approval_requested`
-- `effect_commitment_approval_decided`
-- `effect_commitment_approval_consumed`
+- `proposal.submitted`
 - canonical runtime events `approval.requested` and `approval.decided`
 
-`HostedRuntimeAdapterPort.ops.proposals.proposals.list(sessionId, query?)` returns newest-first
-`EffectCommitmentRecord` values by receipt timestamp. The read model rebuilds
-those records from `decision_receipt_recorded.payload = { proposal, receipt }`
-rather than rejoining `proposal_received` and `proposal_decided`.
-
-Request-state views are intentionally separate:
+Approval and request state is read through the request-lifecycle views:
 
 - `HostedRuntimeAdapterPort.ops.proposals.requests.list(sessionId, query?)` is the
   normalized request-lifecycle view rebuilt from tape
 - `HostedRuntimeAdapterPort.ops.proposals.requests.listPending(sessionId)` is the
   pending-only queue ordered by request `createdAt`
-
-The operator desk surface lives in the same domain:
-
-- `HostedRuntimeAdapterPort.ops.proposals.requests.list(sessionId, query?)`
-- `HostedRuntimeAdapterPort.ops.proposals.requests.listPending(sessionId)`
 - `HostedRuntimeAdapterPort.ops.proposals.requests.decide(sessionId, requestId, input)`
-- `HostedRuntimeAdapterPort.ops.tools.invocation.start({ ..., effectCommitmentRequestId })`
+  is the operator decision entrypoint
+
+`HostedRuntimeAdapterPort.ops.proposals.proposals.submit(sessionId, proposal)` records
+a proposal and returns its `DecisionReceipt`; the `proposals.proposals.list` history
+view is currently a stub.
 
 This keeps approval state and proposal history in one replay-first namespace.
 

@@ -21,8 +21,10 @@ runtime contract is the four-port constitutional shape:
 - `runtime.turn(...)` owns provider physics, context pressure, retry boundaries,
   runtime suspension, and terminal turn commit.
 
-The root no longer exposes `root`, `hosted`, `tool`, `operator`, `authority`, or
-`inspect`. New runtime-facing code must use the four-port root directly.
+The root exposes only the four ports (`tape` / `kernel` / `model` / `turn`) plus
+`identity`, `config`, `start()`, and `close()` — not `root`, `hosted`, `tool`,
+`operator`, `authority`, or `inspect`. New runtime-facing code must use the
+four-port root directly.
 
 ## Stable Root Shape
 
@@ -195,7 +197,7 @@ recreating a second event store.
 ## Verification Semantics
 
 default verification checks are expanded per target root for multi-root tasks.
-command-backed checks only become authoritative after `brewva_verify` records
+command-backed checks only become authoritative after `verification_record` records
 fresh evidence for the relevant target root.
 
 ordinary verifier blockers are verification debt rather than hard runtime

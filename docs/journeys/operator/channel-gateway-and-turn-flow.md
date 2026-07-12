@@ -125,7 +125,7 @@ flowchart TD
 - orchestration:
   - `channel_command_received`
   - `channel_command_rejected`
-  - `channel_focus_changed`
+  - `channel_agent_focus_changed`
   - `channel_fanout_started`
   - `channel_fanout_finished`
 

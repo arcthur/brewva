@@ -22,7 +22,7 @@ No new base scripts. Bias to Brewva package boundaries and governance-critical p
 
 ### Step 1: Bias to package boundaries
 
-Start from runtime, workbench, tools, recall, runtime-plugin, CLI, gateway, and
+Start from runtime, workbench, tools, recall, CLI, gateway, and
 distribution boundaries.
 
 ### Step 2: Highlight governance-critical paths

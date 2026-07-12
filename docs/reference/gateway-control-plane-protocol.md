@@ -174,7 +174,7 @@ sessions. The hosted adapter exposes `HostedRuntimeAdapterPort.ops.sessionWire`
 for runtime-scoped session ids; gateway uses the same runtime-owned compiler
 semantics after it locates the underlying archived agent-session tapes.
 
-Gateway does not treat an old terminal `session.status` cache as authority.
+Gateway does not treat a terminal `session.status` cache as authority.
 Reopening the same public `sessionId` resets the live status lifecycle; later
 subscribe snapshots are derived fresh from replay plus current worker state.
 
@@ -184,8 +184,7 @@ parallel authority source. When runtime lifecycle is available, gateway seeds
 back to bounded frame-history reduction for compatibility or replay bootstrap
 cases that the aggregate cannot yet represent directly.
 
-Gateway does not publish a rival hosted transition lattice. Runtime recovery
-posture is projected from canonical causes: `approval_pending`,
+Runtime recovery posture is projected from canonical causes: `approval_pending`,
 `compaction_required`, `provider_retry`, `interrupt`, and `terminal_commit`.
 `SessionLifecycleSnapshot.summary` remains the session-level posture read model.
 
@@ -229,9 +228,8 @@ Important protocol rules:
   semantic summary.
 - only live cache emits `assistant.delta`, `session.status`, and the initial
   `attempt.started(reason=initial)`.
-- replay no longer emits hosted transition-derived attempt frames; retry,
-  compaction, approval suspension, and interrupt posture are derived from
-  canonical runtime frames and tape projections.
+- replay derives retry, compaction, approval suspension, and interrupt posture
+  from canonical runtime frames and tape projections.
 - live retry, checkpoint-driven compaction, approval suspension, and interrupt
   decisions are owned by the runtime turn implementation; the protocol exposes their
   resulting frames and replayable canonical receipts,

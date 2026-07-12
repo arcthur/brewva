@@ -20,12 +20,15 @@ subpaths:
 - `@brewva/brewva-tools/memory`
 - `@brewva/brewva-tools/delegation`
 - `@brewva/brewva-tools/workflow`
+- `@brewva/brewva-tools/skills`
+- `@brewva/brewva-tools/patch-lifecycle`
+- `@brewva/brewva-tools/world-store`
 
 The root builds the default bundle. `contracts/` owns pure vocabulary,
 `registry/` owns managed-tool metadata and capability scoping, `runtime-port/`
 owns controlled runtime helper ports, and family subpaths expose curated
 factories plus family-specific semantic helpers. Model routing policy belongs
-to `@brewva/brewva-gateway/model-routing`.
+to `@brewva/brewva-gateway/policy/model-routing`.
 
 Tool descriptor/catalog protocol types are imported from
 `@brewva/brewva-substrate/tools`. There is no standalone

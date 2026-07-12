@@ -213,13 +213,12 @@ owner: runtime-maintainers
 
 ## Provider-Core Consumption Matrix
 
-| Provider-core surface | Substrate | Gateway                                                                           | Notes                                                                                                             |
-| --------------------- | --------- | --------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `./contracts`         | Yes       | Yes                                                                               | Shared provider vocabulary and runtime-layer contracts.                                                           |
-| `./catalog`           | No        | Yes                                                                               | Hosted model/provider lookup and rendering only.                                                                  |
-| `./cache`             | No        | Yes                                                                               | Hosted cache policy, fingerprint, and render helpers.                                                             |
-| `./registry`          | No        | Yes                                                                               | Hosted lifecycle and session cleanup port.                                                                        |
-| `./stream`            | No        | Via `packages/brewva-gateway/src/hosted/internal/provider/execution-port.ts` only | Gateway stream execution is centralized behind one hosted provider execution port.                                |
-| `./auth`              | No        | No                                                                                | Provider-core owned auth helper surface; no gateway/substrate direct consumption without a new boundary decision. |
-| `./parse`             | No        | No                                                                                | Internal implementation domain; not a package export.                                                             |
-| `./providers/<api>`   | No        | No                                                                                | Internal driver implementations; not package exports.                                                             |
+| Provider-core surface | Substrate | Gateway                                                                           | Notes                                                                              |
+| --------------------- | --------- | --------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `./contracts`         | Yes       | Yes                                                                               | Shared provider vocabulary and runtime-layer contracts.                            |
+| `./catalog`           | No        | Yes                                                                               | Hosted model/provider lookup and rendering only.                                   |
+| `./cache`             | No        | Yes                                                                               | Hosted cache policy, fingerprint, and render helpers.                              |
+| `./registry`          | No        | Yes                                                                               | Hosted lifecycle and session cleanup port.                                         |
+| `./stream`            | No        | Via `packages/brewva-gateway/src/hosted/internal/provider/execution-port.ts` only | Gateway stream execution is centralized behind one hosted provider execution port. |
+| `./parse`             | No        | No                                                                                | Internal implementation domain; not a package export.                              |
+| `./providers/<api>`   | No        | No                                                                                | Internal driver implementations; not package exports.                              |

@@ -93,7 +93,7 @@ flowchart TD
    called without `plan_id` it runs the merge check and prepares the plan in one
    step (returning the prepared plan or a conflict report); called with `plan_id`
    it commits through the gate. `worker_results_merge` remains available for
-   standalone conflict inspection but is no longer a required pre-apply step. If
+   standalone conflict inspection but is not a required pre-apply step. If
    the parent rejects the patch, it calls `worker_results_reject` to record the
    rejection receipt.
 7. Pending worker outcomes flow into `workflow_status` until the parent

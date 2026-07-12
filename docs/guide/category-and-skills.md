@@ -1,7 +1,7 @@
 # Category And Skills
 
-This guide explains how the skill catalog is organized after skills were
-reduced to advisory SkillCards. It focuses on catalog layout and the separation
+This guide explains how the skill catalog is organized as advisory SkillCards.
+It focuses on catalog layout and the separation
 between skill context and capability authority. For the authoritative skill list
 and contract details, use
 `docs/reference/skills.md`.
@@ -63,7 +63,7 @@ The runtime accepts only these SkillCard fields:
 
 Capability manifests are the authority plane. They are selected separately and
 record durable selection receipts. `skills.routing` and runtime routing scopes
-are removed.
+are not valid config; skills cannot grant routing authority.
 
 Capability selection is deterministic and fail-closed; see the capability
 selection priority in `docs/reference/skill-routing.md` for the authoritative

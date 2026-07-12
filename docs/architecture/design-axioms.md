@@ -138,10 +138,10 @@ Implementation note:
   without becoming the default coupling layer for hosts, skills, or plugins
 - explicit control-plane exemptions may exist, but they must stay narrow and
   auditable
-- the current stable authority-bearing transaction boundary is `single tool
-call`; turn-level bounded recovery may grow later, but cross-agent saga
-  semantics, generalized compensation graphs, and default-path partial-failure
-  repair are not part of the current stable contract
+- the current stable authority-bearing transaction boundary is `single tool call`
+  (axiom 17); turn-level bounded recovery may grow later, while the deferred
+  multi-agent scope stays pinned in `docs/architecture/system-architecture.md`
+  (Transaction Boundary)
 - architecture prose about planes, lanes, prompts, or flow should be read as
   descriptive only unless it names a concrete invariant or public contract
 

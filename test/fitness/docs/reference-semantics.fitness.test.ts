@@ -32,7 +32,7 @@ describe("docs/reference semantic contracts", () => {
     );
     expect(runtimeDoc).toContain("default verification checks are expanded per target root");
     expect(runtimeDoc).toContain(
-      "command-backed checks only become authoritative after `brewva_verify`",
+      "command-backed checks only become authoritative after `verification_record`",
     );
   });
 

@@ -99,7 +99,7 @@ Workflow walkthroughs:
 - Provider streaming: `docs/reference/provider-streaming.md`
 - Hosted dynamic context: `docs/reference/hosted-dynamic-context.md`
 - Token cache: `docs/reference/token-cache.md`
-- Proactivity (removed, explicit heartbeat remains): `docs/reference/proactivity-engine.md`
+- Proactivity (explicit heartbeat): `docs/reference/proactivity-engine.md`
 - Proposal boundary: `docs/reference/proposal-boundary.md`
 - Events: `docs/reference/events/README.md`
   - Runtime event families: `docs/reference/events/runtime.md`

@@ -104,7 +104,7 @@ Skill frontmatter is intentionally small. The accepted SkillCard fields are:
 - `argument_hints`
 - `output_artifacts`
 
-The following old authority fields are rejected at load time in every skill
+The following authority fields are rejected at load time in every skill
 root: `routing`, `intent`, `effects`, `resources`, `execution_hints`,
 `consumes`, `requires`, `composable_with`, `stability`, `budget`, `tools`, and
 `dispatch`.
@@ -143,7 +143,7 @@ The trace uses two separate concepts:
 
 The advisory-shortlist selection algorithm and its `skill.selection.recorded`
 event payload — counts, selection reasons, render metadata, the hidden
-`brewva-skill-selection` message, the `tool_surface_resolved` mirror, and the
+`brewva-skill-selection` message, the `tool.surface.resolved` mirror, and the
 `discover_skills` discover-only projection — are owned by
 `docs/reference/skill-routing.md` (Advisory Shortlist); this page does not
 restate them.

@@ -128,9 +128,8 @@ without an interactive approver instead of suspending forever. It is a map from
 - A class mapped to `deny` auto-denies it — the run continues with the tool
   refused.
 - A class **absent** from the map suspends the run for a human (fail-closed).
-  The empty default therefore suspends every effectful tool — the same behavior
-  as before this setting existed. There is no `"ask"` value; absence is the
-  implicit ask.
+  The empty default therefore suspends every effectful tool. There is no `"ask"`
+  value; absence is the implicit ask.
 
 A call carrying several effect classes folds with precedence
 `suspend > deny > allow`: any unlisted class suspends the whole call, otherwise
@@ -246,9 +245,9 @@ allowlist, and optional per-tool policy overrides. Supported transports are
 metadata; every MCP tool defaults to `external_side_effect` unless a Brewva
 config policy explicitly sets a narrower `actionClass`.
 
-For `stdio`, inherited environment is disabled and there is no opt-in. The
-legacy `inheritEnv` field has been removed; supplying any truthy value fails
-config load. Only explicit `env` entries and `envAllowlist` keys are forwarded
+For `stdio`, inherited environment is disabled and there is no opt-in.
+`inheritEnv` is rejected; supplying any truthy value fails config load. Only
+explicit `env` entries and `envAllowlist` keys are forwarded
 to the child process.
 
 Hosted tool names are generated as `mcp__{serverId}__{toolName}` and bounded to

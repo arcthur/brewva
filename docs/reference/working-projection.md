@@ -43,7 +43,7 @@ hosted advisory evidence. It is stored in the session-index SQLite table
 `session_harness_trace_snapshots` and is rebuilt from events; it is not a
 durable source of truth.
 
-Schema version `7` intentionally resets older indexed rows. Rebuild is the
+Schema version `9` intentionally resets older indexed rows. Rebuild is the
 compatibility strategy because the event tape remains authoritative and Harness
 snapshot rows are derived state.
 

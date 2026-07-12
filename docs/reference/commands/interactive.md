@@ -55,6 +55,7 @@ Stable interactive slash commands include:
 - `/diff`
 - `/archive`
 - `/attention`
+- `/map`
 - `/goal [--tokens <count>] [--max-turns <count>] <objective>`
 - `/goal status`
 - `/goal pause`
@@ -232,5 +233,4 @@ and pager surfaces. Background subagent detail opens in the footer surface above
 the composer. Opening an overlay preserves the composer draft.
 
 Approval and question flows are rendered as cockpit decision surfaces first.
-Dedicated overlays provide focused detail and action entry without restoring the
-old inline-card transcript model.
+Dedicated overlays provide focused detail and action entry.

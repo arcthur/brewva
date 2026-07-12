@@ -57,8 +57,8 @@ Default policy:
 - `scope=session`
 - `reason=default`
 
-The old bare `cacheRetention` meaning is not a supported contract. New code
-must pass the object-shaped `cachePolicy` through the hosted path:
+A bare `cacheRetention` value is not a supported contract; code must pass the
+object-shaped `cachePolicy` through the hosted path:
 
 1. hosted settings
 2. managed session creation

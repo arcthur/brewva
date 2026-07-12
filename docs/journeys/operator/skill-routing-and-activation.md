@@ -84,8 +84,8 @@ flowchart TD
    priority order: `explicit_mention` (a whole-word `$skill-name`), `path_glob`
    (prompt paths), `recent_path` (`selection.path_globs` against recently touched
    tool paths), and `name_match` (a whole-word skill name). There is no fuzzy
-   prose matching — the former tokenized `text_match` and the CJK keyword bridge
-   were removed; surfacing a card by description/when-to-use overlap is now
+   prose matching — the auto-selector never mints `text_match`, and there is no
+   CJK keyword bridge; surfacing a card by description/when-to-use overlap is
    `discover_skills`' explicit job, and the always-visible catalog keeps every
    card legible regardless.
 4. The shortlist sorts by score, applies a render cap (default 8), and computes
@@ -153,7 +153,7 @@ flowchart TD
   `discover_only_projection`
 - a hidden trace message (`brewva-skill-selection`, excluded from context)
   carries the same selection summary, and the summary is mirrored onto the
-  `tool_surface_resolved` trace (`explicitSkillMentionNames`, `skillSelectionId`,
+  `tool.surface.resolved` trace (`explicitSkillMentionNames`, `skillSelectionId`,
   `skillSelectionMode`)
 - delegated skill provenance appears as `delegatedSkill` / `delegatedSkillName`
   in delegation records and as a `Delegated skill:` prompt line

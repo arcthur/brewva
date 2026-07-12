@@ -69,8 +69,9 @@ Brewva authority.
 
 Effect usage is intentionally island-shaped. Effect-native internals own
 resource lifetime until a declared adapter boundary maps the workflow back to a
-Promise or async iterable. The four-port runtime itself remains ordinary
-TypeScript and does not expose Effect services, layers, or values.
+Promise or async iterable. The four-port runtime root itself stays ordinary
+TypeScript with no Effect on its surface; the non-negotiable form of that rule is
+invariant 13 in `docs/architecture/invariants-and-reliability.md`.
 
 Use the distinction precisely:
 

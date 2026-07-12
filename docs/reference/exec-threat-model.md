@@ -188,10 +188,8 @@ effectful receipts.
 
 ## Stateful Box Delta
 
-The previous short-lived execution model bounded filesystem contamination and
-secret exposure to one command. Stateful boxes deliberately trade that for
-faster, more realistic agent workspaces. The blast radius is therefore the
-entire session/task box lifetime:
+Stateful boxes trade per-command isolation for faster, more realistic agent
+workspaces. The blast radius is the entire session/task box lifetime:
 
 - package installs, generated files, credentials, and process state can persist
   across commands

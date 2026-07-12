@@ -76,7 +76,7 @@ Platform-growth rule:
 
 ## Custom Delegated Specialists
 
-Delegated worker authoring now has two layers:
+Delegated worker authoring has two layers:
 
 - built-in runtime postures live in the hosted catalog
 - custom specialists live under `.brewva/subagents/*.md` or
@@ -140,8 +140,7 @@ The current stable built-in specialist surface is:
 
 - public specialists: `navigator`, `explorer`, `worker`, `verifier`, and `librarian`
 - review runs go through `review_request`'s single bounded fresh-context
-  reviewer; there is no internal lane fan-out planner (removed — the
-  requirement-fitness reviewer superseded the lane taxonomy)
+  reviewer; there is no internal lane fan-out planner
 
 For each role's execution posture and the three execution archetypes
 (`readonly-shared`, `exec-ephemeral`, `patch-snapshot`), see
@@ -152,9 +151,8 @@ Orchestration-specific notes on top of that:
   session retains ownership of task truth and artifact adoption
 - hosted context shape is owned by gateway materialization policy, not by a
   passive envelope profile field
-- recovery-critical baseline materialization (`historyViewBaseline` +
-  `recoveryWorkingSet`) is preserved by the gateway context materializer when the
-  hosted lane needs it
+- recovery-critical baseline materialization (`historyViewBaseline`) is preserved
+  by the gateway context materializer when the hosted lane needs it
 - `review_request`'s single reviewer covers evidence-audit concerns (stale
   evidence, missing probes, rollback posture) as one bounded consult, not a
   multi-lane ensemble
@@ -166,7 +164,7 @@ consequence-bearing runtime work should move through `runtime.kernel`.
 ## Inspectable Stall Adjudication
 
 Stall detection still starts with the hosted runtime ops adapter, but the
-gateway worker now adds a second, inspectable adjudication step.
+gateway worker adds a second, inspectable adjudication step.
 
 - `task_stuck_detected` remains the idle-threshold detection signal
 - the worker builds a bounded inspection packet from task state, verification

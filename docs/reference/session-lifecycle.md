@@ -4,11 +4,11 @@ This page describes hosted-session ordering, durability, and recovery
 boundaries. Extension factory options, port ownership, and command-plugin
 composition live in `docs/reference/extensions.md`.
 
-Hosted and CLI entrypoints now converge on the same repo-owned substrate route:
+Hosted and CLI entrypoints converge on the same repo-owned substrate route:
 `createHostedSession(...)` and `createBrewvaSession(...)` bootstrap the same
-managed session lifecycle, and `Pi runtime` is no longer on the
-execution-critical path. `Pi` compatibility remains limited to import/export
-artifacts and reference comparison.
+managed session lifecycle. `Pi runtime` is not on the execution-critical path;
+`Pi` compatibility is limited to import/export artifacts and reference
+comparison.
 
 ## Runtime-Owned Lifecycle Contract
 
@@ -20,16 +20,17 @@ by themselves: "what state is this session in right now?" The runtime keeps the
 underlying domain reducers independent, then composes them into one aggregate
 lifecycle snapshot.
 
-The hosted-adapter contract is exported as `SessionLifecycleSnapshot` and is shaped
-around orthogonal axes rather than one flat phase enum:
+The hosted-adapter contract is exported as `SessionLifecycleSnapshot` (keyed by
+`sessionId`) and is shaped around orthogonal axes rather than one flat phase enum:
 
-- `hydration`
+- `hydration` (the four-port snapshot currently returns a stub literal here; the
+  rich `ready` / `cold` / `degraded` value lives in the separate hydration
+  projection)
 - `execution`
 - `recovery`
-- `skill`
 - `approval`
 - `tooling`
-- `integrity`
+- `integrity` (currently a stub literal; see the integrity note under Recovery Path)
 - `summary`
 
 This snapshot is:
@@ -46,23 +47,16 @@ recovery posture, canonical runtime causes, and session-wire facts.
 
 ## Summary Precedence
 
-The aggregate summary surface exists so adapters do not keep inventing their
-own cross-axis posture logic.
+The aggregate summary surface exists so adapters do not keep inventing their own
+cross-axis posture logic. `summary.kind` is a runtime-owned answer to "what
+posture should adapters present right now?", while the per-axis fields carry the
+precision needed for specialized products.
 
-Stable precedence:
-
-1. `cold` when hydration is not ready enough to trust aggregate posture
-2. `closed` when the session has a terminal lifecycle receipt
-3. `degraded` when lifecycle integrity is unhealthy or recovery is
-   `diagnostic_only` / degraded
-4. `recovering` when hosted recovery or replay-visible continuation is active
-5. `blocked` when approval wait or skill repair dominates the current posture
-6. `active` when model streaming or tool execution is active
-7. `idle` otherwise
-
-`summary` is therefore a runtime-owned answer to "what posture should adapters
-present right now?", while the per-axis fields carry the precision needed for
-specialized products.
+The four-port snapshot emits a minimal `summary.kind` of `running` or `idle`,
+derived from turn-state activity. Richer posture is read from the surface that
+owns it — `cold` / `degraded` from the hydration and integrity projections, and
+`recovering` / `closed` from the host-local `SessionPhase` controller — not from
+`SessionLifecycleSnapshot.summary`.
 
 ## Adapter And Controller Rule
 
@@ -75,9 +69,9 @@ In particular:
   transport-local cache concerns
 - provider-request recovery heuristics and similar policy adapters should read
   lifecycle posture instead of rescanning raw event history
-- host `SessionPhase` remains a local controller FSM for interaction flow and
-  UI state, but it no longer defines the authoritative meaning of durable
-  session lifecycle
+- host `SessionPhase` is a local controller FSM for interaction flow and UI
+  state; it does not define the authoritative meaning of durable session
+  lifecycle
 
 ## Queued Prompt Contract
 
@@ -125,52 +119,40 @@ transaction.
 | host `SessionPhase`                | per UI/controller session | process-local controller state | host UI and interaction controls             |
 | canonical recovery cause           | per runtime turn          | canonical tape projection      | runtime turn implementation and replay tools |
 
-Stable turn gates:
+The turn's durable progression is the canonical event tape. One accepted turn
+appends `turn.started`, then model and tool events (`reason.committed` /
+`msg.committed`, and per tool call `tool.proposed`, `tool.started`, then
+`tool.committed` or `tool.aborted`), and either terminates with `turn.ended` or
+suspends with `runtime.suspended`. The `turn_state` tape projection folds the
+canonical bookends into `{ active, lastCause, lastEvent }`.
 
-| Gate                 | Meaning                                                     | Receipt or driver                                    |
-| -------------------- | ----------------------------------------------------------- | ---------------------------------------------------- |
-| `ingress_received`   | accepted hosted turn identity exists                        | `turn_input_recorded`                                |
-| `admission_resolved` | turn-level admission, schedule prelude, and posture settled | hosted turn envelope pre-loop admission              |
-| `effect_authorized`  | effect authority was resolved for this turn's tool path     | `effect_authority_decided`                           |
-| `execution_recorded` | tool execution outcome was durably observed                 | `tool_result_recorded`                               |
-| `recovery_settled`   | bounded recovery, rollback, or supersession posture settled | canonical recovery, checkpoint, or rollback receipt  |
-| `terminal_recorded`  | accepted turn has terminal committed output                 | `turn_render_committed` or terminal shutdown receipt |
+Progression is monotonic and append-only (invariant 11, turn lifecycle
+monotonicity): a turn never rewrites prior event tape, and recovery supersession
+advances forward without rewinding. The `superseded` marker means the turn passed
+through a trusted recovery supersession at least once, not that the current
+terminal posture is still in recovery.
 
-Gate movement is monotonic. Repeating the current gate is a no-op; moving to an
-earlier gate is an assertion failure. Recovery supersession may mark a turn as
-superseded, but it still advances only to the declared recovery gate and never
-rewrites event tape. The `superseded` marker is historical for the turn: it
-means the turn passed through a trusted recovery supersession at least once, not
-that the current terminal posture is still in recovery.
+Hydration and posture projections derive from the canonical event tape.
+`createHostedProjections` exposes tape-scan projections — hydration
+status (`ready` / `cold` / `degraded`), integrity status, resource leases,
+workbench, worker results, and task spec/items/blockers/requirements — and
+`runtime.ops.session.taskWatchdog` owns task-stall adjudication. Each reads
+canonical events.
 
-Hydration folds remain federated. Their placement is declared against the spine
-so maintainers can see which hard gate a fold observes:
+Recovery placement is declared by the runtime cause vocabulary and carried by
+canonical events. `RUNTIME_RECOVERY_CAUSES` is exactly these five causes:
 
-| Fold                               | Observed gates                                                                      |
-| ---------------------------------- | ----------------------------------------------------------------------------------- |
-| `session_hydration_cost`           | `execution_recorded`, `terminal_recorded`                                           |
-| `session_hydration_ledger`         | `execution_recorded`, `terminal_recorded`                                           |
-| `session_hydration_resource_lease` | `admission_resolved`, `terminal_recorded`                                           |
-| `session_hydration_skill`          | `admission_resolved`, `execution_recorded`, `recovery_settled`, `terminal_recorded` |
-| `session_hydration_tool_lifecycle` | `effect_authorized`, `execution_recorded`, `recovery_settled`                       |
-| `session_hydration_verification`   | `execution_recorded`, `recovery_settled`, `terminal_recorded`                       |
-| `session_integrity`                | `ingress_received`, `recovery_settled`, `terminal_recorded`                         |
-| `task_watchdog`                    | `ingress_received`, `terminal_recorded`                                             |
+| Recovery cause        | Carrier canonical event                                             |
+| --------------------- | ------------------------------------------------------------------- |
+| `approval_pending`    | `runtime.suspended`, with `approval.requested` / `approval.decided` |
+| `compaction_required` | `runtime.suspended` (envelope resume keys on compaction)            |
+| `provider_retry`      | `runtime.suspended` (zero-frame retry)                              |
+| `interrupt`           | `runtime.suspended`                                                 |
+| `terminal_commit`     | `turn.ended`                                                        |
 
-Recovery placement is now declared by the runtime cause vocabulary, not inferred
-from hosted coordinators:
-
-| Recovery cause          | Trusted gate         | Resume/terminal gate | Receipts that explain the move            |
-| ----------------------- | -------------------- | -------------------- | ----------------------------------------- |
-| `approval_pending`      | `effect_authorized`  | `recovery_settled`   | `approval.requested`, `runtime.suspended` |
-| `compaction_required`   | `admission_resolved` | `recovery_settled`   | `checkpoint.committed`                    |
-| `provider_retry`        | `admission_resolved` | `recovery_settled`   | `runtime.suspended` with zero-frame retry |
-| `interrupt`             | `ingress_received`   | `terminal_recorded`  | `runtime.suspended`                       |
-| `terminal_commit`       | `execution_recorded` | `terminal_recorded`  | `turn.ended`                              |
-| explicit rollback tools | `execution_recorded` | `recovery_settled`   | rollback or reversible mutation receipts  |
-
-Gateway hosted transitions were removed. Replay and operator explanation now use
-canonical runtime events and tape projections directly.
+`checkpoint.committed` also carries a cause, and the `recovery_history` projection
+folds these canonical events into the session's recovery posture. Replay and
+operator explanation read the canonical events and tape projections directly.
 
 ## Lifecycle Stages
 
@@ -188,8 +170,8 @@ canonical runtime events and tape projections directly.
    - startup UI setting (`ui.quietStartup`) is applied from `runtime.config.ui` into session settings overrides
    - CLI and hosted routes share the same session bootstrap, then enter the
      runtime-owned turn loop through the hosted adapter
-   - non-hosted direct consumers must construct `BrewvaRuntime` directly; the
-     substrate SDK bypass was removed so there is no second public turn owner
+   - non-hosted direct consumers must construct `BrewvaRuntime` directly; there
+     is no second public turn owner
 3. Register lifecycle handlers through the canonical hosted behavior (`packages/brewva-gateway/src/hosted/internal/session/host-api-installation.ts`)
    - `managedToolMode=hosted`: register managed Brewva tools through the hosted behavior API
    - `managedToolMode=direct`: provide managed Brewva tools directly from the host
@@ -331,20 +313,13 @@ artifact file. The history-view baseline is a receipt-derived view over
 durable `session_compact` history, while working projection remains a separate
 rebuildable snapshot.
 
-Current implementation now performs the first recovery canonicalization pass
-before hydration from tape alone. If the tape already contains a durable
-`unclean_shutdown_reconciled` receipt, that receipt is reused directly; if not,
-the canonicalization pass still detects replay-visible open tool, open turn,
-and dangling producer/capability continuity conditions from the tape before any
-fold state is rebuilt. Hydration apply may still materialize a new
-`unclean_shutdown_reconciled` receipt afterward when an older session needs a
-durable reconciliation record.
-
-Recovery posture remains tape-derived after hydration as well. The runtime keeps
-the `unclean_shutdown_reconciled` receipt for explainability and operator
-inspection, but later canonical recovery receipts supersede that degraded
-posture instead of letting a process-local diagnostic pin the session in
-permanent degradation.
+Recovery posture is tape-derived. The first recovery pass detects replay-visible
+open tool, open turn, and dangling producer/capability continuity conditions from
+the event tape before fold state is rebuilt. Posture then folds from the canonical
+recovery events (`turn.ended`, `runtime.suspended`, `checkpoint.committed`) into
+the `recovery_history` projection; later canonical recovery events supersede an
+earlier degraded posture rather than letting a process-local diagnostic pin the
+session in permanent degradation.
 
 - On `SIGINT`/`SIGTERM`, CLI interrupts the active runtime turn, waits for agent
   idle (bounded by graceful timeout), then exits.
@@ -353,15 +328,14 @@ permanent degradation.
   verification, resource-lease, cost, tape-ledger projection, reversible-mutation,
   and parallel-budget state.
 - Projection rebuild remains a separate on-demand projection-engine path. It is
-  not part of `SessionLifecycleService` hydration and it does not gate replay
-  correctness.
+  not part of session hydration and it does not gate replay correctness.
 - Reasoning-branch state is reconstructed from durable `reasoning_checkpoint`
   and `reasoning_revert` receipts. Recovery WAL does not hold the active
   branch; it only carries the in-flight turn envelope.
-- Session-local runtime state is hydrated lazily through `ensureHydrated(...)`.
-  The first hydration may happen on `onUserInput()`, `onTurnStart()`, or a
-  later inspect/read-model access that needs replay-owned state
-  (skill/budget/cost counters, warning dedupe, ledger compaction cooldown).
+- Session-local runtime state is hydrated lazily on first access. The first
+  hydration may happen on `onUserInput()`, `onTurnStart()`, or a later
+  inspect/read-model access that needs replay-owned state (skill/budget/cost
+  counters, warning dedupe, ledger compaction cooldown).
 - `onTurnStart()` remains the first canonical turn-boundary hook that both
   hydrates and advances per-turn runtime state such as context-budget turn
   bookkeeping.
@@ -414,11 +388,10 @@ permanent degradation.
   `exact_history` continuity snapshot rebuilt from the surviving branch's
   `turn_input_recorded` / `turn_render_committed` history, but that fallback is
   not a replacement for receipt-backed history rewrite authority.
-- Reasoning rewind is no longer a gateway-owned recovery branch. It is
-  expressed as explicit model/kernel state and projected from tape-visible
-  receipts. The default turn implementation recognizes only approval suspension,
-  compaction pressure, zero-frame provider retry, interrupt, and terminal
-  commit.
+- Reasoning rewind is expressed as explicit model/kernel state and projected from
+  tape-visible receipts. The default turn implementation recognizes only approval
+  suspension, compaction pressure, zero-frame provider retry, interrupt, and
+  terminal commit.
 - Channel approval helper state is not part of recovery correctness.
   Approval claims and request resolution remain replay-derived from durable
   runtime events, with optional process-local UI cache only.

@@ -123,13 +123,12 @@ flowchart TD
 ## Observability
 
 - core events:
-  - `schedule_intent`
-  - `schedule_recovery_deferred`
-  - `schedule_recovery_summary`
-  - `schedule_wakeup`
-  - `schedule_child_session_started`
-  - `schedule_child_session_finished`
-  - `schedule_child_session_failed`
+  - `schedule.intent`
+  - `schedule.recovery.deferred`
+  - `schedule.wakeup`
+  - `schedule.child_session.started`
+  - `schedule.child_session.finished`
+  - `schedule.child_session.failed`
 - inspection surfaces:
   - `HostedRuntimeAdapterPort.ops.schedule.intents.getProjectionSnapshot()`
 
