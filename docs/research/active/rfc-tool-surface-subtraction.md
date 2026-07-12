@@ -7,7 +7,7 @@
   forward note on closing the self-improvement loop on the substrate already
   shipped). Not a new plane.
 - Owner: tools-registry / runtime-model-attention maintainers
-- Last reviewed: `2026-07-09`
+- Last reviewed: `2026-07-12`
 - Depends on / relates to:
   - [Design Axioms](../../architecture/design-axioms.md) — axiom 1 `Attention
 belongs to the model.`, axiom 3 `Subtraction beats switches.`, axiom 4 `Govern
@@ -383,6 +383,33 @@ trigger: next config-schema change).
   variant that explicitly instructs when to use the specialized families), and
   confirming the near-zero result before any deletion** (demotion may proceed on
   current evidence since it is reversible).
+
+## Validation Log — 2026-07-12 (cross-model corroboration + first control arm)
+
+An RFC-validation pass added two evidence axes the n=12 lead lacked. The default
+near-zero reproduces; the taught-ontology control arm produces the reversal the
+note predicted — which is why the proposal is reversible demotion, not deletion.
+
+- **Default near-zero, now three ways.** (1) `analyze:advisory-receipts` over the
+  existing 8-session tape corpus (1675 events across `deepseek-v4-pro`,
+  `gpt-5.5-pro`, `glm5.2`) reads **24/33 families with zero committed calls**;
+  host-plane `read` beats managed `source_read` **82:6**. (2) The frozen self-eval
+  fixtures (the D6 evaluator) run live on `glm5.2` commit only `read`/`edit`/`glob`
+  — zero specialized families reached for. So the near-zero is not a single-model
+  or single-corpus artifact.
+- **Taught-ontology control arm — the predicted reversal.** The same comprehension
+  task, re-run on `glm5.2` with a prompt that explicitly instructs
+  `code_digest`-then-`source_read` (both base-surfaced), committed `source_read`×2
+  and `code_digest`×1. So the default near-zero is **partly prompt design, not pure
+  tool worthlessness** — exactly the falsifier the note flagged. This confirms the
+  design: demote the ontology from the default surface (reversible), keep it
+  reachable under a skill commitment or explicit request; it does **not** license
+  deletion.
+- **Still owed for promotion.** The control arm ran on one model only. The gate —
+  ≥2 additional models (one frontier, one mid-tier) through the taught-vs-neutral
+  arms on the Phase-2 self-eval infrastructure — is unmet: `deepseek` was keyless
+  and `openai-codex` had a stale token this pass, so only `glm5.2` was reachable.
+  Demotion (reversible) is corroborated; deletion stays gated.
 
 ## Promotion Criteria And Destination Docs
 

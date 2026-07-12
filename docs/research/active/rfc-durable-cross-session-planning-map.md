@@ -28,7 +28,7 @@
   — it needs production telemetry, not code — so the RFC stays active and is not
   promotable yet.
 - Owner: Substrate, runtime, and gateway maintainers
-- Last reviewed: `2026-07-08`
+- Last reviewed: `2026-07-12`
 - Depends on:
   - [Decision: Goal Control Plane](../decisions/goal-control-plane.md)
     (`goal.*` lifecycle events + `goal.state.get` tape rebuild + capability-scoped
@@ -558,6 +558,15 @@ accepted contracts, not active RFCs). The single largest risk to promotion is de
 brewva's compaction leg keeps improving, and a strong model plus compaction may cover
 more oversized-but-not-foggy work than expected. The map earns its weight only where
 the plan is both **large and foggy**.
+
+Validation note (2026-07-12): an RFC-validation pass looked for the demand signal
+in the available tape corpus (8 ad-hoc sessions across three models + the five
+self-eval fixtures) and found **zero** `plan.map.*` / ticket activity. This is
+**not** evidence of absent demand: `planning.mapEnabled` defaults off, so the tools
+were never surfaced in those sessions — the zero measures "not enabled," not "not
+wanted." The Phase 3 gate is unchanged and unmeetable from local runs; it needs
+production telemetry with the feature enabled across real multi-session efforts.
+Criterion count stays 2 of 4 — NOT promotable.
 
 ## Open Questions
 

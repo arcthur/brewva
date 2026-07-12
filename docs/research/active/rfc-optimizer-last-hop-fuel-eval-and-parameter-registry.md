@@ -8,7 +8,7 @@
   a gated note — fuel, utility function, and the first safe action surface for
   the self-improvement loop). Not a new plane, and explicitly not an optimizer.
 - Owner: gateway control-plane / calibration maintainers
-- Last reviewed: `2026-07-11`
+- Last reviewed: `2026-07-12`
 - Depends on / relates to:
   - [RFC: Tool-Surface Subtraction](./rfc-tool-surface-subtraction.md) — its
     forward half names the three steps this RFC turns into phases; its
@@ -432,6 +432,43 @@ aging, expiry, or mining was built — the counter is the trigger, nothing more.
   stabilize; if the registry degenerates into an unread inventory, it has
   become the census failure mode the subtraction case law warns about and
   must shrink to the parameters a report actually cites.
+
+## Validation Log — 2026-07-12 (glm5.2, live + deterministic)
+
+An RFC-validation pass exercised every phase. The confirming signal is met on its
+mechanism axis; promotion stays blocked on the empirical-maturity axis
+(cross-model, multi-cycle) the note always named.
+
+- **Phase 1 — confirmed live.** A live `glm5.2` unattended run that needs `exec`
+  auto-approved `local_exec` under a declared envelope with the provenance receipt
+  on the tape (`approval.decided` `actor=unattended-config-policy`,
+  `reason="unattended config policy allows this effect class within its declared
+envelope"`), committed the `exec`, and completed the task unattended
+  (`echo BREWVA_P1_OK` → reported output → `turn.ended`). The suspend-on-uncovered
+  half is pinned deterministically by
+  `test/unit/gateway/unattended-approval-flow.unit.test.ts` (an unlisted
+  `credential_access` halts fail-closed after the covered `local_exec` accepts).
+  Environment note: the frozen fixtures carry only the unattended envelope, so on
+  a host without the default `box` backend (`boxlite` absent) their `exec` is
+  auto-approved but cannot execute — the receipt fires, the task cannot finish; a
+  `security.execution.backend: host` override completes it. The fixtures are
+  self-contained on the approval axis but not on the execution-backend axis.
+- **Phase 2 — repeatable.** `report:self-eval` runs live against the durable tape;
+  the metric gate (`test/unit/eval/self-eval-metrics.unit.test.ts`) is green. Real
+  `glm5.2` fixture metrics land as host-plane primitives (`read`/`edit`/`glob`);
+  cross-model stability across a grown corpus stays owed.
+- **Phase 3 — registry honest.** `analyze:calibration-registry` lists the 12
+  `asserted` parameters with per-parameter source + evidence; both named debts read
+  as resolved (tape/knowledge freshness divergence documented as earned; the `0.80`
+  duplicate removed). Gate (`test/fitness/calibration-registry.fitness.test.ts`)
+  green.
+- **Phase 4 — counter present.** `analyze:proposal-backpressure` emits its one
+  demand line (`0` unconsumed, no aging mechanism). Gate
+  (`test/unit/gateway/proposal-backpressure.unit.test.ts`) green.
+- **Not promoted.** The cross-model self-eval re-measurement and the two-cycle
+  corpus-growth signal are unmet — only `glm5.2` was reachable this pass
+  (`deepseek` keyless, `openai-codex` token stale). Promotion stays a reviewed
+  human act.
 
 ## Promotion Criteria And Destination Docs
 
