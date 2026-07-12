@@ -418,7 +418,7 @@ describe("gateway protocol validator", () => {
       source: "live",
       durability: "cache",
       sourceEventId: "evt-1",
-      sourceEventType: "turn_render_committed",
+      sourceEventType: "turn.render.committed",
       type: "session.status",
       state: "running",
     });

@@ -117,7 +117,7 @@ flowchart TD
   - `channel_turn_emitted`
   - `channel_turn_bridge_error`
 - dispatch:
-  - `channel_session_bound`
+  - `channel.session.bound`
   - `channel_turn_dispatch_start`
   - `channel_turn_dispatch_end`
   - `channel_turn_outbound_complete`

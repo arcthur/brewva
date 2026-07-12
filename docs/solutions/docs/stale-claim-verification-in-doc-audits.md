@@ -58,7 +58,7 @@ whole codebase, not a single constant file:
 - account for the dotted-versus-underscored duality: the runtime emit `kind` is
   often dotted (for example `tool.result.recorded`), while the
   canonical/persisted/projected form may be underscored
-  (`tool_result_recorded`). Searching one form alone misses the other.
+  (`tool.result.recorded`). Searching one form alone misses the other.
 
 `worker.results.cleared` is emitted as a literal in
 `runtime-ops-builders/session.ts` and consumed in `runtime-ops-projections.ts`;

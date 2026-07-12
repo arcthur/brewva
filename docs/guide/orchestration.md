@@ -166,11 +166,11 @@ consequence-bearing runtime work should move through `runtime.kernel`.
 Stall detection still starts with the hosted runtime ops adapter, but the
 gateway worker adds a second, inspectable adjudication step.
 
-- `task_stuck_detected` remains the idle-threshold detection signal
+- `task.stuck.detected` remains the idle-threshold detection signal
 - the worker builds a bounded inspection packet from task state, verification
   state, tape pressure, recent failed tool outcomes, blocked tool calls, and
   pending worker results
-- the adjudicator records a durable `task_stall_adjudicated` event with
+- the adjudicator records a durable `task.stall.adjudicated` event with
   `continue`, `steer`, `compact_recommended`, or `abort_recommended`
 - inspection surfaces such as `workflow_status` can expose that recommendation
   together with planning assurance posture such as `plan_complete`,

@@ -68,7 +68,7 @@ function createRuntime(skills: SkillDocument[]): {
     const payload = events
       .toReversed()
       .find(
-        (event) => event.sessionId === sessionId && event.type === "skill_selection_recorded",
+        (event) => event.sessionId === sessionId && event.type === "skill.selection.recorded",
       )?.payload;
     return typeof payload === "object" && payload !== null && !Array.isArray(payload)
       ? payload
@@ -88,7 +88,7 @@ function createRuntime(skills: SkillDocument[]): {
             record: (sessionId, receipt) => {
               events.push({
                 sessionId,
-                type: "skill_selection_recorded",
+                type: "skill.selection.recorded",
                 payload: receipt,
               });
             },
@@ -466,7 +466,7 @@ describe("hosted advisory skill shortlist context", () => {
       promptPaths: [],
     });
     expect(events).toHaveLength(1);
-    expect(events[0]?.type).toBe("skill_selection_recorded");
+    expect(events[0]?.type).toBe("skill.selection.recorded");
     const payload = expectObject(events[0]?.payload, "skill selection payload");
     expect(payload).toMatchObject({
       trigger: "user_message",

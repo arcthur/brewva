@@ -220,7 +220,7 @@ describe("hosted-tape projection liveness (real gpt-5.5 session)", () => {
 
   test("compaction input provenance records the modified files from the commitment boundary", () => {
     // Same essence, second subsystem: compaction's `modifiedFiles` used to come
-    // ONLY from `usageEvents` (tool.invocation.started / source.patch.applied /
+    // ONLY from `usageEvents` (tool.invocation.started / source_patch_applied /
     // ...), every kind of which is absent on hosted tapes — so a compacted
     // summary's provenance recorded ZERO modified files on every real session.
     // Fed the committed tool runs, it must recover the real touched set.

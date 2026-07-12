@@ -39,7 +39,7 @@ function eventTimestampOf(event: CompactionContinuityEvent | undefined): number 
 export function assertAutoCompactionCompletionContinuity(
   events: CompactionContinuityEvent[],
 ): void {
-  const completionIndexes = eventIndexes(events, "context_compaction_auto_completed");
+  const completionIndexes = eventIndexes(events, "context.compaction.auto.completed");
   if (completionIndexes.length === 0) return;
 
   for (const completionIndex of completionIndexes) {

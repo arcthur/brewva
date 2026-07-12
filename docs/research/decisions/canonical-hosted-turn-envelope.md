@@ -22,7 +22,7 @@
 - `runtime.turn(...)` is the model/tool turn owner; the hosted envelope is a transport/session adapter.
 - production hosted prompt entrypoints enter through `packages/brewva-gateway/src/hosted/internal/turn-adapter/turn-envelope.ts`.
 - the envelope owns profile resolution, runtime-turn binding, schedule-trigger prelude, WAL recovery entry mapping, and suspended-vs-terminal status mapping.
-- turn truth is canonical tape owned by Runtime; gateway does not write `turn_input_recorded` or `turn_render_committed`.
+- turn truth is canonical tape owned by Runtime; gateway does not write `turn.input.recorded` or `turn.render.committed`.
 - Envelope diagnostics stay process-local; No durable envelope-diagnostics event should be added.
 
 ## Superseded by

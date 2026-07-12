@@ -8,7 +8,7 @@ import {
 describe("compaction continuity assertion helper", () => {
   test("accepts bounded continuation after auto compaction completion", () => {
     const events: CompactionContinuityEvent[] = [
-      { type: "context_compaction_auto_completed", timestamp: 1_000 },
+      { type: "context.compaction.auto.completed", timestamp: 1_000 },
       { type: "message_end", timestamp: 1_800 },
       { type: "agent_end", timestamp: 2_200 },
     ];
@@ -18,7 +18,7 @@ describe("compaction continuity assertion helper", () => {
 
   test("rejects missing continuation before the next turn", () => {
     const events: CompactionContinuityEvent[] = [
-      { type: "context_compaction_auto_completed", timestamp: 1_000 },
+      { type: "context.compaction.auto.completed", timestamp: 1_000 },
       { type: "turn_start", timestamp: 2_000 },
     ];
 
@@ -36,7 +36,7 @@ describe("compaction continuity assertion helper", () => {
 
   test("rejects excessive silence after auto compaction completion", () => {
     const events: CompactionContinuityEvent[] = [
-      { type: "context_compaction_auto_completed", timestamp: 1_000 },
+      { type: "context.compaction.auto.completed", timestamp: 1_000 },
       { type: "message_end", timestamp: 1_000 + MAX_POST_AUTO_COMPACTION_GAP_MS + 1 },
     ];
 

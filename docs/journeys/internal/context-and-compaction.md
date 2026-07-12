@@ -210,12 +210,12 @@ flowchart TD
 
 - context / compaction events:
   - `context.critical_without_compact`
-  - `context_compaction_gate_armed`
-  - `context_compaction_gate_cleared`
-  - `context_compaction_auto_requested`
-  - `context_compaction_auto_completed`
-  - `context_compaction_auto_failed`
-  - `context_compaction_skipped`
+  - `context.compaction.gate.armed`
+  - `context.compaction.gate.cleared`
+  - `context.compaction.auto.requested`
+  - `context.compaction.auto.completed`
+  - `context.compaction.auto.failed`
+  - `context.compaction.skipped`
 - runtime recovery observations:
   - canonical runtime suspension frames
   - checkpoint and compaction receipts

@@ -38,7 +38,7 @@ type RegressionRunResult = {
 const COMPACTION_FOLLOW_TYPES = new Set([
   "session_before_compact",
   "session_compact",
-  "context_compaction_skipped",
+  "context.compaction.skipped",
 ]);
 
 const MULTI_TURN_PROMPTS = [
@@ -300,7 +300,7 @@ function summarizeCounts(events: RuntimeEvent[]): string {
   const compactionRequested = countEvents(events, "context_compaction_requested");
   const beforeCompact = countEvents(events, "session_before_compact");
   const sessionCompact = countEvents(events, "session_compact");
-  const compactionSkipped = countEvents(events, "context_compaction_skipped");
+  const compactionSkipped = countEvents(events, "context.compaction.skipped");
 
   return [
     `input=${input}`,
@@ -408,7 +408,7 @@ function assertCompactionContinuity(result: RegressionRunResult): void {
 }
 
 function hasCompactionAutoFailure(result: RegressionRunResult): boolean {
-  return countEvents(result.events, "context_compaction_auto_failed") > 0;
+  return countEvents(result.events, "context.compaction.auto.failed") > 0;
 }
 
 describe("live: interactive multi-turn regression", () => {
@@ -420,7 +420,7 @@ describe("live: interactive multi-turn regression", () => {
       driverExit: 0,
       tapeFile: "/tmp/tape.jsonl",
       events: [
-        { type: "context_compaction_auto_completed", timestamp: 1_000 },
+        { type: "context.compaction.auto.completed", timestamp: 1_000 },
         { type: "message_end", timestamp: 1_800 },
         { type: "agent_end", timestamp: 2_200 },
       ],
@@ -437,7 +437,7 @@ describe("live: interactive multi-turn regression", () => {
       driverExit: 0,
       tapeFile: "/tmp/tape.jsonl",
       events: [
-        { type: "context_compaction_auto_completed", timestamp: 1_000 },
+        { type: "context.compaction.auto.completed", timestamp: 1_000 },
         { type: "turn_start", timestamp: 2_000 },
       ],
     };
@@ -461,7 +461,7 @@ describe("live: interactive multi-turn regression", () => {
       driverExit: 0,
       tapeFile: "/tmp/tape.jsonl",
       events: [
-        { type: "context_compaction_auto_completed", timestamp: 1_000 },
+        { type: "context.compaction.auto.completed", timestamp: 1_000 },
         { type: "message_end", timestamp: 1_000 + MAX_POST_AUTO_COMPACTION_GAP_MS + 1 },
       ],
     };

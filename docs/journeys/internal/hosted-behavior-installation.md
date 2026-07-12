@@ -183,8 +183,8 @@ class is context-write equal exactly `{context_messages.write}` — never by ban
   (`recordPluginCapabilityViolation`), a tagged `BrewvaHostPluginHandlerError`,
   and an observability span named `brewva.host.plugin.<event>`
 - durable evidence and receipts written by the installed behaviors:
-  - event stream subscribes `turn_input_recorded`, `turn_render_committed`,
-    `session_shutdown`, and `verification_outcome_recorded`
+  - event stream subscribes `turn.input.recorded`, `turn.render.committed`,
+    `session_shutdown`, and `verification.outcome.recorded`
   - the ledger writer records tool outputs and finishes tool invocations
   - provider-request recovery appends `output_budget_escalation` evidence;
     reduction appends `transient_reduction` evidence (semantics in

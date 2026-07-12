@@ -25,7 +25,7 @@
 ## Decision Summary
 
 - Frontend session protocol is a read model, not authority. Tape and receipt-bearing runtime facts remain authoritative. Session wire is the stable derived language consumed by frontend and transport layers.
-- Replayable UX requires durable committed presentation receipts. Accepted input and committed terminal rendering are durably captured through `turn_input_recorded` and `turn_render_committed`.
+- Replayable UX requires durable committed presentation receipts. Accepted input and committed terminal rendering are durably captured through `turn.input.recorded` and `turn.render.committed`.
 - Live preview traffic remains cache-class. `assistant.delta`, live tool preview frames, `session.status`, and `attempt.started(reason=initial)` are transport-layer cache views and are not replay-critical durable facts.
 - Replay emits committed state, not live preview noise. Replay does not emit standalone durable `tool.finished`; committed tool output is carried only by `turn.committed.toolOutputs`.
 - Committed assistant output keeps both an aggregate `assistantText` compatibility field and timestamped `assistantSegments[]`; replay seed construction uses the segments so narration, tools, and final answers keep their original order.

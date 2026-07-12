@@ -89,7 +89,7 @@ In scope:
 - three prune operations: identical-result deduplication (md5 hash,
   > =200 chars), informative one-liner replacement for old tool results, and
   > image stripping from old multimodal results
-- a new tape event (`session_pre_compact_prune`) recording what was pruned,
+- a new tape event (`session.pre_compact_prune`) recording what was pruned,
   making the prune replay-visible and inspectable
 - integration with the existing compaction pipeline (hosted manual, hosted
   auto, and model-downshift paths)
@@ -165,7 +165,7 @@ LLM summarizer. The existing mechanisms are orthogonal and continue to run.
 Brewva's constitution says `Tape owns truth`. A prune that silently replaces
 tool results without a receipt would be an unrecorded history mutation —
 exactly what the tape is supposed to prevent. The prune produces a
-`session_pre_compact_prune` tape event recording what was deduped, replaced,
+`session.pre_compact_prune` tape event recording what was deduped, replaced,
 or stripped. Replay shows the original content (from the original
 `tool.result.recorded` events) and the prune event (recording the
 transformation). The compaction summary event (`session_compact`) references
@@ -196,7 +196,7 @@ transformation is tape-accountable.
    tail-protection window, remove image content blocks, keeping text
    blocks and a textual note that images were stripped.
 
-3. **Tape-recorded.** The prune produces a `session_pre_compact_prune` tape
+3. **Tape-recorded.** The prune produces a `session.pre_compact_prune` tape
    event with the list of transformations applied (entry id, operation,
    original digest, replacement summary).
 
@@ -262,7 +262,7 @@ Internal implementation anchors:
   distiller — registered in `host-api-installation.ts`, not in `session.ts`; the
   orthogonal same-turn mechanism)
 - `packages/brewva-vocabulary/src/internal/context.ts` (compaction event
-  family; the new `session_pre_compact_prune` event extends this)
+  family; the new `session.pre_compact_prune` event extends this)
 
 External comparison anchors (mechanism only, not their tape-less approach):
 
@@ -404,7 +404,7 @@ leaves no receipt.
 
 - Implement `pruneCompactionInput(...)` with dedupe and informative replace.
 - Wire into the hosted compaction controller.
-- Emit `session_pre_compact_prune` tape event.
+- Emit `session.pre_compact_prune` tape event.
 - Fitness: the prune is deterministic and idempotent; replay shows the prune
   event; the `session_compact` receipt references the prune receipt; the LLM
   summarizer input is verifiably smaller.
@@ -431,7 +431,7 @@ leaves no receipt.
   same output (property test).
 - Idempotency fitness: running the prune twice on the same input produces the
   same output (property test).
-- Replay fitness: the `session_pre_compact_prune` event is replay-visible;
+- Replay fitness: the `session.pre_compact_prune` event is replay-visible;
   replay shows both the original `tool.result.recorded` events and the prune
   transformation; the `session_compact` receipt references the prune receipt.
 - Authority fitness: the prune does not mutate tape events; it operates on
@@ -465,7 +465,7 @@ genuinely accumulates, not from headless validation runs.
 | Required authored fields              |      0 |     0 | No new configuration; prune thresholds are internal constants.               |
 | Optional authored fields              |      0 |    +1 | `compaction.pruneEnabled` config (default true), held minimal.               |
 | Author-facing concepts                |      0 |     0 | The prune is runtime physics, not an author-facing concept.                  |
-| Persisted formats                     |      0 |    +1 | `session_pre_compact_prune` event (schema `brewva.pre-compaction-prune.v1`). |
+| Persisted formats                     |      0 |    +1 | `session.pre_compact_prune` event (schema `brewva.pre-compaction-prune.v1`). |
 | Inspect surfaces                      |      0 |     0 | Prune operations are visible through existing tape inspection.               |
 | Public tools                          |      0 |     0 | The prune is not model-invoked.                                              |
 | Routing/control-plane decision points |      0 |    +1 | The prune runs inside the compaction pipeline; no new external decision.     |

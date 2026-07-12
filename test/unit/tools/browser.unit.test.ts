@@ -300,11 +300,13 @@ describe("browser tools", () => {
 
     const text = extractText(result as { content: Array<{ type: string; text?: string }> });
     expect(text).toContain("Tool call blocked by runtime policy");
+    // The block is durably audited as a single tool.call.blocked receipt, and
+    // the browser subprocess is never invoked (no args log).
     expect(
       runtime.capabilities.events.records.query("browser-boundary-1", {
-        type: "tool_call_blocked",
+        type: "tool.call.blocked",
       }),
-    ).toHaveLength(0);
+    ).toHaveLength(1);
     expect(existsSync(logPath)).toBe(false);
   });
 });

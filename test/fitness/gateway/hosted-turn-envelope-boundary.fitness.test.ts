@@ -107,8 +107,8 @@ describe("hosted turn envelope boundary", () => {
     const receiptWriterPatterns = [
       /type:\s*TURN_INPUT_RECORDED_EVENT_TYPE/u,
       /type:\s*TURN_RENDER_COMMITTED_EVENT_TYPE/u,
-      /type:\s*["']turn_input_recorded["']/u,
-      /type:\s*["']turn_render_committed["']/u,
+      /type:\s*["']turn\.input\.recorded["']/u,
+      /type:\s*["']turn\.render\.committed["']/u,
     ];
 
     const offenders = listProductionFiles().filter((file) => {

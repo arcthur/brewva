@@ -14,7 +14,7 @@ describe("observability shared query", () => {
                 {
                   id: "evt-1",
                   sessionId,
-                  type: "tool_result_recorded",
+                  type: "tool.result.recorded",
                   timestamp: 10,
                   payload: { rawTokens: 5 },
                 },
@@ -29,7 +29,7 @@ describe("observability shared query", () => {
       runtime as never,
       "obs-shared-1",
       {
-        types: ["tool_result_recorded"],
+        types: ["tool.result.recorded"],
         where: {},
         windowMinutes: null,
         last: null,
@@ -43,7 +43,7 @@ describe("observability shared query", () => {
     expect(listCalls).toEqual([
       {
         sessionId: "obs-shared-1",
-        query: { type: "tool_result_recorded" },
+        query: { type: "tool.result.recorded" },
       },
     ]);
   });

@@ -269,7 +269,7 @@ describe("compaction input provenance", () => {
       ],
       usageEvents: [
         {
-          type: "source.patch.applied",
+          type: "source_patch_applied",
           payload: { modifiedFiles: ["src/in-process.ts"] },
         },
       ],

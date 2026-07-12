@@ -86,8 +86,8 @@ flowchart TD
 7. Every tool call enters the shared invocation spine and is evaluated for
    access, budget, compaction, ledger writes, and event persistence.
 8. Accepted turns also materialize durable presentation receipts:
-   `turn_input_recorded` when the turn is admitted and
-   `turn_render_committed` when the turn reaches a terminal outcome.
+   `turn.input.recorded` when the turn is admitted and
+   `turn.render.committed` when the turn reaches a terminal outcome.
 9. Verification remains explicit runtime authority. It is derived from fresh
    evidence and does not depend on an active skill slot.
 10. When assistant text reaches stable transcript state, the CLI presentation
@@ -119,7 +119,7 @@ flowchart TD
 - canonical Verifier outcome data preserves `pass`, `fail`, and `inconclusive`
   instead of flattening inconclusive validation into failure
 - verification freshness is evaluated against the latest
-  `verification_write_marked` boundary, not against any historical passing run
+  `verification.write.marked` boundary, not against any historical passing run
 - interactive queue UX remains queue-only: the pending strip and `Leader Q`
   overlay surface queued future turns, while explicit `followUp` delivery
   remains a separate continuation primitive rather than a user-visible queue
@@ -146,7 +146,7 @@ flowchart TD
 - primary durable records:
   - event tape records for tool execution, verification, and compaction
   - workbench records for model-authored working memory
-  - session-wire receipts (`turn_input_recorded`, `turn_render_committed`) for
+  - session-wire receipts (`turn.input.recorded`, `turn.render.committed`) for
     frontend/session replay
   - ledger rows containing tool outcomes and verification evidence
 - presentation carriers such as Markdown tables and Mermaid diagrams are

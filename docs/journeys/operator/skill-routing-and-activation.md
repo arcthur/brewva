@@ -142,7 +142,7 @@ flowchart TD
 
 - durable skill-selection event: the runtime emit form is the dotted
   `skill.selection.recorded`; the canonical persisted / projected form is the
-  underscore `skill_selection_recorded` (folded by the session-index
+  underscore `skill.selection.recorded` (folded by the session-index
   projection). Both forms are real — the dotted form is the in-process runtime
   kind, the underscore form is the canonical event-family name
 - the receipt carries the selection id, trigger, explicit mentions, candidate /

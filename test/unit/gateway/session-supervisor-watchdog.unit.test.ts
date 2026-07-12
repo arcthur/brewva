@@ -195,7 +195,7 @@ describe("session supervisor watchdog bridge", () => {
 
       expect(
         observer.ops.events.records.query(resolvedAgentSessionId, {
-          type: "task_stuck_detected",
+          type: "task.stuck.detected",
         }),
       ).toHaveLength(0);
 
@@ -552,7 +552,7 @@ describe("session supervisor watchdog bridge", () => {
         configPath: TEST_CONFIG_PATH,
       });
       expect(
-        observer.ops.events.records.query(agentSessionId, { type: "task_stuck_detected" }),
+        observer.ops.events.records.query(agentSessionId, { type: "task.stuck.detected" }),
       ).toHaveLength(0);
       expect(observer.ops.task.state.get(agentSessionId).spec).toBe(undefined);
     } finally {

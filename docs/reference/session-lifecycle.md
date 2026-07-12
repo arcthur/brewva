@@ -182,8 +182,8 @@ operator explanation read the canonical events and tape projections directly.
      schedule-trigger prelude, WAL resume transitions, or terminal render
      receipts
    - every production accepted hosted prompt turn records
-     `turn_input_recorded`
-   - `turn_render_committed` is recorded only for terminal
+     `turn.input.recorded`
+   - `turn.render.committed` is recorded only for terminal
      `completed | failed | cancelled` outcomes; approval `suspended` turns
      remain represented by the input receipt plus approval/session-wire frames
    - envelope diagnostics stay process-local; replay and operator diagnostics use
@@ -354,7 +354,7 @@ session in permanent degradation.
   Runtime-scoped replay uses `HostedRuntimeAdapterPort.ops.sessionWire`; gateway public
   replay uses the same runtime-owned compiler semantics against archived
   agent-session event logs. In both cases replay is compiled from durable
-  receipts including `turn_input_recorded`, `turn_render_committed`, approval
+  receipts including `turn.input.recorded`, `turn.render.committed`, approval
   events, delegation receipts, canonical runtime events, and `session_shutdown`.
 - `brewva inspect` is adjacent to that replay pipeline but not identical to it:
   the command builds an operator report from `HostedRuntimeAdapterPort.ops.events`,
@@ -386,7 +386,7 @@ session in permanent degradation.
   checks. If no compatible receipt-backed baseline exists,
   `HostedRuntimeAdapterPort.ops.context.prompt.getHistoryViewBaseline(...)` can still expose a bounded
   `exact_history` continuity snapshot rebuilt from the surviving branch's
-  `turn_input_recorded` / `turn_render_committed` history, but that fallback is
+  `turn.input.recorded` / `turn.render.committed` history, but that fallback is
   not a replacement for receipt-backed history rewrite authority.
 - Reasoning rewind is expressed as explicit model/kernel state and projected from
   tape-visible receipts. The default turn implementation recognizes only approval

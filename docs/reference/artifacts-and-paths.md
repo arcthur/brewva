@@ -152,7 +152,7 @@ helper material, not session-state durability surfaces in the taxonomy above.
     instead of a single source-tier ordering
   - repository precedent can outrank weak task-event notes; strong runtime
     receipts can still outrank precedent
-  - `recall_results_surfaced`, `context_*`, and `projection_*` are excluded
+  - `recall.results.surfaced`, `context_*`, and `projection_*` are excluded
     from broker tape search and session digest text
   - curation aggregates keep raw signal counts plus time-decayed ranking
     weights in broker memory; they are rebuilt from durable recall feedback
