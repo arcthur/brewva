@@ -234,6 +234,11 @@ export function decideTransientReductionEligibility(
     };
   }
 
+  // Recovery/degraded/approval posture blocks the discretionary reduction paths
+  // below (advisory compaction, cache-cold). It is deliberately checked *after*
+  // the provider-payload pressure allow above: when the outbound payload itself
+  // is the pressure source it must be reduced to fit regardless of posture, but
+  // otherwise the payload stays byte-faithful while the session is mid-recovery.
   if (input.postureBlockReason) {
     return {
       allowed: false,

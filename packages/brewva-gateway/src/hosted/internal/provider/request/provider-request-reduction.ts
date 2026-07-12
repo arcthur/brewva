@@ -418,3 +418,7 @@ export function registerProviderRequestReduction(
     return result.status === "completed" ? result.payload : undefined;
   });
 }
+
+export const PROVIDER_REQUEST_REDUCTION_TEST_ONLY = {
+  resolveReductionPostureBlockReason,
+};

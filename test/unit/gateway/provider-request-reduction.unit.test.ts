@@ -3,9 +3,76 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { InternalHostPluginApi } from "@brewva/brewva-substrate/host-api";
+import type { SessionLifecycleSnapshot } from "@brewva/brewva-vocabulary/session";
 import { CLEARED_TOOL_RESULT_PLACEHOLDER } from "../../../packages/brewva-gateway/src/hosted/internal/provider/request/provider-request-reduction-walker.js";
-import { registerProviderRequestReduction } from "../../../packages/brewva-gateway/src/hosted/internal/provider/request/provider-request-reduction.js";
+import {
+  PROVIDER_REQUEST_REDUCTION_TEST_ONLY,
+  registerProviderRequestReduction,
+} from "../../../packages/brewva-gateway/src/hosted/internal/provider/request/provider-request-reduction.js";
+import type { HostedRuntimeAdapterPort } from "../../../packages/brewva-gateway/src/hosted/internal/session/runtime-ports.js";
 import { createRuntimeConfig, createRuntimeInstanceFixture } from "../../helpers/runtime.js";
+
+const { resolveReductionPostureBlockReason } = PROVIDER_REQUEST_REDUCTION_TEST_ONLY;
+
+function baseSnapshot(sessionId: string): SessionLifecycleSnapshot {
+  return {
+    sessionId,
+    hydration: "fresh",
+    execution: { kind: "idle" },
+    integrity: "ok",
+    recovery: {
+      mode: "idle",
+      latestReason: null,
+      latestStatus: null,
+      pendingFamily: null,
+      degradedReason: null,
+      duplicateSideEffectSuppressionCount: 0,
+      latestSourceEventId: null,
+      latestSourceEventType: null,
+      recentTransitions: [],
+    },
+    approval: {
+      status: "idle",
+      pendingCount: 0,
+      requestId: null,
+      toolCallId: null,
+      toolName: null,
+      subject: null,
+    },
+    tooling: { openToolCalls: [] },
+    summary: { kind: "idle", reason: null, detail: null },
+  } as SessionLifecycleSnapshot;
+}
+
+/**
+ * The recovery posture the four-port lifecycle producer surfaces while a turn is
+ * suspended mid-recovery (its latest event is a `runtime.suspended` commit): the
+ * recovery family is pending and its transition has been entered.
+ */
+function recoveryPostureSnapshot(sessionId: string): SessionLifecycleSnapshot {
+  const snapshot = baseSnapshot(sessionId);
+  return {
+    ...snapshot,
+    execution: { kind: "running", detail: "runtime_turn_active" },
+    recovery: {
+      ...snapshot.recovery,
+      mode: "observed",
+      latestReason: "compaction_required",
+      latestStatus: "entered",
+      pendingFamily: "recovery",
+      latestSourceEventType: "runtime.suspended",
+      recentTransitions: ["compaction_required"],
+    },
+    summary: { kind: "running", reason: "compaction_required", detail: "runtime.suspended" },
+  } as SessionLifecycleSnapshot;
+}
+
+/** Minimal runtime whose lifecycle snapshot is the only surface the gate reads. */
+function lifecycleRuntime(snapshot: SessionLifecycleSnapshot): HostedRuntimeAdapterPort {
+  return {
+    ops: { lifecycle: { getSnapshot: () => snapshot } },
+  } as unknown as HostedRuntimeAdapterPort;
+}
 
 type BeforeProviderRequestHandler = (
   event: {
@@ -80,5 +147,32 @@ describe("registerProviderRequestReduction", () => {
       ],
     });
     expect(payload.input[1]?.output).not.toBe(CLEARED_TOOL_RESULT_PLACEHOLDER);
+  });
+
+  test("recovery posture on the lifecycle snapshot blocks reduction (previously a permanent no-op)", () => {
+    // Before the producer fix the snapshot never carried a pending recovery family,
+    // so this resolver could only ever return null and the recovery/degraded gate
+    // was dead. A suspended-recovery snapshot must now surface a block reason, which
+    // suppresses the discretionary reduction paths in the eligibility decision.
+    expect(
+      resolveReductionPostureBlockReason(lifecycleRuntime(recoveryPostureSnapshot("s1")), "s1"),
+    ).toBe("recovery posture is active");
+  });
+
+  test("an entered recovery transition (without a pending family) still blocks", () => {
+    const snapshot = baseSnapshot("s1");
+    const enteredTransition = {
+      ...snapshot,
+      recovery: { ...snapshot.recovery, latestStatus: "entered" },
+    } as SessionLifecycleSnapshot;
+    expect(resolveReductionPostureBlockReason(lifecycleRuntime(enteredTransition), "s1")).toBe(
+      "recovery posture is active",
+    );
+  });
+
+  test("an idle session does not block reduction", () => {
+    expect(
+      resolveReductionPostureBlockReason(lifecycleRuntime(baseSnapshot("s1")), "s1"),
+    ).toBeNull();
   });
 });
