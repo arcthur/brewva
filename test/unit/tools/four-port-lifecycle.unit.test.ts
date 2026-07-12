@@ -6,48 +6,10 @@ import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import type { RuntimeProviderPort, RuntimeToolExecutorPort } from "@brewva/brewva-runtime";
 import { createFourPortLifecycleRuntimeOps } from "@brewva/brewva-tools/runtime-port";
 import type { SessionLifecycleSnapshot } from "@brewva/brewva-vocabulary/session";
-
-interface LifecycleScenario {
-  readonly active?: boolean;
-  readonly lastEventType?: string | null;
-  readonly lastCause?: string | null;
-  readonly causes?: readonly string[];
-}
-
-/**
- * Builds the lifecycle ops over a fake tape that returns the given turn-state
- * scenario. The four-port lifecycle producer reads only `turn_state`,
- * `recovery_history`, and `tool_commitments`, so a hand-shaped projection is
- * enough to exercise the posture derivation without a live runtime.
- */
-function createLifecycleOps(scenario: LifecycleScenario) {
-  const causes = scenario.causes ?? (scenario.lastCause ? [scenario.lastCause] : []);
-  const lastEvent =
-    scenario.lastEventType == null
-      ? null
-      : { id: "evt-last", type: scenario.lastEventType, timestamp: 1, sessionId: "s1" };
-  const project = (sessionId: string, name: string): unknown => {
-    switch (name) {
-      case "turn_state":
-        return {
-          sessionId,
-          active: scenario.active ?? false,
-          lastCause: scenario.lastCause ?? null,
-          lastEvent,
-        };
-      case "recovery_history":
-        return { sessionId, causes };
-      case "tool_commitments":
-        return { sessionId, proposed: [], committed: [], aborted: [] };
-      default:
-        throw new Error(`unexpected tape view: ${name}`);
-    }
-  };
-  const context = {
-    runtime: { tape: { project } },
-  } as unknown as Parameters<typeof createFourPortLifecycleRuntimeOps>[0];
-  return createFourPortLifecycleRuntimeOps(context);
-}
+import {
+  createLifecycleOps,
+  type FourPortLifecycleScenario,
+} from "../../helpers/four-port-lifecycle.js";
 
 describe("createFourPortLifecycleRuntimeOps recovery posture", () => {
   test("surfaces a recovery pending family while suspended for a recovery cause", () => {
@@ -152,5 +114,74 @@ describe("createFourPortLifecycleRuntimeOps recovery posture", () => {
     expect(snapshotAtRetry.recovery.pendingFamily).toBe("recovery");
     expect(snapshotAtRetry.recovery.latestStatus).toBe("entered");
     expect(snapshotAtRetry.recovery.latestSourceEventType).toBe("runtime.suspended");
+  });
+});
+
+describe("createFourPortLifecycleRuntimeOps execution/summary value space", () => {
+  // Tier 1: a live recovery wait must collapse the running turn onto a `recovering`
+  // execution/summary kind so the daemon replay-seed and bootstrap phase can read
+  // "restarting"/"recovering" straight off the snapshot instead of always falling
+  // through to the expensive frame-history path.
+  test("collapses a live recovery wait onto a recovering execution and summary", () => {
+    const snapshot = createLifecycleOps({
+      active: true,
+      lastEventType: "runtime.suspended",
+      lastCause: "compaction_required",
+    }).getSnapshot("s1");
+    expect(snapshot.execution.kind).toBe("recovering");
+    expect(snapshot.summary.kind).toBe("recovering");
+    // The recovery posture the transient-reduction gate reads stays intact.
+    expect(snapshot.recovery.pendingFamily).toBe("recovery");
+  });
+
+  // Tier 2 (ELSE branch): an approval wait carries no tool identity / subject on the
+  // four-port tape (only turn_state/recovery_history/tool_commitments are readable),
+  // so the producer keeps the active turn's kind and lets `recovery.pendingFamily`
+  // carry the approval truth. The approval *phase* is sourced from wire frames, which
+  // do carry the requestId/toolName/subject the snapshot lacks.
+  test("keeps an approval wait as a running kind and defers approval identity to wire frames", () => {
+    const snapshot = createLifecycleOps({
+      active: true,
+      lastEventType: "runtime.suspended",
+      lastCause: "approval_pending",
+    }).getSnapshot("s1");
+    expect(snapshot.execution.kind).toBe("running");
+    expect(snapshot.summary.kind).toBe("running");
+    expect(snapshot.recovery.pendingFamily).toBe("approval");
+  });
+
+  // Tier 3: the snapshot must not carry the dishonest `hydration: "fresh"` /
+  // `integrity: "ok"` constants or the all-constant `approval` stub. The honest
+  // hydration/integrity live on `ops.session.lifecycle.getHydration/getIntegrity`,
+  // and nothing reads these off the lifecycle snapshot.
+  test("drops the dishonest hydration/integrity/approval stubs", () => {
+    const snapshot = createLifecycleOps({ active: false }).getSnapshot("s1");
+    expect("hydration" in snapshot).toBe(false);
+    expect("integrity" in snapshot).toBe(false);
+    expect("approval" in snapshot).toBe(false);
+  });
+
+  // Reachability proof against the REAL producer: every execution/summary kind that a
+  // consumer switches on must be yielded by some input, and no other kind may appear.
+  // This is what keeps the tightened value-space union honest instead of drifting back
+  // into a hand-built-fixture fiction.
+  test("yields exactly idle|running|recovering across the suspend-cause space", () => {
+    const scenarios: FourPortLifecycleScenario[] = [
+      { active: false, lastEventType: null, lastCause: null },
+      { active: true, lastEventType: "turn.started", lastCause: null },
+      { active: true, lastEventType: "runtime.suspended", lastCause: "provider_retry" },
+      { active: true, lastEventType: "runtime.suspended", lastCause: "interrupt" },
+      { active: true, lastEventType: "runtime.suspended", lastCause: "approval_pending" },
+      { active: false, lastEventType: "turn.ended", lastCause: "terminal_commit" },
+    ];
+    const executionKinds = new Set<string>();
+    const summaryKinds = new Set<string>();
+    for (const scenario of scenarios) {
+      const snapshot = createLifecycleOps(scenario).getSnapshot("s1");
+      executionKinds.add(snapshot.execution.kind);
+      summaryKinds.add(snapshot.summary.kind);
+    }
+    expect([...executionKinds].toSorted()).toEqual(["idle", "recovering", "running"]);
+    expect([...summaryKinds].toSorted()).toEqual(["idle", "recovering", "running"]);
   });
 });

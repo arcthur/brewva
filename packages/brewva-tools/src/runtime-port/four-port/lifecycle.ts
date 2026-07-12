@@ -40,13 +40,28 @@ export function createFourPortLifecycleRuntimeOps(
       const suspendedCause =
         turnState.lastEvent?.type === "runtime.suspended" ? turnState.lastCause : null;
       const pendingFamily = pendingRecoveryFamily(suspendedCause);
+      const latestEventType = turnState.lastEvent?.type ?? null;
+      // A live recovery wait is the turn's current posture, so it wins over the
+      // still-active turn: the snapshot reads `recovering` rather than `running`,
+      // which is what makes the daemon replay-seed ("restarting") and the bootstrap
+      // recovering phase derivable straight off the snapshot. An approval wait, by
+      // contrast, carries no tool identity or subject on this tape (only turn_state,
+      // recovery_history, and tool_commitments are readable), so it keeps the active
+      // `running` kind and lets `recovery.pendingFamily` carry the approval truth —
+      // the approval phase is reconstructed from wire frames that do carry it.
+      // The kind's legal value space is pinned by `SessionLifecycleStatusKind` at the
+      // `summary`/`execution` assignment sites below, so it is inferred here rather than
+      // re-spelling the literal union (which would drift from the vocabulary contract).
+      const executionKind =
+        pendingFamily === "recovery" ? "recovering" : turnState.active ? "running" : "idle";
       return {
         sessionId,
-        hydration: "fresh",
-        execution: turnState.active
-          ? { kind: "running", detail: "runtime_turn_active" }
-          : { kind: "idle" },
-        integrity: "ok",
+        execution:
+          executionKind === "recovering"
+            ? { kind: "recovering", reason: latestCause, detail: latestEventType }
+            : executionKind === "running"
+              ? { kind: "running", detail: "runtime_turn_active" }
+              : { kind: "idle" },
         recovery: {
           mode: latestCause ? "observed" : "idle",
           latestReason: latestCause,
@@ -55,24 +70,16 @@ export function createFourPortLifecycleRuntimeOps(
           degradedReason: null,
           duplicateSideEffectSuppressionCount: 0,
           latestSourceEventId: turnState.lastEvent?.id ?? null,
-          latestSourceEventType: turnState.lastEvent?.type ?? null,
+          latestSourceEventType: latestEventType,
           recentTransitions: recovery.causes,
-        },
-        approval: {
-          status: "idle",
-          pendingCount: 0,
-          requestId: null,
-          toolCallId: null,
-          toolName: null,
-          subject: null,
         },
         tooling: {
           openToolCalls: openCalls,
         },
         summary: {
-          kind: turnState.active ? "running" : "idle",
+          kind: executionKind,
           reason: latestCause,
-          detail: turnState.lastEvent?.type ?? null,
+          detail: latestEventType,
         },
       };
     },

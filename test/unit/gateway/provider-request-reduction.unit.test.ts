@@ -17,9 +17,7 @@ const { resolveReductionPostureBlockReason } = PROVIDER_REQUEST_REDUCTION_TEST_O
 function baseSnapshot(sessionId: string): SessionLifecycleSnapshot {
   return {
     sessionId,
-    hydration: "fresh",
     execution: { kind: "idle" },
-    integrity: "ok",
     recovery: {
       mode: "idle",
       latestReason: null,
@@ -31,14 +29,6 @@ function baseSnapshot(sessionId: string): SessionLifecycleSnapshot {
       latestSourceEventType: null,
       recentTransitions: [],
     },
-    approval: {
-      status: "idle",
-      pendingCount: 0,
-      requestId: null,
-      toolCallId: null,
-      toolName: null,
-      subject: null,
-    },
     tooling: { openToolCalls: [] },
     summary: { kind: "idle", reason: null, detail: null },
   } as SessionLifecycleSnapshot;
@@ -46,14 +36,15 @@ function baseSnapshot(sessionId: string): SessionLifecycleSnapshot {
 
 /**
  * The recovery posture the four-port lifecycle producer surfaces while a turn is
- * suspended mid-recovery (its latest event is a `runtime.suspended` commit): the
- * recovery family is pending and its transition has been entered.
+ * suspended mid-recovery (its latest event is a `runtime.suspended` commit): the live
+ * recovery wait collapses the turn onto a `recovering` execution/summary kind and the
+ * recovery family is pending with its transition entered.
  */
 function recoveryPostureSnapshot(sessionId: string): SessionLifecycleSnapshot {
   const snapshot = baseSnapshot(sessionId);
   return {
     ...snapshot,
-    execution: { kind: "running", detail: "runtime_turn_active" },
+    execution: { kind: "recovering", reason: "compaction_required", detail: "runtime.suspended" },
     recovery: {
       ...snapshot.recovery,
       mode: "observed",
@@ -63,7 +54,27 @@ function recoveryPostureSnapshot(sessionId: string): SessionLifecycleSnapshot {
       latestSourceEventType: "runtime.suspended",
       recentTransitions: ["compaction_required"],
     },
-    summary: { kind: "running", reason: "compaction_required", detail: "runtime.suspended" },
+    summary: { kind: "recovering", reason: "compaction_required", detail: "runtime.suspended" },
+  } as SessionLifecycleSnapshot;
+}
+
+/**
+ * An approval wait keeps the active `running` kind (the four-port tape has no approval
+ * identity to attach) and signals the wait through `recovery.pendingFamily`.
+ */
+function approvalPostureSnapshot(sessionId: string): SessionLifecycleSnapshot {
+  const snapshot = baseSnapshot(sessionId);
+  return {
+    ...snapshot,
+    execution: { kind: "running", detail: "runtime_turn_active" },
+    recovery: {
+      ...snapshot.recovery,
+      mode: "observed",
+      latestStatus: "entered",
+      pendingFamily: "approval",
+      latestSourceEventType: "runtime.suspended",
+    },
+    summary: { kind: "running", reason: null, detail: "runtime.suspended" },
   } as SessionLifecycleSnapshot;
 }
 
@@ -168,6 +179,15 @@ describe("registerProviderRequestReduction", () => {
     expect(resolveReductionPostureBlockReason(lifecycleRuntime(enteredTransition), "s1")).toBe(
       "recovery posture is active",
     );
+  });
+
+  test("an approval wait blocks reduction with an approval-specific reason", () => {
+    // Regression: the approval wait is carried by `recovery.pendingFamily`, so it used to
+    // be caught by the generic non-null-family check and mislabelled "recovery posture is
+    // active". It must now be labelled as an approval wait.
+    expect(
+      resolveReductionPostureBlockReason(lifecycleRuntime(approvalPostureSnapshot("s1")), "s1"),
+    ).toBe("approval wait is active");
   });
 
   test("an idle session does not block reduction", () => {

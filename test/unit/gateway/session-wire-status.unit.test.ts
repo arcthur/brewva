@@ -180,154 +180,67 @@ describe("session wire status seeds", () => {
     });
   });
 
-  test("maps lifecycle snapshot summaries into session status seeds for replay seeding", () => {
+  test("seeds a restarting status from a producer-realistic recovering snapshot", () => {
+    // The four-port producer emits `recovering` on both summary and execution while a
+    // turn is suspended mid-recovery (see four-port-lifecycle.unit.test.ts). That is the
+    // only posture this function seeds from the snapshot; waiting_approval and closed are
+    // reconstructed from wire frames (covered by the history tests above), so the
+    // function returns null for them and lets the frame-history seed win.
     expect(
       deriveSessionStatusSeedFromLifecycleSnapshot({
-        hydration: {
-          status: "ready",
-          issues: [],
-        },
-        execution: {
-          kind: "waiting_approval",
-          requestId: "req-1",
-          toolCallId: asBrewvaToolCallId("tool-1"),
-          toolName: asBrewvaToolName("shell"),
-          reason: "approval_requested",
-          detail: "Run guarded command",
-        },
-        recovery: {
-          mode: "idle",
-          latestReason: null,
-          latestStatus: null,
-          pendingFamily: null,
-          degradedReason: null,
-          duplicateSideEffectSuppressionCount: 0,
-          latestSourceEventId: null,
-          latestSourceEventType: null,
-          recentTransitions: [],
-        },
-        approval: {
-          status: "pending",
-          pendingCount: 1,
-          requestId: "req-1",
-          toolCallId: asBrewvaToolCallId("tool-1"),
-          toolName: asBrewvaToolName("shell"),
-          subject: null,
-        },
-        tooling: {
-          openToolCalls: [],
-        },
-        integrity: {
-          status: "healthy",
-          issues: [],
-        },
-        summary: {
-          kind: "blocked",
-          reason: "approval_requested",
-          detail: "Run guarded command",
-        },
-      }),
-    ).toEqual({
-      state: "waiting_approval",
-      reason: "approval_requested",
-      detail: "Run guarded command",
-    });
-
-    expect(
-      deriveSessionStatusSeedFromLifecycleSnapshot({
-        hydration: {
-          status: "ready",
-          issues: [],
-        },
+        sessionId: SESSION_ID,
         execution: {
           kind: "recovering",
-          reason: "wal_recovery_resume",
-          detail: undefined,
-          family: "recovery",
+          reason: "compaction_required",
+          detail: "runtime.suspended",
         },
         recovery: {
-          mode: "resumable",
-          latestReason: "wal_recovery_resume",
+          mode: "observed",
+          latestReason: "compaction_required",
           latestStatus: "entered",
           pendingFamily: "recovery",
           degradedReason: null,
           duplicateSideEffectSuppressionCount: 0,
-          latestSourceEventId: "revert-1",
-          latestSourceEventType: "reasoning_revert_recorded",
-          recentTransitions: [],
+          latestSourceEventId: "evt-1",
+          latestSourceEventType: "runtime.suspended",
+          recentTransitions: ["compaction_required"],
         },
-        approval: {
-          status: "idle",
-          pendingCount: 0,
-          requestId: null,
-          toolCallId: null,
-          toolName: null,
-          subject: null,
-        },
-        tooling: {
-          openToolCalls: [],
-        },
-        integrity: {
-          status: "healthy",
-          issues: [],
-        },
+        tooling: { openToolCalls: [] },
         summary: {
           kind: "recovering",
-          reason: "wal_recovery_resume",
-          detail: undefined,
+          reason: "compaction_required",
+          detail: "runtime.suspended",
         },
       }),
     ).toEqual({
       state: "restarting",
-      reason: "wal_recovery_resume",
-      detail: undefined,
+      reason: "compaction_required",
+      detail: "runtime.suspended",
     });
+  });
 
+  test("declines to seed a running snapshot so the frame-history seed wins", () => {
+    // Even an approval wait keeps a `running` kind on the snapshot (it carries no tool
+    // identity), so the snapshot must not seed a status — the frame-history path holds
+    // the real waiting_approval seed for approvals.
     expect(
       deriveSessionStatusSeedFromLifecycleSnapshot({
-        hydration: {
-          status: "ready",
-          issues: [],
-        },
-        execution: {
-          kind: "terminated",
-          reason: "host_closed",
-        },
+        sessionId: SESSION_ID,
+        execution: { kind: "running", detail: "runtime_turn_active" },
         recovery: {
           mode: "idle",
           latestReason: null,
-          latestStatus: null,
-          pendingFamily: null,
+          latestStatus: "entered",
+          pendingFamily: "approval",
           degradedReason: null,
           duplicateSideEffectSuppressionCount: 0,
-          latestSourceEventId: null,
-          latestSourceEventType: null,
+          latestSourceEventId: "evt-1",
+          latestSourceEventType: "runtime.suspended",
           recentTransitions: [],
         },
-        approval: {
-          status: "idle",
-          pendingCount: 0,
-          requestId: null,
-          toolCallId: null,
-          toolName: null,
-          subject: null,
-        },
-        tooling: {
-          openToolCalls: [],
-        },
-        integrity: {
-          status: "healthy",
-          issues: [],
-        },
-        summary: {
-          kind: "closed",
-          reason: "host_closed",
-          detail: null,
-        },
+        tooling: { openToolCalls: [] },
+        summary: { kind: "running", reason: null, detail: "runtime.suspended" },
       }),
-    ).toEqual({
-      state: "closed",
-      reason: "host_closed",
-    });
+    ).toBeNull();
   });
 });

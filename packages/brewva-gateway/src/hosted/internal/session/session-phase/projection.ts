@@ -22,46 +22,16 @@ export function deriveSessionPhaseFromLifecycleSnapshot(
   fallbackTurn: number,
 ): RuntimeFactSessionPhaseProjection | null {
   const resolvedTurn = fallbackTurn > 0 ? fallbackTurn : 1;
+  // The four-port snapshot can only source the idle and recovering phases. Tool
+  // execution, approval waits, and termination are reconstructed from wire frames — they
+  // carry the tool identity / requestId / close reason the snapshot does not — so a
+  // `running`/other execution kind falls through to null and the bootstrap uses the
+  // frame-history projection for those postures.
   switch (snapshot.execution.kind) {
     case "idle":
       return {
         phase: { kind: "idle" },
       };
-    case "tool_executing": {
-      const toolCallId = snapshot.execution.toolCallId;
-      const toolName = snapshot.execution.toolName;
-      if (!toolCallId || !toolName) {
-        return null;
-      }
-      const toolExecutionTurn =
-        snapshot.tooling.openToolCalls.find((record) => record.toolCallId === toolCallId)?.turn ??
-        resolvedTurn;
-      return {
-        phase: {
-          kind: "tool_executing",
-          toolCallId,
-          toolName,
-          turn: toolExecutionTurn,
-        },
-      };
-    }
-    case "waiting_approval": {
-      if (!snapshot.execution.toolCallId || !snapshot.execution.toolName) {
-        return null;
-      }
-      return {
-        phase: {
-          kind: "waiting_approval",
-          requestId:
-            snapshot.execution.requestId ?? `transition:${snapshot.execution.reason ?? "approval"}`,
-          toolCallId: snapshot.execution.toolCallId,
-          toolName: snapshot.execution.toolName,
-          turn: resolvedTurn,
-        },
-        reason: snapshot.execution.reason ?? undefined,
-        detail: snapshot.execution.detail ?? undefined,
-      };
-    }
     case "recovering":
       return {
         phase: {
@@ -73,14 +43,6 @@ export function deriveSessionPhaseFromLifecycleSnapshot(
         },
         reason: snapshot.execution.reason ?? undefined,
         detail: snapshot.execution.detail ?? undefined,
-      };
-    case "terminated":
-      return {
-        phase: {
-          kind: "terminated",
-          reason: "host_closed",
-        },
-        reason: snapshot.execution.reason ?? undefined,
       };
     default:
       return null;

@@ -356,38 +356,46 @@ export interface SessionUncleanShutdownDiagnostic extends ProtocolRecord {
   readonly latestEventType?: string;
 }
 
+/**
+ * The status vocabulary the four-port lifecycle producer actually emits for a
+ * session's `execution`/`summary` posture. The four-port cutover reduced the live
+ * postures to running/idle plus a live recovery wait; an approval wait is carried by
+ * `recovery.pendingFamily` (and reconstructed from wire frames) rather than a distinct
+ * kind, because the four-port tape exposes no approval identity to attach. Keeping this
+ * a closed literal union is the load-bearing contract: it lets tsc catch consumers that
+ * switch on values the producer never emits — the divergence that was previously hidden
+ * behind a `{ [key: string]: unknown }` index signature on `summary`/`execution`.
+ */
+export type SessionLifecycleStatusKind = "idle" | "running" | "recovering";
+
 export interface SessionLifecycleSnapshot extends ProtocolRecord {
+  readonly sessionId: string;
   readonly summary: {
-    readonly kind: string;
+    readonly kind: SessionLifecycleStatusKind;
     readonly reason?: string | null;
     readonly detail?: string | null;
-    readonly [key: string]: unknown;
   };
   readonly execution: SessionLifecycleExecutionSnapshot;
   readonly recovery: {
-    readonly pendingFamily?: string | null;
-    readonly latestStatus?: string | null;
-    readonly [key: string]: unknown;
+    readonly mode?: "observed" | "idle";
+    readonly latestReason?: string | null;
+    readonly latestStatus?: "entered" | "recorded" | null;
+    readonly pendingFamily?: "recovery" | "approval" | null;
+    readonly degradedReason?: string | null;
+    readonly duplicateSideEffectSuppressionCount?: number;
+    readonly latestSourceEventId?: string | null;
+    readonly latestSourceEventType?: string | null;
+    readonly recentTransitions?: readonly string[];
   };
   readonly tooling: {
     readonly openToolCalls: readonly OpenToolCallRecord[];
-    readonly [key: string]: unknown;
   };
-  readonly openToolCalls?: readonly OpenToolCallRecord[];
-  readonly openTurns?: readonly OpenTurnRecord[];
-  readonly approvals?: readonly SessionLifecycleApprovalSnapshot[];
-  readonly executions?: readonly SessionLifecycleExecutionSnapshot[];
 }
 
-export interface SessionLifecycleApprovalSnapshot extends ProtocolRecord {}
-
-export interface SessionLifecycleExecutionSnapshot extends ProtocolRecord {
-  readonly kind: string;
-  readonly toolCallId?: string;
-  readonly toolName?: string;
-  readonly requestId?: string;
-  readonly reason?: string;
-  readonly detail?: string;
+export interface SessionLifecycleExecutionSnapshot {
+  readonly kind: SessionLifecycleStatusKind;
+  readonly reason?: string | null;
+  readonly detail?: string | null;
 }
 
 export interface CreateBrewvaSessionOptions {

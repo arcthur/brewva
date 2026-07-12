@@ -109,29 +109,16 @@ export function deriveSessionStatusSeedFromHistory(
 export function deriveSessionStatusSeedFromLifecycleSnapshot(
   snapshot: SessionLifecycleSnapshot,
 ): SessionStatusSeed | null {
-  if (snapshot.summary.kind === "blocked" && snapshot.execution.kind === "waiting_approval") {
-    return {
-      state: "waiting_approval",
-      reason: snapshot.summary.reason ?? undefined,
-      detail: snapshot.summary.detail ?? undefined,
-    };
-  }
-
-  if (
-    (snapshot.summary.kind === "recovering" || snapshot.summary.kind === "degraded") &&
-    snapshot.execution.kind === "recovering"
-  ) {
+  // A live recovery wait is the only posture the four-port snapshot can seed straight to
+  // a status: while suspended it emits `recovering` on both summary and execution. The
+  // waiting_approval and closed states are reconstructed from wire frames (which carry
+  // the approval subject / close reason the snapshot cannot), so this defers to the
+  // frame-history seed for them by returning null rather than inventing a poorer seed.
+  if (snapshot.summary.kind === "recovering" && snapshot.execution.kind === "recovering") {
     return {
       state: "restarting",
       reason: snapshot.summary.reason ?? undefined,
       detail: snapshot.summary.detail ?? undefined,
-    };
-  }
-
-  if (snapshot.summary.kind === "closed") {
-    return {
-      state: "closed",
-      reason: snapshot.summary.reason ?? undefined,
     };
   }
 

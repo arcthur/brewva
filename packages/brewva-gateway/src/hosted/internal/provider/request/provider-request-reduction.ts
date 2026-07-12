@@ -196,18 +196,20 @@ function resolveReductionPostureBlockReason(
   sessionId: string,
 ): string | null {
   const lifecycle = getRuntimeLifecycleSnapshot(runtime, sessionId);
-  if (lifecycle.summary.kind === "degraded" || lifecycle.summary.kind === "recovering") {
-    return "recovery posture is active";
+  // An approval wait is carried by `recovery.pendingFamily`, not by a distinct execution
+  // kind (the four-port snapshot has no approval identity to attach). Labelling it from
+  // the pending family — before the generic recovery check that also matches a non-null
+  // family — is what stops approvals being mislabelled "recovery posture is active".
+  if (lifecycle.recovery.pendingFamily === "approval") {
+    return "approval wait is active";
   }
   if (
-    lifecycle.recovery.pendingFamily !== null ||
-    lifecycle.recovery.latestStatus === "entered" ||
-    lifecycle.execution.kind === "recovering"
+    lifecycle.summary.kind === "recovering" ||
+    lifecycle.execution.kind === "recovering" ||
+    lifecycle.recovery.pendingFamily != null ||
+    lifecycle.recovery.latestStatus === "entered"
   ) {
     return "recovery posture is active";
-  }
-  if (lifecycle.execution.kind === "waiting_approval") {
-    return "approval wait is active";
   }
   return null;
 }
