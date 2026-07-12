@@ -90,20 +90,53 @@ export function requireOperatorApprovalPolicy(fixture: SelfEvalFixture): void {
 }
 
 /**
- * Stage the operator approval config OUTSIDE the model-writable workspace and
- * return its path. Written to a sibling temp dir under the workspace's PARENT,
- * so the run's `cwd` (the workspace) never contains it — the loader's
- * operator-source barrier honors an out-of-workspace policy and strips a
- * workspace-internal one. A model with workspace-write cannot reach here to
- * widen its own envelope. (`local_exec` remains host execution — a separate
- * trust boundary; do not grant it to untrusted models on an unsandboxed host.)
+ * Assemble the operator-delivered launch-authority envelope for a hermetic
+ * self-eval run. It is delivered from OUTSIDE the model-writable workspace (the
+ * operator-source barrier) and pins two axes a model must not be able to widen:
+ *
+ *  - `security.unattendedApproval`: the fixture's operator approval policy — the
+ *    only channel that lets an exec-needing task finish unattended (the Phase-1
+ *    chain). This is PER-FIXTURE: a fixture declares the effect classes it needs.
+ *  - `security.execution.backend: "host"`: pins tool execution to the host. The
+ *    runtime default is `"box"`, which requires the optional `boxlite` backend; on
+ *    a dev host without it every `exec` would be auto-approved by the policy above
+ *    yet fail to execute, and the whole corpus would report `terminal_incomplete`
+ *    — a working harness that only looks broken. Pinning host makes the fixtures
+ *    hermetic on the execution-backend axis the same way the approval policy makes
+ *    them hermetic on the approval axis. This is a HARNESS invariant, not
+ *    per-fixture: no fixture should vary the backend. (`local_exec` runs on the
+ *    host unsandboxed — a trust boundary; do not grant it to untrusted models on an
+ *    unsandboxed host. `security.mode` is left at its `"standard"` default; strict
+ *    mode would require `"box"` and is out of scope for the portable dev-host path.)
  */
-function stageOperatorApprovalConfig(fixture: SelfEvalFixture, parentDir: string): string {
+export function buildOperatorEnvelope(approvalPolicy: Readonly<Record<string, "allow" | "deny">>): {
+  readonly security: {
+    readonly unattendedApproval: Readonly<Record<string, "allow" | "deny">>;
+    readonly execution: { readonly backend: "host" };
+  };
+} {
+  return {
+    security: {
+      unattendedApproval: approvalPolicy,
+      execution: { backend: "host" },
+    },
+  };
+}
+
+/**
+ * Stage the operator envelope ({@link buildOperatorEnvelope}) OUTSIDE the
+ * model-writable workspace and return its path. Written to a sibling temp dir
+ * under the workspace's PARENT, so the run's `cwd` (the workspace) never contains
+ * it — the loader's operator-source barrier honors an out-of-workspace config and
+ * strips a workspace-internal one. A model with workspace-write cannot reach here
+ * to widen its own envelope.
+ */
+function stageOperatorEnvelopeConfig(fixture: SelfEvalFixture, parentDir: string): string {
   const operatorDir = mkdtempSync(join(parentDir, `brewva-self-eval-operator-${fixture.id}-`));
   const configPath = join(operatorDir, "brewva.json");
   writeFileSync(
     configPath,
-    `${JSON.stringify({ security: { unattendedApproval: fixture.operatorApprovalPolicy } }, null, 2)}\n`,
+    `${JSON.stringify(buildOperatorEnvelope(fixture.operatorApprovalPolicy), null, 2)}\n`,
     "utf8",
   );
   return configPath;
@@ -155,7 +188,7 @@ export async function driveSelfEvalRun(input: {
     workspace,
     `Self-eval fixture ${input.fixture.id}`,
   );
-  const operatorConfigPath = stageOperatorApprovalConfig(input.fixture, parentDir);
+  const operatorConfigPath = stageOperatorEnvelopeConfig(input.fixture, parentDir);
   assertOperatorConfigOutsideWorkspace(operatorConfigPath, workspace);
   const { stdout, exitCode, timedOut } = await spawnPrintTurn({
     prompt: input.fixture.prompt,

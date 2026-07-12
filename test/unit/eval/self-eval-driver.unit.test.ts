@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   assertOperatorConfigOutsideWorkspace,
+  buildOperatorEnvelope,
   collectRunOutcome,
 } from "../../eval/self-eval/driver.js";
 import type { SelfEvalOracle } from "../../eval/self-eval/types.js";
@@ -238,5 +239,28 @@ describe("operator config outside-workspace guard (fail loud, not silent)", () =
     // A sibling under the same parent (no repo marker) is outside the workspace
     // root, so the guard accepts it.
     expect(rejected).toBe(false);
+  });
+});
+
+describe("operator envelope assembly (launch-authority config)", () => {
+  test("pins security.execution.backend to host so exec fixtures run without boxlite", () => {
+    // The default backend is "box", which needs boxlite installed. On a dev host
+    // without it, an exec auto-approved by unattendedApproval would still fail to
+    // execute and every exec fixture would report terminal_incomplete — an
+    // all-broken corpus that looks like a broken harness. Pinning host makes the
+    // fixtures hermetic on the execution-backend axis the same way the operator
+    // approval policy makes them hermetic on the approval axis.
+    const envelope = buildOperatorEnvelope({
+      workspace_read: "allow",
+      workspace_write: "allow",
+      local_exec: "allow",
+    });
+    expect(envelope.security.execution.backend).toBe("host");
+  });
+
+  test("carries the operator approval policy verbatim under security.unattendedApproval", () => {
+    const policy = { workspace_read: "allow", local_exec: "allow" } as const;
+    const envelope = buildOperatorEnvelope(policy);
+    expect(envelope.security.unattendedApproval).toEqual(policy);
   });
 });
