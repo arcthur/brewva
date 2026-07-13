@@ -3,10 +3,11 @@
 ## Metadata
 
 - Status: active
-- Kind: RFC (a wording-authority recalibration of the built-in skill corpus,
-  plus two mechanism closures found during the audit — the `AGENTS.md`
-  promotion bypass and the adoption-measurement validity gap). Text-layer
-  first; no new runtime plane.
+- Kind: RFC (mechanism closures first — the `AGENTS.md` promotion bypass and
+  the adoption-measurement honesty gap — then a **piloted** kernel/scaffold
+  recalibration of the skill corpus's wording authority, expanded only on
+  paired-eval evidence). No new runtime plane; one new authored surface (the
+  rule manifest, budgeted below).
 - Owner: skills-catalog / harness-calibration maintainers
 - Last reviewed: `2026-07-13`
 - Depends on / relates to:
@@ -21,21 +22,28 @@ documented invariant that nothing checks is a promise, not a contract.`
     bypass of it) and stays inside (the retirement loop derives reports; rule
     changes land as reviewed code).
   - [RFC: Tool-Surface Subtraction](./rfc-tool-surface-subtraction.md) — the
-    method precedent. That RFC measured designed-vs-exercised for the tool
-    ontology and found near-dead surface; this RFC applies the same
-    designed-vs-exercised discipline one layer up, to the skill corpus's
-    behavioral clauses — which today have no exercise measurement at all.
+    method precedent: designed-vs-exercised measurement, reversible demotion
+    before deletion, and a taught-arm control. This RFC applies the same
+    discipline to the skill corpus's behavioral clauses.
   - [RFC: The Optimizer Last-Hop](./rfc-optimizer-last-hop-fuel-eval-and-parameter-registry.md)
-    — Phase 3 of this RFC lands skill strictness as named calibration-registry
-    parameters and uses `report:self-eval` as the behavior gate for wording
-    changes.
+    — supplies the behavior gate (`report:self-eval` with its per-fixture
+    post-run oracle) and the registry precedent. Note: the current registry
+    carries numeric literals only (`value: number | number[]`); skill-text
+    variants do NOT fit it today, which is one reason per-model profiles are
+    out of this RFC (see Review Log).
+  - External: Anthropic Agent Skills authoring guidance — the description is
+    the activation surface and deserves its own should-trigger /
+    should-not-trigger evaluation; include only what the model does not
+    already know; calibrate constraint strength to task fragility.
 - Promotion target:
-  - `docs/research/decisions/` — an ADR once the phased changes land and the
-    self-eval before/after comparison confirms no completion-rate regression.
+  - `docs/research/decisions/` — an ADR once Phase 0 lands and the pilot
+    paired evaluation reports task-success non-inferiority.
   - `skills/meta/skill-authoring/references/skill-anatomy-v2.md` → v3 (the
-    two-tier rule grammar and the script-input rule).
-  - The skill corpus itself (`skills/core/**`, `skills/domain/**`,
-    `skills/meta/**`) — rewritten clauses per the proposal.
+    kernel/scaffold anatomy, the three-tier rule grammar, the rule manifest,
+    and the validator-authority rule).
+  - The pilot skills first (`skills/core/debugging`, `skills/core/review`,
+    `skills/core/learning-research`), the rest of the corpus only after the
+    pilot gate.
 
 ## Problem Statement
 
@@ -58,28 +66,38 @@ the kernel layer: prescribing the exact reasoning path intelligence must take.
 As models grow stronger, each such prescription flips from guardrail to
 ceiling; a corpus with no retirement loop only accumulates them.
 
+The counter-risk is named with equal weight, because the naive fix is worse
+than the disease: replacing hard rules with "the model declares why it skipped
+them" swaps one failure mode (ossified ritual) for another (self-licensed
+shortcutting with no accountable trace). The proposal therefore never trades a
+hard rule for an unaccountable soft one: every softening step is paired with
+an identity mechanism (rule manifest), an evidence requirement (exceptions
+cite evidence, not eloquence), and a paired-eval gate scored on task success.
+
 ### Scope boundaries
 
 - **In scope:** skill-text wording authority; judgment scripts shipped with
   skills; the learning-promotion channel (`promote.sh`); adoption-measurement
-  semantics (`skill-adoption.ts`); the authoring anatomy that stamps the genre.
+  semantics (`skill-adoption.ts`); the authoring anatomy that stamps the
+  genre; description trigger-quality **measurement** for the pilot skills.
 - **Out of scope:** effect governance (approval, capability, sandbox — those
   constrain the world, not thought, and stay exactly as hard); the skills
-  discovery/selection runtime (its catalog + `discover_skills` escape hatches
-  are adequate; only measurement semantics are touched); deleting the skill
-  corpus or weakening it for weak models (Phase 3 is per-model calibration,
-  not removal).
+  discovery/selection **runtime** (catalog + `discover_skills` escape hatches
+  exist; their trigger precision/recall is unmeasured — this RFC adds the
+  measurement assets, not a retrieval redesign); per-model text-variant
+  materialization (see Review Log — deliberately deferred); deleting the
+  skill corpus or weakening it ahead of evidence.
 
 ## Evidence Base
 
-Three passes, deliberately independent, then cross-checked:
+Four passes, deliberately independent, then cross-checked:
 
 1. **Full-corpus first read.** All 35 SKILL.md bodies, the meta anatomy, the
    shared project rules, key invariants (`planning-posture`,
    `simplicity-check`, goal-loop preflight/outcome), key scripts
    (`hypothesis_tracker.py`, `check_scope_drift.py`), and the verifier ladder.
-2. **Two external expert reviews** (independent LLM analyses) covering the
-   skill text and — uniquely in the second — the runtime chain
+2. **Two external expert reviews of the corpus** (independent LLM analyses)
+   covering the skill text and — uniquely in the second — the runtime chain
    (`skill-selection.ts`, `skill-adoption.ts`, `promote.sh`,
    `promotion-targets.md`, `bento-paradigm.md`).
 3. **Claim-by-claim verification** of both reviews against source. Three
@@ -87,7 +105,14 @@ Three passes, deliberately independent, then cross-checked:
    exemption; self-improve's 2-occurrence gate misread — single incidents route
    to `knowledge-capture`; workflow-gates misread as per-edit rather than
    per-change-set). Every expert-two runtime claim reproduced, and two were
-   worse than claimed (F8, F9 below). Findings below survived verification.
+   worse than claimed (F8, F9 below).
+4. **Two external expert reviews of this RFC's first draft**, again verified
+   against source before absorption — three repo-fact spot-checks all
+   confirmed (the self-eval oracle exists and grades `task_passed` /
+   `task_failed`; `promote.sh` has zero automated callers; the calibration
+   registry carries numeric literals only). Their corrections reshaped the
+   proposal; the Review Log section records what was absorbed and what was
+   pushed back.
 
 ## Findings
 
@@ -118,23 +143,32 @@ model cannot tell which laws are load-bearing safety and which are calibrated
 defaults, so the safe reading is: all absolute. The heuristic ones then block
 strictly better paths (see F6).
 
-### F3 — Judgment scripts consume only self-reported data
+### F3 — Self-reported-data scripts claim authority they cannot earn
 
-The discriminating test for a skill script: **does its input contain any
-information the model does not already possess?** Perception scripts pass —
+The first filter for a skill script: **does its input contain any information
+the model does not already possess?** Perception scripts pass —
 `parse_ci_state.sh` reads real CI, `locate_session_artifacts.sh` reads the
 real filesystem, `verification_record`'s static guards run on real source
-("the grade is earned by the predicate RUNNING"). Judgment scripts fail:
-`hypothesis_tracker.py` validates a JSON array the model itself authored
+("the grade is earned by the predicate RUNNING"). Self-report scripts fail
+it: `hypothesis_tracker.py` validates a JSON array the model itself authored
 (checking only format — a non-empty `evidence` string passes regardless of
 quality — and clamping `max_active` to a hard 3), `check_scope_drift.py`
 adjudicates the semantic question "is this file part of the change?" by path
 prefix (a shared helper outside the target list forces a full
 return-to-plan; an unrelated edit inside a target directory passes), and
 `classify_verifier_verdict.py` computes a three-row decision table from
-model-supplied counts. These defend against unintentional drift — which
-shrinks with model strength — while costing a tool round-trip per phase and
-lending false "checked by a script" authority to unexamined inputs.
+model-supplied counts.
+
+Input novelty is not the whole rule, though (see Review Log): a self-report
+validator can still provide durable state externalization and format
+consistency across turns and agents — value that is real but categorically
+weaker than evidence. The governing principle is therefore an **authority
+ceiling**: a validator over self-reported data may serve as advisory lint,
+but may never be cited as independent evidence, never gate a phase
+transition, and never solely decide a high-impact verdict. Today's scripts
+violate the ceiling (drift verdicts force a return-to-plan; the tracker's
+escalation signal ends investigations), and none of them currently persists
+state — the externalization value is hypothetical until one does.
 
 ### F4 — Count budgets where evidence conditions belong
 
@@ -204,7 +238,12 @@ directly to `AGENTS.md` (`echo "$AGENTS_ENTRY" >> "$AGENTS_FILE"`).
 hold" — including single-occurrence `resolved`, "required actual debugging",
 or the user saying "remember this" (an authorization signal, not a correctness
 signal). No human-approval step, no expiry, no rollback beyond `--dry-run`.
-This contradicts three standing authorities at once: (a) the accepted
+
+Threat model, stated precisely: the script has **zero automated callers**
+(verified by repo-wide grep) — it is an unreviewed promotion **primitive**,
+armed whenever a model holds `local_exec` inside a self-improve flow or an
+operator runs it as documented, not a standing automated writer. Even as a
+primitive it contradicts three standing authorities at once: (a) the accepted
 [advisory-receipt-and-calibration-standard](../decisions/advisory-receipt-and-calibration-standard.md)
 decision — "calibration derives reports … rule changes land as reviewed
 code"; (b) self-improve's own Iron Law `NO SYSTEMIC CLAIM WITHOUT REPEATED
@@ -226,21 +265,33 @@ metric is named adoption, and `analyze:advisory-receipts` feeds
 "offer-vs-adoption" into calibration passes. If subtraction decisions ever
 key on it, Goodhart bites in both directions: skills followed from context
 without a re-open count as un-adopted (kill signal for a working skill);
-skills opened and ignored count as adopted (keep signal for a dead one). The
-corpus's own standard — "a receipt or advisory surface is not shipped until a
-liveness fitness asserts a canonical run emits it" — is not met by the
-conduct level of this metric.
+skills opened and ignored count as adopted (keep signal for a dead one).
+
+The causality gap runs deeper than the name: tool events carry no
+`selectionId`, so even "opened" is a temporal join, and any richer
+"conduct" claim built from artifact presence would still be a correlation
+(the artifact may predate the selection, come from a fallback path, or
+belong to another skill). Honest levels, in order of what the tape can
+support today: `offered` (receipt-backed), `opened` (temporal join),
+`conduct` (**requires** a receipt that binds `selectionId` + rule/skill
+identity + the producer artifact — a runtime change, not a projection
+tweak). The corpus's own standard — "a receipt or advisory surface is not
+shipped until a liveness fitness asserts a canonical run emits it" — is not
+met above `opened` today.
 
 ### F10 — No reality-arbitration rule; accumulation without retirement
 
-Nothing in the corpus says what wins when skill text contradicts observed
+Nothing in the corpus says what happens when skill text contradicts observed
 code/runtime reality. Skills embed decaying facts (tape paths, "#1 hidden
 root cause" experience claims) in invariant register, and learning-research
 even red-flags the thought "The precedent is probably outdated so I'll ignore
 it" — suppressing the correct response to a stale precedent. Combined with
 F1's add-only rationalization tables and F8's open intake, the corpus has an
 entry ratchet and no exit: nothing measures whether a clause ever fires, and
-nothing retires one that stops earning its keep (axiom 3).
+nothing retires one that stops earning its keep (axiom 3). The arbitration
+rule must itself be tiered, though — observation can refute a **descriptive**
+claim, but a **normative** rule being widely violated in code is not evidence
+the rule is wrong (the code may be the regression); see the Review Log.
 
 ### F11 — Minor cluster (verified, lower stakes)
 
@@ -279,136 +330,229 @@ valuable with model strength, not less:
 - **Anti-theater clauses** (repository-analysis Phase 4 "Do not scan more
   files to look thorough").
 
+## Review Log — 2026-07-13 (two external reviews of the first draft)
+
+Both reviewers accepted the diagnosis (F1, F8, F9 called out as strong) and
+converged, independently, on four structural defects in the first draft's
+proposal. All four are absorbed; two pushbacks are recorded at the end.
+
+- **Sequencing contradiction (both reviewers, P0).** The draft softened the
+  shared corpus in its Phase 1, deleted strict-era scripts in Phase 2, and
+  promised weak-model protection via per-model profiles in Phase 3 — but no
+  model-aware variant selection exists, and the calibration registry carries
+  numeric literals only (verified: `CalibrationParameter.value: number |
+number[]`). Softening the single shared text would strip weak-model
+  protection with nothing to restore it from. **Absorbed:** strict material
+  is never deleted — it is _relocated_ into per-skill scaffold references
+  (the lazy-loading layer that already exists), the rewrite runs on 2–3
+  pilot skills only, and per-model profile machinery is deferred out of this
+  RFC entirely (its own design problem: profile identity, unknown-model
+  fallback, variant storage, selection provenance).
+- **Unaccountable deviation (both reviewers, P0).** The draft's
+  deviation-with-disclosure was free text with no stable clause identity —
+  unfired would conflate "not applicable", "complied", and "silently
+  skipped"; the receipts Phase 3 wanted to count could not be counted. This
+  reproduced, inside the proposal, the exact self-report defect F3/F9
+  diagnose. **Absorbed:** a minimal **rule manifest** (stable `ruleId`, tier,
+  exception-evidence class) becomes the precondition for any softening;
+  disclosures must cite a `ruleId` and attach evidence, making them
+  deterministically countable from the tape; the zero-new-authored-surface
+  claim is honestly withdrawn (Surface Budget below carries the debt).
+- **Two tiers are not enough (reviewer one).** Safety/default collapses two
+  different non-safety cases: high-impact cognitive processes (release,
+  complex debugging, cross-package migration) where an exception needs
+  _evidence_, and low-impact heuristics (fanout width, retrieval depth,
+  hypothesis count) where mandatory disclosure would just be new ritual.
+  **Absorbed:** three tiers — `non-negotiable` / `controlled-exception` /
+  `adaptive-heuristic` (see proposal).
+- **Wrong primary gate metric (reviewer one).** "No completion-rate
+  regression + fewer tool round-trips" can reward skipped investigation.
+  Verified: `report:self-eval` already grades `task_passed` / `task_failed`
+  through a deterministic post-run oracle over the final workspace —
+  completion and task success are separate axes by design. **Absorbed:** the
+  gate leads with oracle-graded task-success non-inferiority (strong- and
+  weak-tier fixtures, paired, with repetitions and a declared threshold);
+  round-trip cost is secondary and only counts as improvement at equal task
+  success.
+- **"Reality beats skill text" over-broad (both reviewers).** Observation may
+  refute descriptive claims; a violated normative rule is not thereby wrong —
+  the code may be the regression, and derived projections can lie.
+  **Absorbed:** two-lane arbitration (descriptive → evidence wins + report;
+  normative → conflict escalates, never auto-overridden).
+- **Smaller corrections absorbed:** F8's threat model restated as an
+  unreviewed primitive, not an automated writer (zero callers verified);
+  `conduct_observed` demoted from Phase 0 to a gated design sketch pending
+  `selectionId` receipt binding (F9); the promotion-candidate lane aligned to
+  the existing RDP candidate pattern (`.brewva/knowledge/rdp/` —
+  files-for-human-review) instead of overloading the harness ledger, whose
+  payload is manifest deltas; "text-layer first" framing corrected to
+  mechanism-first; `skills/meta/**` added to the rewrite acceptance scope;
+  the draft's unmeasured "selection escape hatches are adequate" claim
+  replaced with trigger-quality measurement assets for the pilots.
+- **Pushback 1 (partial):** reviewer one defended self-report validators as
+  state externalization against context loss. Real in principle — but none of
+  today's scripts persists state (stdin→stdout), so that value is
+  hypothetical until one does. Resolution: F3 keeps input-novelty as the
+  first filter, adds the authority ceiling as the governing rule, and leaves
+  each script's fate to the scaffold's paired eval instead of decreeing
+  deletion.
+- **Pushback 2 (partial):** reviewer two read the draft's selection-scope
+  exclusion as contradicting the kernel goal (description quality is
+  in-corpus). Resolution: description trigger-quality measurement joins the
+  pilot (should-trigger / should-not-trigger query sets per pilot skill); the
+  selection **runtime** stays out of scope — no retrieval redesign here.
+
 ## Decision Options
 
-- **Option A — Phased recalibration + retirement loop (recommended).** Close
-  the live mechanism gaps first (F8, F9), then recalibrate wording authority
-  (F1–F7), then wire clause-level exercise measurement into the existing
-  calibration substrate so the corpus can shrink with evidence (F10). Detailed
-  below.
-- **Option B — Per-model strictness profiles only.** Leave text as-is; select
-  strictness by model tier at injection time. Rejected as sole path: F8
-  conflicts with an accepted decision today regardless of model tier, F1's
-  meta-clause overrides profile softening at execution time, and dual-text
-  maintenance without a retirement loop doubles the ratchet. Survives as
-  Phase 3's delivery mechanism.
-- **Option C — Measure first, change nothing.** Land only receipts/statistics
-  and re-decide later. Rejected as sole path: F8 is a live bypass with
-  day-one blast radius, and F1/F2 wording costs are already documented from
-  text alone. Survives as Phase 3's evidence discipline.
+- **Option A — Kernel/scaffold split, piloted, paired-eval gated
+  (recommended; absorbed from review).** Close the two mechanism gaps, build
+  rule identity + eval assets, rewrite 2–3 pilot skills into kernel +
+  relocated strict scaffold, expand only on task-success non-inferiority.
+  Detailed below.
+- **Option B — Deterministic fixes and measurement only.** Land Phase 0 and
+  the eval assets; do not touch skill bodies. Lowest risk, preserves the
+  ritual cost indefinitely; kept as the fallback if the pilot gate fails.
+- **Option C — Per-model strictness profiles as the primary mechanism.**
+  Rejected for this RFC: requires profile identity, unknown-model fallback,
+  variant storage, selection provenance, and registry type expansion — a new
+  runtime plane this RFC explicitly does not open. Revisit as its own RFC
+  only if the pilot shows the strict scaffold helps weak tiers while taxing
+  strong tiers.
 
 ## Proposal (Option A)
 
-### Phase 0 — Close the mechanism gaps (smallest blast radius, first)
+### The target anatomy (v3): kernel / scaffold / capability, with a rule manifest
+
+- **Kernel** (SKILL.md body, short and stable): the description (trigger
+  surface), non-derivable domain and project facts, external-effect gates,
+  honesty contracts, handoff expectations, and outcome boundaries. What a
+  strong model needs and cannot know.
+- **Scaffold** (per-skill `references/` files, lazy-loaded as today):
+  observed-deficit countermeasures — step workflows, count budgets,
+  rationalization tables, detailed checklists, and the strict-era material
+  relocated (never deleted) from kernels. Each scaffold names the failure
+  mode it counters and carries an eval contract: it earns default-loading
+  only while the paired eval shows it helps.
+- **Deterministic capability** (`scripts/`): world-reading or
+  world-transforming code, unchanged. Self-report validators live under the
+  authority ceiling (advisory lint at most — never independent evidence,
+  never a phase gate, never sole verdict authority).
+- **Rule manifest** (the one new authored surface): each pilot skill's rules
+  get a stable `ruleId`, a tier, and — for controlled exceptions — the
+  evidence class an exception must cite. Kept in a structured block the
+  anatomy validator can extract, so receipts, calibration, and any future
+  profile all have identity to bind to.
+
+Three tiers replace the draft's two:
+
+1. `non-negotiable` — permissions, external side effects, secrets, persisted
+   formats, honesty-of-claims. No self-exemption; wording stays absolute.
+2. `controlled-exception` — high-impact cognitive process rules (root-cause
+   before a shipped fix, precedent consult before high-risk planning,
+   independent review before release). Exceptions are legal but must cite
+   the `ruleId` plus the manifest's required evidence class (or explicit
+   operator approval) — an exception needs evidence, not eloquence.
+3. `adaptive-heuristic` — fanout width, retrieval depth, hypothesis count,
+   browse step budgets. The model tunes freely; skills state the default and
+   why. No mandatory disclosure (that would be new ritual); exercised values
+   are observable from the tape where they matter.
+
+### Phase 0 — Close the mechanism gaps (deterministic, immediate)
 
 1. **Retire the `AGENTS.md` direct-write path.** `promote.sh agents` stops
-   appending; it emits a reviewable candidate (reuse the harness-candidates
-   lane / `.brewva/learnings/candidates/`) whose landing is a human-reviewed
-   diff. Rewrite `promotion-targets.md` criteria from "any of these" to
-   recurrence-or-reviewed: repeated evidence per self-improve's own Iron Law,
-   or an explicit human instruction that still lands as a reviewed diff.
-   Candidate entries carry scope, provenance (`candidateId`), and an expiry /
+   appending; it emits a promotion candidate for human review, following the
+   existing RDP candidate pattern (files under a candidates directory, never
+   active records — the harness ledger is not reused; its payload is
+   manifest deltas, not learning text). Rewrite `promotion-targets.md`
+   criteria from "any of these" to recurrence-or-reviewed: repeated evidence
+   per self-improve's own Iron Law, or an explicit human instruction that
+   still lands as a reviewed diff. Candidates carry scope, provenance, and a
    re-evaluation trigger.
-2. **Rename adoption → opened; add the conduct level.** The projection and
-   trace line say what they measure. Add a per-skill conduct receipt where
-   cheap and deterministic: skills with producer artifacts count conduct by
-   artifact presence (debugging → `investigation_record` exists; verifier →
-   executed checks recorded; plan → decisions + targets present). Ladder:
-   `offered → opened → conduct_observed`, tape-derived like today's
-   projection. No selector may key subtraction on `opened` alone.
+2. **Rename adoption → opened.** The projection and trace line say what they
+   measure (a temporal join, per F9). No conduct metric ships in this phase:
+   anything beyond `opened` waits for receipt-level causality
+   (`selectionId` bound into producer-artifact receipts — a runtime design
+   of its own, sketched in F9 and deliberately not promised here).
 
-### Phase 1 — Recalibrate wording authority (pure text)
+### Phase 1 — Identity and measurement assets (before any rewrite)
 
-1. **Two meta-rules in skill-authoring, replacing the self-sealing clauses**
-   (delete "Follow the steps, then adapt" and "violating the letter is
-   violating the spirit"):
-   - _Deviation with disclosure._ Any non-safety rule may be deviated from,
-     but the deviation must be declared in the produced artifact — what was
-     skipped, why, and what evidence covers the risk (axiom 5: a deviation is
-     a commitment; it leaves a receipt the tape can count). Safety-tier rules
-     admit no deviation.
-   - _Reality beats skill text._ When skill text contradicts observed
-     code/runtime evidence, evidence wins; the conflict routes to
-     self-improve as a candidate correction. Remove learning-research's
-     red-flag row that suppresses doubting stale precedent.
-2. **Two-tier rule grammar — the tier is the wording, no new fields.**
-   Safety-tier laws (external writes, destructive ops, honesty disclosures,
-   permission truth) keep the absolute register. Default-tier laws are
-   rewritten conditional: debugging becomes `NO SHIPPED PATCH WITHOUT
-CONFIRMED ROOT CAUSE — experimental probes are encouraged: declare the
-hypothesis and expected observation, revert after`; learning-research
-   becomes consult-or-state-why. Anatomy v3 documents the two registers and
-   requires each Iron Law to be classifiable at author time.
-3. **Count budgets → evidence conditions.** Template: ci-iteration's `NO
-RETRY WITHOUT FRESH EVIDENCE FROM THE LAST ATTEMPT`. Numbers survive only
-   as soft self-check triggers ("on the third attempt, ask what is new"),
-   never as stops. Red-flag reset semantics change from "return to Phase 1"
-   to "repair the violated precondition, then continue".
-4. **Debugging specifics** (the most-constrained skill): probe/fix
-   distinction per above; "not reproducible" routes to evidence-limited
-   investigation (instrumentation, containment, tape/history archaeology)
-   instead of Stop; multi-cause explanations are legal ("the smallest set of
-   causes that explains the full signal").
-5. **Cognition topology → conditional.** review/predict-review adopt the
-   repository-analysis form: fan out when slices are independent and the
-   parallel budget buys information; single-context is legal with the
-   stated reason. Forced dissent is replaced by mandatory falsification
-   conditions (already required on `ranked_hypotheses`). Verifier keeps
-   "attempt the strongest adversarial probe"; drops "at least one must be"
-   when the change class makes adversarial probing meaningless.
+1. **Rule manifest for the pilot skills** (`debugging`, `review`,
+   `learning-research`): every Iron Law, red flag, and budget gets a
+   `ruleId` + tier + exception-evidence class. A docs fitness validates
+   manifest shape and tier vocabulary.
+2. **Trigger-quality sets:** should-trigger / should-not-trigger query sets
+   per pilot skill (the description is the activation surface; measure it,
+   don't assume it).
+3. **Eval extension:** pilot-targeted fixtures in `report:self-eval`
+   covering what the generic five cannot — a review task, a stale-precedent
+   trap, a non-reproducible failure, and a deviation-laundering probe (a
+   tempting shortcut where the correct behavior is a cited exception, the
+   wrong one a silent skip). Report gains paired comparison (same fixture,
+   same model, wording variants), repetition counts, and a declared
+   non-inferiority threshold on oracle task-success.
 
-### Phase 2 — Scripts and formulas
+### Phase 2 — Pilot rewrite (2–3 skills, kernel + scaffold)
 
-1. **Retire self-reported-data judgment scripts.** `hypothesis_tracker.py`
-   deleted (its discipline moves to two prose lines: every hypothesis carries
-   an evidence status; falsification cites a concrete observation).
-   `check_scope_drift.py` demoted to informational — it lists files outside
-   the declared prefix set; the model must attribute each to the change
-   intent or return to plan, and the attribution sentence is the receipt.
-   `classify_verifier_verdict.py` and the debate-setup invariant return to
-   prose decision tables. Anatomy v3 adds the script-input rule: **a skill
-   script must consume information the model does not already possess**
-   (world-reading scripts stay; self-report validators do not).
-2. **Formulas → anchors.** planning-posture and simplicity-check outputs
-   become stated defaults the model may override with a one-line diff reason
-   ("formula says complex — 20 mechanical renames, treating as moderate
-   because …"). Downstream triggers (learning-research, prep) key on the
-   final posture judgment, not the raw formula output, dissolving the F5
-   cascade.
+1. Rewrite the pilot skills into the v3 anatomy: kernel keeps facts, gates,
+   and honesty contracts; strict workflows/budgets/tables relocate into
+   scaffold references (loaded by default initially — the eval decides
+   whether default-loading survives); rules annotated per the manifest.
+2. Apply the wording corrections inside the pilots: meta-clauses replaced
+   (delete "Follow the steps, then adapt" and letter=spirit; add
+   deviation-with-evidence for `controlled-exception` rules and the two-lane
+   reality-arbitration rule — descriptive claims yield to evidence,
+   normative conflicts escalate); count budgets → evidence conditions
+   (ci-iteration's Iron Law as the template); debugging gains the probe/fix
+   distinction, the evidence-limited path for non-reproducible failures, and
+   multi-cause explanations; "return to Phase 1" → "repair the violated
+   precondition, then continue"; review/predict-review fanout and dissent
+   become conditional on evidence independence, with falsification
+   conditions replacing manufactured disagreement.
+3. `skills/meta/skill-authoring/**` updates land here too (anatomy v3, the
+   authority ceiling, the three-tier grammar) — the meta layer is in the
+   acceptance scope, not an afterthought.
 
-### Phase 3 — Retirement loop + per-model strictness (gated on 0–2)
+### Phase 3 — Gate, expand, and only then retire
 
-1. **Clause-level exercise receipts.** Deviation declarations, red-flag
-   triggers, and rationalization-row hits become countable tape signals;
-   `calibration-report` gains a skill-clause section with a zero-firing
-   watchlist ("unexercised, not unnecessary" wording applies). Consistent
-   with the advisory-receipt decision: the report proposes retirement; the
-   retirement itself lands as reviewed skill-text diffs.
-2. **Strictness as calibration parameters.** Count-budget values, script
-   enforcement, and formula authority become named parameters in the
-   optimizer-last-hop calibration registry with per-model profiles: weak-tier
-   models keep hard budgets and tracker-style scaffolds; strong-tier models
-   get the evidence-condition register. Values change only as reviewed code.
-3. **Provenance on rationalization rows.** Each row gains observed-model and
-   date; rows unfired across N calibration windows on current-tier models
-   enter the retirement watchlist.
+1. **The pilot gate:** three-arm paired eval per pilot skill — no-skill /
+   kernel-only / kernel+scaffold — on strong- and weak-tier fixtures.
+   Primary metric: oracle task-success non-inferiority (declared threshold,
+   paired runs, repetitions reported). Secondary: safety/honesty failure
+   count (never worse), then round-trip cost. A weak-tier regression on
+   kernel-only keeps the scaffold default-loaded; a strong-tier tax from the
+   scaffold demotes it to on-demand for that skill.
+2. **Corpus expansion** only after the gate passes, skill by skill, same
+   mechanics.
+3. **Retirement semantics** (replacing the draft's zero-firing watchlist):
+   a clause is retirement-eligible only with (a) an eligible-opportunity
+   denominator (fixtures or tape situations where it _could_ have fired),
+   (b) behavior receipts distinguishing complied / excepted-with-evidence /
+   not-applicable, and (c) an outcome delta at equal task success. Zero
+   observations alone are never deletion evidence ("unexercised, not
+   unnecessary"). Retirement lands as reviewed skill-text diffs via the
+   calibration report's proposal lane, per the accepted standard.
 
 ## Surface Budget
 
-- Required authored fields: **0 → 0**. Optional authored fields: **0 → 0**
-  (the rule tier is expressed by wording register, not frontmatter).
-- Author-facing concepts: **net negative** (two meta anti-deviation clauses
-  deleted; one add-only-table rule deleted; `hypothesis_tracker.py` and the
-  debate-setup invariant retired; `promote.sh`'s `agents` branch removed).
-  New concepts: deviation-with-disclosure, the two-tier register, the
-  script-input rule — three added against six retired.
-- Automated writers of `AGENTS.md`: **1 → 0**.
-- Config keys: **0 new** (Phase 3 parameters land in the already-proposed
-  calibration registry mechanism, gated on that RFC).
-- Inspect surfaces: **0 new** (Phase 3 receipts surface inside the existing
+- Required authored fields: **0 → 0**.
+- Optional authored fields / author-facing concepts: **+1** — the rule
+  manifest block (`ruleId`, tier, exception-evidence class) on pilot skills,
+  extending to the corpus only with the expansion. This is a real positive
+  delta, accepted because clause-level accounting is impossible without
+  identity (the first draft's "the tier is the wording" claimed zero surface
+  and was rightly rejected in review as unaccountable). Debt owner:
+  skills-catalog maintainers; re-evaluation trigger: the Phase 3 pilot gate —
+  if the manifest's receipts are not consulted by then, the manifest is
+  itself retirement-eligible.
+- Offsetting retirements: two meta anti-deviation clauses deleted; the
+  add-only rationalization-table rule deleted; `promote.sh`'s `agents`
+  branch removed; self-report scripts stripped of gate authority (three
+  fewer mandatory tool round-trips on the pilot paths).
+- Unreviewed write primitives targeting `AGENTS.md`: **1 → 0**.
+- Config keys: **0 new**. Runtime planes: **0 new** (profiles deferred; the
+  conduct receipt explicitly not promised here).
+- Inspect surfaces: **0 new** (receipts surface inside the existing
   calibration report).
-- Routing / control-plane decision points: **0 new** (receipts are
-  observability; nothing gates on them).
 
 ## Source Anchors
 
@@ -430,10 +574,14 @@ RETRY WITHOUT FRESH EVIDENCE FROM THE LAST ATTEMPT`. Numbers survive only
   boundary claim) (F8).
 - Adoption semantics:
   `packages/brewva-gateway/src/hosted/internal/session/skills/skill-adoption.ts`
-  (read-class match = adopted),
+  (read-class match = adopted; no `selectionId` on tool events),
   `packages/brewva-gateway/src/hosted/internal/session/skills/skill-selection.ts`
-  (catalog + shortlist escape hatches — the reason selection itself is out of
-  scope) (F9).
+  (catalog + shortlist escape hatches) (F9).
+- Behavior gate: `test/eval/self-eval/oracle.ts`,
+  `test/eval/self-eval/types.ts` (`task_passed` / `task_failed` /
+  `terminal_incomplete`; completion and task success are separate axes).
+- Registry limits: `packages/brewva-runtime/src/governance/calibration-registry.ts`
+  (`value: number | readonly number[]` — numeric literals only).
 - Appreciating assets: `skills/core/verifier/references/verification-ladder.md`,
   `skills/project/shared/critical-rules.md`.
 - Minor cluster: `skills/domain/goal-loop/invariants/preflight.md`
@@ -443,76 +591,76 @@ RETRY WITHOUT FRESH EVIDENCE FROM THE LAST ATTEMPT`. Numbers survive only
 
 ## Validation Signals
 
-- **Confirming (verified in this audit):** every finding above is anchored to
-  quoted source; F8's three-way contradiction and F9's opened-vs-followed gap
-  reproduce from code; two independent expert reviews converged on F2, F4,
-  F6, F7 without coordination.
+- **Confirming (verified in this audit and its reviews):** every finding is
+  anchored to quoted source; F8's three-way contradiction, F9's
+  opened-vs-followed gap, the oracle's existence, the registry's
+  numeric-only shape, and promote.sh's zero callers all reproduce from code;
+  two corpus reviews converged on F2/F4/F6/F7 and two RFC reviews converged
+  on the four structural defects — all without coordination.
 - **Falsifying / still owed:**
-  - _Weak models may genuinely need the hard register._ This is why Phase 3
-    is per-model calibration, not deletion — and why Phase 1 rewrites keep
-    the strict form recoverable as a profile. The falsifier to watch:
-    self-eval completion-rate regression on weak-tier fixtures after Phase 1
-    wording lands.
-  - _Deviation-with-disclosure may be abused as laundered shortcutting._
-    The deviation receipt exists precisely to measure this: a rising
-    deviation rate with flat-or-negative outcome quality on the self-eval
-    fixtures falsifies the mechanism and argues for re-hardening specific
-    clauses.
-  - _This RFC's evidence is textual/code analysis, not behavioral A/B._ No
-    measurement exists of how often each clause fires, blocks, or mis-blocks
-    — that absence is itself finding F10, and Phase 0/3 receipts are the
-    remedy. Before/after `report:self-eval` runs on the frozen fixtures are
-    the behavior gate for every wording phase.
-  - Expert-review base rate: 3 of ~21 external claims failed verification —
-    the findings here were re-anchored to source, but a re-read may still
-    find over-statement; treat each Phase 1 rewrite as its own review unit.
+  - _Weak models may genuinely need the strict scaffold._ The pilot's
+    weak-tier arm answers this before anything expands; a kernel-only
+    regression keeps the scaffold default-loaded (and would validate keeping
+    strict material relocatable rather than deleted).
+  - _Deviation-with-evidence may still be laundered._ The
+    deviation-laundering fixture probes exactly this; a cited `ruleId` with
+    fabricated evidence is measurable against the oracle (the task fails, or
+    the honesty check does — either way it lands in the paired report).
+  - _The rule manifest may be dead weight._ Its own re-evaluation trigger is
+    declared in the Surface Budget: unconsulted receipts by the pilot gate
+    make the manifest retirement-eligible.
+  - _The pilot may be unrepresentative._ Three skills, chosen for maximum
+    constraint density, not randomness; expansion stays skill-by-skill with
+    the same gate rather than a bulk rewrite.
 
 ## Promotion Criteria And Destination Docs
 
 - Phase 0 landed: `promote.sh` has no `AGENTS.md` write path; promotion
-  criteria text requires recurrence-or-reviewed; adoption projection and
-  trace line renamed `opened` with the conduct ladder recorded on tape.
-- Phase 1 landed across `skills/core/**` and `skills/domain/**`: two-tier
-  register applied, meta-clauses replaced, count budgets rewritten as
-  evidence conditions, debugging probe/fix distinction in place.
-- Phase 2 landed: retired scripts removed from skill frontmatter and disk;
-  anatomy v3 published with the script-input rule; formula invariants carry
-  anchor semantics.
-- Behavior gate: `report:self-eval` before/after comparison on the frozen
-  fixtures shows no completion-rate regression (weak-tier profile) and
-  reduced ritual overhead (fewer tool round-trips per fixture) on the
-  default profile.
-- Phase 3 (gated): calibration report carries the skill-clause section for
-  two consecutive windows; strictness parameters registered.
+  criteria text requires recurrence-or-reviewed; the adoption projection and
+  trace line say `opened`.
+- Phase 1 landed: rule manifests + docs fitness on the three pilots;
+  trigger-quality sets recorded; self-eval extended with the pilot fixtures,
+  paired comparison, and the declared non-inferiority threshold.
+- Phase 2 landed: pilot skills rewritten to v3 anatomy (kernel + relocated
+  scaffold, three-tier manifest); `skills/meta/skill-authoring/**` carries
+  anatomy v3, the authority ceiling, and the arbitration rule.
+- Phase 3 gate reported: three-arm paired eval on strong- and weak-tier
+  fixtures with oracle task-success non-inferior, safety/honesty failures
+  not worse, and round-trip deltas reported alongside.
 - On acceptance: ADR in `docs/research/decisions/`; anatomy v3 replaces v2;
-  this note archives.
+  corpus expansion proceeds under the same gate; this note archives.
 
 ## Non-Goals
 
 - No change to effect governance: approval, capability, sandbox, and
-  destructive-op gates stay exactly as hard. Deviation-with-disclosure never
-  applies to safety-tier rules and is not an approval bypass.
-- No deletion of the skill corpus, and no weakening of the weak-model
-  profile before Phase 3 measurement exists.
+  destructive-op gates stay exactly as hard. Exceptions never apply to
+  `non-negotiable` rules and are not an approval bypass.
+- No bulk corpus rewrite ahead of the pilot gate, and no deletion of strict
+  material — relocation into scaffolds only.
+- No per-model profile runtime in this RFC (profile identity, fallback,
+  variant storage, and provenance are a separate design; the registry's
+  numeric-only shape is a hard boundary today).
+- No conduct-level adoption metric before receipt-level causality exists.
 - No optimizer: retirement stays report-then-reviewed-code per the accepted
   calibration standard.
+- No retrieval/selection runtime redesign (measurement assets only).
 - No rewrite of reference knowledge content (bento-paradigm is re-labeled
   opt-in recipe with `when_not_to_use`, not rewritten).
-- No selection/retrieval overhaul (catalog + `discover_skills` already
-  provide the escape hatches; only F9's measurement semantics change).
 
 ## Honest Limitations
 
 Textual and code-level evidence only; zero behavioral A/B backing any
-individual clause judgment. All three analysis passes (including the
-first-hand read) are LLM analyses — the verified expert error rate in this
-very audit (3/21) is the standing reminder to re-anchor every claim before
-acting on it. The deviation mechanism's behavior on weak models is unknown
-until Phase 3 profiles exist; until then Phase 1 wording ships with the
-self-eval gate as the tripwire.
+individual clause judgment until Phase 1's eval assets exist — which is why
+nothing irreversible happens before Phase 3's gate, and why Phase 0 contains
+only deterministic mechanism fixes. All analysis passes, including the
+first-hand read and both review rounds, are LLM analyses; the verified error
+rates (3/21 corpus-review claims, four structural defects in this RFC's own
+first draft) are the standing reminder that each rewrite lands as its own
+reviewed unit. The deviation mechanism's behavior on weak models is unknown
+until the pilot runs it; the strict scaffold stays default-loaded until then.
 
 ## Under The Line
 
-`Govern effects, not thought paths — in the skill text too. Make every hard
-rule a safety boundary, every default a calibrated anchor, and every rule
-earn its keep on the tape.`
+`Govern effects, not thought paths — in the skill text too. Every hard rule a
+safety boundary, every default a calibrated anchor, every exception carrying
+evidence instead of eloquence — and every rule earning its keep on the tape.`
