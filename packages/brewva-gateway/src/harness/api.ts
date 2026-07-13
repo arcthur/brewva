@@ -37,6 +37,8 @@ export {
   appendHarnessCandidateLifecycleRecord,
   readHarnessCandidateLifecycleRecords,
   resolveHarnessCandidateLedgerPath,
+  verifyHarnessCandidateLedgerIntegrity,
+  type HarnessCandidateLedgerIntegrity,
 } from "./internal/candidate-ledger.js";
 export {
   countProposalBacklog,

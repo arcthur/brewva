@@ -17,7 +17,9 @@ import {
 } from "node:fs";
 import { dirname, join, resolve, sep } from "node:path";
 import { scanAppendOnly } from "@brewva/brewva-std/node/fs";
+import { isRecord } from "@brewva/brewva-std/unknown";
 import {
+  HARNESS_CANDIDATE_LIFECYCLE_SCHEMA,
   isHarnessCandidateLifecycleRecord,
   type HarnessCandidateLifecycleRecord,
 } from "@brewva/brewva-vocabulary/harness";
@@ -247,4 +249,53 @@ export function readHarnessCandidateLifecycleRecords(
     }
   });
   return records;
+}
+
+export interface HarnessCandidateLedgerIntegrity {
+  /** True when the ledger holds no genuinely-corrupt (unparseable) interior line. */
+  readonly ok: boolean;
+  /** `path:line:invalid_json` for each corrupt interior line; empty when clean. */
+  readonly issues: readonly string[];
+}
+
+/**
+ * Read-only durability check of the candidate ledger, the ledger dimension of
+ * the unified session integrity aggregation (RFC WS1). It never repairs —
+ * torn-tail repair belongs to the owning writer's lock, not to a read. It
+ * classifies through the SAME `scanAppendOnly` grammar the reader uses, so the
+ * two cannot drift, and it degrades only on genuine byte-level corruption:
+ *
+ * - A crash-torn final line is tolerated: `scanAppendOnly` never delivers it,
+ *   and the owner's next append self-heals it (matching the WAL and tape scans,
+ *   which also treat a torn tail as recoverable rather than damage).
+ * - A well-formed-but-unknown-schema interior line is tolerated: the on-disk
+ *   reader already skips foreign/newer-writer rows rather than treating them as
+ *   damage, so degrading on one would be a false positive against forward-compat.
+ *   A row claiming the current schema must nevertheless pass the current record
+ *   validator; otherwise the durable audit chain has dropped a malformed receipt.
+ * - An interior line that does not parse as JSON is real corruption — a broken
+ *   chain — and is reported.
+ */
+export function verifyHarnessCandidateLedgerIntegrity(
+  workspaceRoot: string,
+): HarnessCandidateLedgerIntegrity {
+  const path = resolveHarnessCandidateLedgerPath(workspaceRoot);
+  const issues: string[] = [];
+  scanAppendOnly(path, (line) => {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(line.text);
+    } catch {
+      issues.push(`${path}:${line.lineNumber}:invalid_json`);
+      return;
+    }
+    if (
+      isRecord(parsed) &&
+      parsed.schema === HARNESS_CANDIDATE_LIFECYCLE_SCHEMA &&
+      !isHarnessCandidateLifecycleRecord(parsed)
+    ) {
+      issues.push(`${path}:${line.lineNumber}:invalid_schema`);
+    }
+  });
+  return { ok: issues.length === 0, issues };
 }

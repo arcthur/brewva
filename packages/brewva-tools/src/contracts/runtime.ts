@@ -195,7 +195,7 @@ export type RuntimeSessionHydration =
   | RuntimeSessionHydrationProven
   | RuntimeSessionHydrationUnavailable;
 
-/** Integrity confirmed against tape, WAL, and artifacts. Evidence-bearing. */
+/** Integrity confirmed against every durability dimension. Evidence-bearing. */
 export type RuntimeSessionIntegrityProven = {
   readonly status: "healthy" | "degraded";
   readonly cursor: RuntimeSessionEvidenceCursor;
@@ -214,9 +214,23 @@ export type RuntimeSessionIntegrityUnproven = {
   readonly issues: readonly RuntimeSessionIssue[];
 };
 
+/**
+ * A non-tape durability dimension conclusively reported damage, but the tape
+ * forensic scan itself could not produce its evidence cursor. The damage must
+ * not be hidden as inconclusive merely because the independent tape check is
+ * unavailable.
+ */
+export type RuntimeSessionIntegrityDegradedWithoutTapeEvidence = {
+  readonly status: "degraded";
+  readonly cursor: null;
+  readonly reason: string;
+  readonly issues: readonly RuntimeSessionIssue[];
+};
+
 export type RuntimeSessionIntegrity =
   | RuntimeSessionIntegrityProven
-  | RuntimeSessionIntegrityUnproven;
+  | RuntimeSessionIntegrityUnproven
+  | RuntimeSessionIntegrityDegradedWithoutTapeEvidence;
 
 // World-snapshot lane availability for a rewind checkpoint, projected honestly:
 // `available` (manifest + every blob verified), `missing_artifacts` (captured

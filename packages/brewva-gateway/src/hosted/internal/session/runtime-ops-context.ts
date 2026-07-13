@@ -30,6 +30,7 @@ import {
   type BrewvaReplaySession,
   type SessionCostSummary,
 } from "@brewva/brewva-vocabulary/session";
+import { buildDurabilityProbes } from "./runtime-ops-builders/durability-integrity.js";
 import {
   createHostedProjections,
   type HostedProjections,
@@ -453,7 +454,25 @@ export function createHostedRuntimeOpsContext(options: {
           sessionId,
         )
       : emptyTapeForensicScan(sessionId);
-  const projections = createHostedProjections({ listEvents, scanTape, clock });
+  // Durability integrity folds the recovery WAL, candidate ledger, and world
+  // artifacts alongside the tape scan (RFC WS1). The probes read the same
+  // workspace-relative stores `brewva inspect` reads, read-only.
+  const durability = buildDurabilityProbes({
+    workspaceRoot: options.runtime.identity.workspaceRoot,
+    tapeEnabled: options.runtime.config.tape.enabled,
+    listEvents,
+    recoveryWal: options.runtime.config.infrastructure.recoveryWal,
+    worlds: options.runtime.config.worlds,
+  });
+  const projections = createHostedProjections({
+    listEvents,
+    scanTape,
+    clock,
+    tapeEnabled: durability.tapeEnabled,
+    walIssues: durability.walIssues,
+    ledgerIssues: durability.ledgerIssues,
+    artifactIssues: durability.artifactIssues,
+  });
 
   return {
     runtime: options.runtime,

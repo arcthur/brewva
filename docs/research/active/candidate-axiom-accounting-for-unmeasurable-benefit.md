@@ -148,7 +148,8 @@ account/grade/calibrate method would apply — surfaced here the way
 - **Recovery**: did a recovery actually restore correct state, graded by observed
   post-recovery behavior, not asserted on completion.
 - **Cost governance**: the same measured-vs-estimated honesty the savings ledger
-  needs (`getIntegrity()` is still a stub) — denominated, graded, calibrated.
+  needs; `getIntegrity()` now provides durability aggregation, not benefit evidence —
+  denominated, graded, calibrated.
 - **Skill effectiveness**: an injected skill claims a benefit; was it adopted?
   (The skill-selection trace is the instrument; the loop is unbuilt.)
 

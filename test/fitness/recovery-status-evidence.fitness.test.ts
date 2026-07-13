@@ -11,8 +11,10 @@ const repoRoot = resolve(import.meta.dir, "../..");
 // Standing fitness #1 (RFC "Prefer Standing Fitness Over One-Time Gates"):
 // no evidence-bearing status is returned without evidence refs and a source cursor.
 // The invariant is enforced at the type level by a discriminated union — an
-// evidence-bearing status (`ready`/`degraded`/`cold`/`healthy`) must carry a cursor;
-// a non-claim (`unavailable`/`inconclusive`) must carry a reason and a null cursor.
+// evidence-bearing status (`ready`/`cold`/`healthy`) must carry a cursor. A
+// `degraded` integrity result can instead carry independently verified WAL,
+// ledger, or artifact damage when the tape cursor itself is unavailable; in that
+// case it must be reason-bearing with a null cursor.
 // This fitness blocks the two ways that guarantee can rot: an `as` cast that
 // fabricates a status, and a future loosening of the union.
 
@@ -57,7 +59,7 @@ describe("recovery status evidence invariant (RFC WS0 standing fitness)", () => 
     expect(integrity.reason.length).toBeGreaterThan(0);
   });
 
-  test("the union makes an evidence-bearing status without a cursor unrepresentable", () => {
+  test("the union makes healthy integrity without a tape cursor unrepresentable", () => {
     // @ts-expect-error a `ready` hydration must carry a cursor; this must not compile.
     const illegalHydration: RuntimeSessionHydration = {
       status: "ready",
@@ -76,6 +78,17 @@ describe("recovery status evidence invariant (RFC WS0 standing fitness)", () => 
     void illegalHydration;
     void illegalIntegrity;
     expect(true).toBe(true);
+  });
+
+  test("independent confirmed damage remains representable when tape evidence is unavailable", () => {
+    const integrity: RuntimeSessionIntegrity = {
+      status: "degraded",
+      cursor: null,
+      reason: "event tape integrity check did not complete: unreadable",
+      issues: [{ domain: "wal", severity: "error", reason: "quarantined row" }],
+    };
+    expect(integrity.status).toBe("degraded");
+    expect(integrity.cursor).toBeNull();
   });
 
   test("no source bypasses the discriminated union with an `as` cast", () => {

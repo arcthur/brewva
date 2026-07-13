@@ -30,7 +30,8 @@ The hosted-adapter contract is exported as `SessionLifecycleSnapshot` (keyed by
 - `recovery`
 - `approval`
 - `tooling`
-- `integrity` (currently a stub literal; see the integrity note under Recovery Path)
+- `integrity` (a snapshot-field stub literal, distinct from the fully projected
+  `getIntegrity(...)` operator read under Recovery Path)
 - `summary`
 
 This snapshot is:
@@ -424,11 +425,13 @@ session in permanent degradation.
   repaired; Recovery WAL compaction preserves the latest ingress watermark through a
   metadata-only marker needed for polling recovery.
 - `HostedRuntimeAdapterPort.ops.session.lifecycle.getIntegrity(sessionId)` is the
-  intended canonical operator-facing health read model: its contract is to
-  aggregate `event_tape`, `recovery_wal`, and `artifact` durability issues into
-  one status surface. That aggregation is not yet implemented — the hosted
-  adapter returns a healthy stub, so the `brewva inspect` `integrity` block also
-  stays empty. Until it lands, durability health is read from the live signals:
-  malformed event-tape rows degrade hydration with explicit `event_tape` issues,
-  the Recovery WAL store guards itself fail-closed (surfaced through the inspect
-  `recoveryWal` block), and the ledger chain is verified independently.
+  canonical operator-facing health read model: it aggregates every durability
+  dimension into one status surface. It folds `event_tape` (a forensic tape scan),
+  `recovery_wal` (the store's fail-closed quarantine guard, the same signal the
+  inspect `recoveryWal` block reads), `ledger` (candidate ledger chain
+  verification), and `artifact` (tape-referenced world manifests and blobs hash
+  verified). Any
+  unhealthy dimension yields `degraded` with the offending dimension's issues
+  surfaced in the `brewva inspect` `integrity` block; `healthy` requires all
+  dimensions verified clean; and `inconclusive` is reserved for an incomplete
+  check (for example, the event tape is disabled or a durability store is unreadable).

@@ -809,30 +809,66 @@ export function createWorkspaceWorldStore(options: WorldStoreOptions): Workspace
     return hex !== undefined && existsSync(manifestPath(hex));
   }
 
-  function verifyWorld(worldId: string): WorldVerification {
-    const manifest = readManifest(worldId);
-    if (!manifest) {
-      return { worldId, present: false, fileCount: 0, missingBlobCount: 0 };
-    }
+  function verifyWorlds(worldIds: readonly string[]): readonly WorldVerification[] {
     const presence = readBlobPresence();
-    const checked = new Set<string>();
-    let missingBlobCount = 0;
-    for (const entry of manifest.files) {
-      const hex = toHex(entry.blob);
-      if (!hex || checked.has(hex)) {
-        continue;
+    const blobIntegrity = new Map<string, "valid" | "missing" | "corrupt">();
+    const verifyBlob = (hex: string): "valid" | "missing" | "corrupt" => {
+      const cached = blobIntegrity.get(hex);
+      if (cached) {
+        return cached;
       }
-      checked.add(hex);
       if (!presence.has(hex)) {
-        missingBlobCount += 1;
+        blobIntegrity.set(hex, "missing");
+        return "missing";
       }
-    }
-    return {
-      worldId,
-      present: missingBlobCount === 0,
-      fileCount: manifest.files.length,
-      missingBlobCount,
+      try {
+        const result = sha256HexOfFileSync(blobPath(hex)) === hex ? "valid" : "corrupt";
+        blobIntegrity.set(hex, result);
+        return result;
+      } catch {
+        blobIntegrity.set(hex, "corrupt");
+        return "corrupt";
+      }
     };
+
+    return worldIds.map((worldId): WorldVerification => {
+      const manifest = readManifest(worldId);
+      if (!manifest) {
+        return { worldId, present: false, fileCount: 0, missingBlobCount: 0 };
+      }
+      const expectedManifestHex = toHex(worldId);
+      const manifestHashMismatch =
+        expectedManifestHex === undefined ||
+        sha256Hex(stableJsonStringify(manifest)) !== expectedManifestHex;
+      const checked = new Set<string>();
+      let missingBlobCount = 0;
+      let corruptBlobCount = 0;
+      for (const entry of manifest.files) {
+        const hex = toHex(entry.blob);
+        if (!hex || checked.has(hex)) {
+          continue;
+        }
+        checked.add(hex);
+        const integrity = verifyBlob(hex);
+        if (integrity === "missing") {
+          missingBlobCount += 1;
+        } else if (integrity === "corrupt") {
+          corruptBlobCount += 1;
+        }
+      }
+      return {
+        worldId,
+        present: !manifestHashMismatch && missingBlobCount === 0 && corruptBlobCount === 0,
+        fileCount: manifest.files.length,
+        missingBlobCount,
+        ...(corruptBlobCount > 0 ? { corruptBlobCount } : {}),
+        ...(manifestHashMismatch ? { manifestHashMismatch: true } : {}),
+      };
+    });
+  }
+
+  function verifyWorld(worldId: string): WorldVerification {
+    return verifyWorlds([worldId])[0]!;
   }
 
   function tryCreateGcLock(): boolean {
@@ -1038,6 +1074,7 @@ export function createWorkspaceWorldStore(options: WorldStoreOptions): Workspace
     readManifest,
     hasWorld,
     verifyWorld,
+    verifyWorlds,
     listRefs: (sessionId) => readRefsState(sessionId).refs,
     sweep,
   };

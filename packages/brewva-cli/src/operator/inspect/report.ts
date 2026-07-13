@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import {
   RECOVERABLE_WAL_STATUSES,
+  resolveRecoveryWalConfigForSessionBootstrap,
   type RecoveryWalStoredRecord,
   scanRecoveryWalForensics,
 } from "@brewva/brewva-gateway/daemon";
@@ -798,11 +799,11 @@ function buildInspectReport(
     bootstrapArtifactRoots.projectionDir.trim().length > 0
       ? bootstrapArtifactRoots.projectionDir
       : runtime.config.projection.dir;
-  const effectiveRecoveryWalDir =
-    typeof bootstrapArtifactRoots?.recoveryWalDir === "string" &&
-    bootstrapArtifactRoots.recoveryWalDir.trim().length > 0
-      ? bootstrapArtifactRoots.recoveryWalDir
-      : runtime.config.infrastructure.recoveryWal.dir;
+  const recoveryWalConfig = resolveRecoveryWalConfigForSessionBootstrap(
+    runtime.config.infrastructure.recoveryWal,
+    bootstrap,
+  );
+  const effectiveRecoveryWalDir = recoveryWalConfig.dir;
   const verification = buildVerificationInspection(inspect, sessionId);
   const reviewDebt = buildTapeReviewDebt(events);
   // Re-derive the CURRENT fitness over the whole tape (shared with run-report):
@@ -838,11 +839,6 @@ function buildInspectReport(
     sanitizeSessionIdForPath(sessionId),
   );
   const patchHistoryPath = join(snapshotSessionDir, PATCH_HISTORY_FILE);
-  const recoveryWalConfig =
-    typeof effectiveRecoveryWalDir === "string" &&
-    effectiveRecoveryWalDir !== runtime.config.infrastructure.recoveryWal.dir
-      ? { ...runtime.config.infrastructure.recoveryWal, dir: effectiveRecoveryWalDir }
-      : runtime.config.infrastructure.recoveryWal;
   // Read-only forensic scan: surfacing the WAL's pending and quarantined rows
   // must not mutate the file. Repairing a torn tail belongs to the owning
   // daemon's strict load, not to a read-only `brewva inspect`.

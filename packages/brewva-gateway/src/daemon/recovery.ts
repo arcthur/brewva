@@ -71,6 +71,27 @@ export interface RecoveryWalConfig extends WalRecord {
   readonly maxRetries?: number;
 }
 
+/**
+ * A session's bootstrap receipt pins the recovery-WAL directory that its
+ * operator inspect surface must keep reading after a config migration. The
+ * scanner configuration otherwise stays current, matching the CLI's existing
+ * recovery-WAL inspection semantics.
+ */
+export function resolveRecoveryWalConfigForSessionBootstrap(
+  config: RecoveryWalConfig & { readonly dir: string },
+  bootstrapPayload: unknown,
+): RecoveryWalConfig & { readonly dir: string } {
+  if (!isRecord(bootstrapPayload) || !isRecord(bootstrapPayload.runtimeConfig)) {
+    return config;
+  }
+  const artifactRoots = bootstrapPayload.runtimeConfig.artifactRoots;
+  if (!isRecord(artifactRoots) || typeof artifactRoots.recoveryWalDir !== "string") {
+    return config;
+  }
+  const dir = artifactRoots.recoveryWalDir.trim();
+  return dir.length > 0 ? { ...config, dir } : config;
+}
+
 const RECOVERY_WAL_ROW_SCHEMA = "brewva.recovery-wal.v1";
 const RECOVERY_WAL_WATERMARK_SCHEMA = "brewva.recovery-wal.watermark.v1";
 const DEFAULT_RECOVERY_WAL_DIR = ".orchestrator/recovery-wal";

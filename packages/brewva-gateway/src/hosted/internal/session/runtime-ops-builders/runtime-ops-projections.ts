@@ -270,33 +270,152 @@ function projectHydration(
     : { status: "ready", hydratedAt, cursor, reason: null, issues: [] };
 }
 
-function projectIntegrity(scanTape: ScanTape, sessionId: string): RuntimeSessionIntegrity {
-  const scan = scanTape(sessionId);
-  if (scan.issues.length > 0) {
+/**
+ * The durability dimensions the unified integrity aggregation folds (RFC WS1).
+ * The event tape is scanned inline via `scanTape`; the recovery WAL, candidate
+ * ledger, and world artifacts are supplied as domain-tagged issue probes built
+ * from the workspace layout (see `buildDurabilityProbes`). Each probe returns an
+ * empty array to mean "verified clean", never "unknown".
+ */
+export interface DurabilityProbes {
+  readonly scanTape: ScanTape;
+  /** Whether the durable event tape substrate is enabled and therefore verifiable. */
+  readonly tapeEnabled: boolean;
+  readonly walIssues: (sessionId: string) => readonly RuntimeSessionIssue[];
+  readonly ledgerIssues: () => readonly RuntimeSessionIssue[];
+  readonly artifactIssues: (sessionId: string) => readonly RuntimeSessionIssue[];
+}
+
+type IntegrityProbeResult = {
+  readonly issues: readonly RuntimeSessionIssue[];
+  readonly incompleteReason?: string;
+};
+
+function runIntegrityProbe(
+  label: string,
+  probe: () => readonly RuntimeSessionIssue[],
+): IntegrityProbeResult {
+  try {
+    return { issues: probe() };
+  } catch (error) {
+    const detail = error instanceof Error && error.message.length > 0 ? `: ${error.message}` : "";
+    return { issues: [], incompleteReason: `${label} integrity check did not complete${detail}` };
+  }
+}
+
+/**
+ * Aggregate every durability dimension (event tape, recovery WAL, candidate
+ * ledger, world artifacts) into one honest verdict:
+ *
+ * - `degraded` when ANY dimension reports an issue — every dimension's issues are
+ *   surfaced so `brewva inspect` can attribute which one degraded. It carries
+ *   the tape cursor when available; independently confirmed damage remains
+ *   degraded with a reason when tape evidence is unavailable.
+ * - `inconclusive` when a required check cannot complete (including a disabled
+ *   event tape) and no other dimension found positive damage: we decline to
+ *   claim health we cannot establish.
+ * - `healthy` only when every dimension is verified clean.
+ */
+export function projectIntegrity(
+  probes: DurabilityProbes,
+  sessionId: string,
+): RuntimeSessionIntegrity {
+  let scan: TapeForensicScan | null = null;
+  let tapeIncompleteReason: string | undefined;
+  try {
+    scan = probes.scanTape(sessionId);
+  } catch (error) {
+    const detail = error instanceof Error && error.message.length > 0 ? `: ${error.message}` : "";
+    tapeIncompleteReason = `event tape integrity check did not complete${detail}`;
+  }
+  const tapeIssues = scan === null ? [] : tapeForensicIssues(scan);
+  const wal = runIntegrityProbe("recovery WAL", () => probes.walIssues(sessionId));
+  const ledger = runIntegrityProbe("candidate ledger", () => probes.ledgerIssues());
+  const artifact =
+    scan !== null && tapeIssues.length === 0 && probes.tapeEnabled
+      ? runIntegrityProbe("artifact", () => probes.artifactIssues(sessionId))
+      : { issues: [] };
+  const issues: RuntimeSessionIssue[] = [
+    ...tapeIssues,
+    ...wal.issues,
+    ...ledger.issues,
+    // Artifact references are derived from the strict event reader. A damaged
+    // tape already degrades integrity, but cannot safely enumerate references;
+    // never let its strict-read failure hide that forensic result.
+    ...artifact.issues,
+  ];
+  const cursor =
+    scan === null || !probes.tapeEnabled
+      ? null
+      : { latestEventId: scan.lastValidEventId, eventCount: scan.validRecords };
+  if (issues.length > 0) {
+    return cursor === null
+      ? {
+          status: "degraded",
+          cursor: null,
+          reason:
+            tapeIncompleteReason ??
+            (probes.tapeEnabled
+              ? "event tape integrity check did not complete"
+              : "event tape disabled; tape evidence cursor unavailable"),
+          issues,
+        }
+      : { status: "degraded", cursor, reason: null, issues };
+  }
+  const incompleteReasons = [
+    tapeIncompleteReason,
+    wal.incompleteReason,
+    ledger.incompleteReason,
+    artifact.incompleteReason,
+  ]
+    .filter((reason): reason is string => reason !== undefined)
+    .join("; ");
+  if (incompleteReasons.length > 0) {
+    return { status: "inconclusive", cursor: null, reason: incompleteReasons, issues: [] };
+  }
+  if (!probes.tapeEnabled) {
+    // No durable event substrate to verify: the other dimensions passed, but the
+    // session's events themselves are unverifiable, so stay honestly unproven
+    // rather than claim a health we cannot establish.
     return {
-      status: "degraded",
-      cursor: { latestEventId: scan.lastValidEventId, eventCount: scan.validRecords },
-      reason: null,
-      issues: tapeForensicIssues(scan),
+      status: "inconclusive",
+      cursor: null,
+      reason: "event tape disabled; session durability cannot be established without it",
+      issues: [],
     };
   }
-  // Tape verified clean. WAL, artifact, and ledger dimensions are not yet checked,
-  // so we must not claim full health — stay honestly inconclusive.
-  return {
-    status: "inconclusive",
-    cursor: null,
-    reason:
-      "tape integrity verified; WAL, artifact, and ledger checks not yet implemented (RFC WS1)",
-    issues: [],
-  };
+  if (cursor === null) {
+    // Defensive type and future-change guard: the earlier incomplete-tape path
+    // returns already, but never promote an absent tape cursor to healthy.
+    return {
+      status: "inconclusive",
+      cursor: null,
+      reason: "event tape integrity check did not produce an evidence cursor",
+      issues: [],
+    };
+  }
+  // Every dimension verified clean — a genuine, evidence-bound clean bill of health.
+  return { status: "healthy", cursor, reason: null, issues: [] };
 }
 
 export function createHostedProjections(deps: {
   readonly listEvents: ListEvents;
   readonly scanTape: ScanTape;
   readonly clock: () => number;
+  readonly tapeEnabled: boolean;
+  readonly walIssues: (sessionId: string) => readonly RuntimeSessionIssue[];
+  readonly ledgerIssues: () => readonly RuntimeSessionIssue[];
+  readonly artifactIssues: (sessionId: string) => readonly RuntimeSessionIssue[];
 }): HostedProjections {
-  const { listEvents, scanTape, clock } = deps;
+  const { listEvents, scanTape, clock, tapeEnabled, walIssues, ledgerIssues, artifactIssues } =
+    deps;
+  const integrityProbes: DurabilityProbes = {
+    scanTape,
+    tapeEnabled,
+    walIssues,
+    ledgerIssues,
+    artifactIssues,
+  };
   return {
     taskSpec: (sessionId) => projectTaskSpec(listEvents, sessionId),
     taskItems: (sessionId) => projectTaskItems(listEvents, sessionId),
@@ -306,6 +425,6 @@ export function createHostedProjections(deps: {
     workbench: (sessionId) => projectWorkbench(listEvents, sessionId),
     workerResults: (sessionId) => projectWorkerResults(listEvents, sessionId),
     hydration: (sessionId) => projectHydration(listEvents, scanTape, clock, sessionId),
-    integrity: (sessionId) => projectIntegrity(scanTape, sessionId),
+    integrity: (sessionId) => projectIntegrity(integrityProbes, sessionId),
   };
 }

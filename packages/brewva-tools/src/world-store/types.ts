@@ -79,10 +79,14 @@ export interface WorldRef {
 
 export interface WorldVerification {
   readonly worldId: string;
-  /** True when the manifest and every referenced blob exist in the store. */
+  /** True when the manifest and every referenced blob match their SHA-256 refs. */
   readonly present: boolean;
   readonly fileCount: number;
   readonly missingBlobCount: number;
+  /** Present only when a named blob exists but its contents no longer match its ref. */
+  readonly corruptBlobCount?: number;
+  /** Present when the manifest no longer hashes to the world id that named it. */
+  readonly manifestHashMismatch?: boolean;
 }
 
 export interface WorldSweepSuccess {
@@ -190,6 +194,11 @@ export interface WorkspaceWorldStore {
   /** Cheap manifest-presence check (shallow); `verifyWorld` is the deep check. */
   hasWorld(worldId: string): boolean;
   verifyWorld(worldId: string): WorldVerification;
+  /**
+   * Deep-verify multiple worlds from one fresh object-store inventory, reusing
+   * blob hash results for content shared by more than one world.
+   */
+  verifyWorlds(worldIds: readonly string[]): readonly WorldVerification[];
   listRefs(sessionId: string): readonly WorldRef[];
   sweep(): WorldSweepResult;
 }

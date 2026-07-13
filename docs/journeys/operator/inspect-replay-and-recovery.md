@@ -30,18 +30,17 @@ under `docs/research/active/rfc-inspect-replay-and-recovery-optimization.md`:
 hydration projects `cold`/`ready`/`degraded` from tape with a source cursor;
 conversation and workspace rewind and redo run through one gateway-owned
 transaction engine with per-turn auto-checkpoints and supersession; recovery
-capabilities are evidence-derived. Integrity currently verifies the event tape
-(degrading on damage) and stays `inconclusive` until WAL, artifact, and ledger
-checks also run. World-changing rewind invalidates verification evidence
+capabilities are evidence-derived. Integrity folds the event-tape forensic scan,
+Recovery WAL quarantine guard, candidate-ledger validation, and tape-referenced
+world artifacts into one status; any damaged dimension is `degraded`, while an
+unreadable check remains `inconclusive`. World-changing rewind invalidates verification evidence
 structurally rather than through an authority-bearing event: patch-set rollback
 detaches the patch-set-keyed evidence the gate matches on (`containsAll` over
 `patchSetRefs`), so stale outcomes fall to a `stale`/`missing` posture by
 consequence. Requirement-fitness grading and a review-debt Work Card line ship
 as a re-derived read-time view (see
 `verification-and-independent-review`); a dedicated "verification debt created by
-recovery" annotation on that line remains an intended refinement. Read
-present-tense descriptions of the unchecked integrity dimensions as the intended
-contract, not yet a shipped guarantee.
+recovery" annotation on that line remains an intended refinement.
 
 ## In Scope
 
@@ -87,14 +86,14 @@ flowchart TD
    replay and diagnostic sections are explicit drill-downs.
 2. On first hydration, the runtime performs checkpoint-plus-delta replay and
    restores task, truth, cost, verification, and related fold slices.
-3. The report surfaces durability health from live signals: damaged event-tape
-   rows degrade hydration with explicit `event_tape` issues, the Recovery WAL
-   store guards itself fail-closed, and the ledger chain is verified
-   independently. The unified
-   `HostedRuntimeAdapterPort.ops.session.lifecycle.getIntegrity(...)` aggregation
-   is the intended single health surface, but it is not yet implemented: the
-   hosted adapter returns a healthy stub, so the report's `integrity` block stays
-   empty until it lands.
+3. The report surfaces durability health from the unified
+   `HostedRuntimeAdapterPort.ops.session.lifecycle.getIntegrity(...)` aggregation,
+   which folds every dimension into one status: `event_tape` (a forensic tape scan),
+   `recovery_wal` (the store's fail-closed quarantine guard), `ledger` (candidate
+   ledger chain verification), and `artifact` (tape-referenced world manifests and
+   blobs hash verified). Any unhealthy dimension yields `degraded` and the `integrity` block names
+   which dimension degraded; `healthy` requires all clean; `inconclusive` means a
+   required check could not complete, such as when the event tape is disabled.
 4. `--replay` prints raw structured event records from durable tape for scripts
    that intentionally depend on event payloads.
 5. `--replay-timeline` prints a redacted replay timeline from the same durable
@@ -139,8 +138,9 @@ flowchart TD
 - hydration and integrity are distinct views:
   - hydration reports whether replay successfully rebuilt session-local state,
     as `cold`/`ready`/`degraded` with a source cursor
-  - integrity reports durability health: it degrades on `event_tape` damage and
-    stays `inconclusive` until WAL, artifact, and ledger checks also run, rather
+  - integrity reports aggregate durability health across `event_tape`,
+    `recovery_wal`, `ledger`, and `artifact`; any damaged dimension degrades it,
+    while a disabled tape or an incomplete probe remains `inconclusive` rather
     than ever claiming health it has not verified
 
 ## Failure And Recovery
@@ -164,12 +164,12 @@ flowchart TD
   - `brewva --undo`
   - the Recovery WAL store's fail-closed integrity guard (read via the inspect
     `recoveryWal` block)
-  - `HostedRuntimeAdapterPort.ops.session.lifecycle.getIntegrity(...)` — the
-    intended unified health surface, currently a healthy stub (see Key Steps)
+  - `HostedRuntimeAdapterPort.ops.session.lifecycle.getIntegrity(...)` — the unified
+    health surface folding `event_tape`/`recovery_wal`/`ledger`/`artifact` (see Key Steps)
 - key report sections:
   - Work Card goal/context/options/authority/work/evidence/continuation anchor
   - hydration status
-  - integrity issues (empty until the unified `getIntegrity` aggregation lands)
+  - integrity issues (per-dimension, from the unified `getIntegrity` aggregation)
   - latest verification outcome
   - ledger chain status
   - projection, WAL, and snapshot artifact paths

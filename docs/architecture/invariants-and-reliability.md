@@ -124,11 +124,15 @@ recovery, and bounded execution.
   `process_crash` durable between), a torn trailing line is truncated on load, and
   the durable write is the commit point — memory moves only after it succeeds, so a
   failed write leaves no ghost record. Recovery delivery is `at_least_once`.
-- The unified `getIntegrity` durability aggregation is currently a healthy stub;
-  live integrity signals are the Recovery WAL quarantine surface (a malformed row
-  is isolated and reported through `brewva inspect`, not a fail-closed halt),
-  hydration (which surfaces `event_tape` damage), and ledger chain verification
-  (see `docs/journeys/internal/wal-and-crash-recovery.md`).
+- The unified `getIntegrity` durability aggregation folds every dimension into one
+  status: `event_tape` (a forensic tape scan), `recovery_wal` (the WAL quarantine
+  surface — a malformed row is isolated, refused by recovery, and reported through
+  `brewva inspect`), `ledger` (candidate ledger chain verification), and `artifact`
+  (tape-referenced world manifests and blobs hash verified). Any unhealthy dimension degrades the
+  aggregate with per-dimension issues; `healthy` requires every dimension verified
+  clean, and `inconclusive` is reserved for an incomplete check (for example, no
+  durable tape substrate or an unreadable store). See
+  `docs/journeys/internal/wal-and-crash-recovery.md`.
 - Promise/Effect boundary crossings are adapter mechanics. Repeated boundary
   crossings inside provider stream core, channel queue core, tool execution
   internals, or runtime package code are reliability bugs, not implementation

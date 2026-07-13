@@ -26,10 +26,9 @@
   zero-cache rebuild equivalence, the rewind/redo/new-turn/rewind-again lattice
   fixture, the `brewva inspect --verify-replay` drill-down, and three standing
   fitnesses (status-evidence, engine-authority, strict/forensic grammar parity).
-  Remaining: the integrity WAL/artifact/ledger dimensions (tape is verified, the
-  others stay `inconclusive`); a dedicated "verification debt created by recovery"
-  Work Card line (the posture data already exists); schema-evolution upcasters;
-  resume-drift telemetry; and promotion of this RFC into the stable docs.
+  Remaining: a dedicated "verification debt created by recovery" Work Card line
+  (the posture data already exists); schema-evolution upcasters; resume-drift
+  telemetry; and promotion of this RFC into the stable docs.
 - Owner: Runtime, gateway, CLI, and operator-experience maintainers
 - Last reviewed: `2026-06-17`
 - Promotion target:
@@ -346,7 +345,8 @@ Current implementation:
   (`HostedRuntimeAdapterPort` narrowed: `createRuntime` removed, `capabilities`
   folded; `ops` is gateway-private)
 - `packages/brewva-gateway/src/hosted/internal/session/runtime-ops-builders/session.ts`
-  (the synthetic hydration/integrity/rewind/redo stubs to replace, `:53-182`)
+  (the hosted lifecycle reads, including the implemented `getIntegrity(...)`
+  projection)
 - `packages/brewva-gateway/src/hosted/internal/session/runtime-ops-builders/runtime-ops-projections.ts`
   (the established `projectXFromTape` no-cache projector pattern to mirror)
 - `packages/brewva-cli/src/runtime/cli-runtime-ports.ts`

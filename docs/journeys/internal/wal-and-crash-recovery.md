@@ -225,14 +225,17 @@ flowchart TD
   - Recovery WAL: `.orchestrator/recovery-wal/<scope>.jsonl` (gateway scope
     `gateway`; channel scopes per store)
   - event tape: `.brewva/tape/<encoded-session-id>.jsonl`
-- integrity-surface caveat: the unified
+- integrity surface: the unified
   `HostedRuntimeAdapterPort.ops.session.lifecycle.getIntegrity(...)` aggregation
-  — intended to fold `event_tape`, `recovery_wal`, and `artifact` durability
-  issues into one status — is not yet implemented. The hosted adapter returns a
-  healthy stub, so the `brewva inspect` `integrity` block stays empty. The live
-  integrity signals today are the Recovery WAL store's fail-closed integrity
-  guard (surfaced through the inspect `recoveryWal` block), hydration (which
-  surfaces `event_tape` damage), and ledger chain verification
+  folds every durability dimension into one status — `event_tape` (a forensic tape
+  scan), `recovery_wal` (the store's fail-closed quarantine guard, the same signal
+  the inspect `recoveryWal` block reads), `ledger` (candidate ledger chain
+  verification), and `artifact` (tape-referenced world manifests and blobs hash
+  verified). Any
+  unhealthy dimension yields `degraded` with per-dimension issues in the inspect
+  `integrity` block; `healthy` requires all dimensions verified clean; and
+  `inconclusive` is reserved for a genuinely incomplete check (for example, no durable
+  tape substrate or an unreadable durability store).
 
 ## Code Pointers
 
@@ -271,9 +274,9 @@ flowchart TD
   `packages/brewva-gateway/src/hosted/internal/session/runtime-ops-builders/channel.ts`
 - Inspect recovery-WAL and integrity surface:
   `packages/brewva-cli/src/operator/inspect/report.ts`
-- Stubbed lifecycle integrity (drift):
-  `packages/brewva-gateway/src/hosted/internal/session/runtime-ops-builders/session.ts`,
-  delegated by `packages/brewva-cli/src/runtime/cli-runtime-ports.ts`
+- Session lifecycle integrity aggregation:
+  `packages/brewva-gateway/src/hosted/internal/session/runtime-ops-builders/{durability-integrity,runtime-ops-projections}.ts`,
+  delegated by `packages/brewva-gateway/src/hosted/internal/session/runtime-ops-builders/session.ts`
 
 ## Related Docs
 

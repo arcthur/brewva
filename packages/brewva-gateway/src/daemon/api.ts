@@ -15,6 +15,7 @@ export {
   createRecoveryWalRecovery,
   createRecoveryWalStore,
   RECOVERABLE_WAL_STATUSES,
+  resolveRecoveryWalConfigForSessionBootstrap,
   type RecoveryWalConfig,
   type RecoveryWalForensicScan,
   type RecoveryWalRecovery,

@@ -343,8 +343,9 @@ workspaces).
   rollback artifacts in `packages/brewva-vocabulary/src/internal/durability.ts`.
   Retention is config-bounded per session; release on session archive.
 - **Integrity**: the world store gives the `artifact` dimension of
-  `getIntegrity` (today `inconclusive` per the inspect-replay RFC) something
-  real to verify: ref → oid reachability is a cheap deterministic check.
+  `getIntegrity` a real check: tape-referenced world manifests and blobs are
+  hash verified, so damage degrades the aggregate rather than becoming an
+  `inconclusive` placeholder.
 
 This is also the honest fix for the patch lane's sharpest edge: after Loop 1, a
 missing rollback artifact degrades a window rewind to the world lane instead of
