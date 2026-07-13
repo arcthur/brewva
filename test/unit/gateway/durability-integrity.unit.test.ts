@@ -10,7 +10,10 @@ import {
   resolveHarnessCandidateLedgerPath,
   verifyHarnessCandidateLedgerIntegrity,
 } from "../../../packages/brewva-gateway/src/harness/internal/candidate-ledger.js";
-import { artifactIntegrityIssues } from "../../../packages/brewva-gateway/src/hosted/internal/session/runtime-ops-builders/durability-integrity.js";
+import {
+  artifactIntegrityIssues,
+  buildDurabilityProbes,
+} from "../../../packages/brewva-gateway/src/hosted/internal/session/runtime-ops-builders/durability-integrity.js";
 import {
   type DurabilityProbes,
   projectIntegrity,
@@ -19,6 +22,32 @@ import {
 // The artifact suite does real world capture (filesystem enumeration + hashing),
 // which can exceed the bare `bun test` 5s default on a cold run.
 setDefaultTimeout(60_000);
+
+// The WAL dimension resolves its config through the tape reader (for a
+// per-session WAL-dir override), but must stay independent of it: a strict-reader
+// throw (an unreadable tape) must not swallow real WAL damage.
+describe("buildDurabilityProbes WAL probe tape-independence (RFC WS1)", () => {
+  test("walIssues still verifies the WAL when the tape reader throws", () => {
+    const root = mkdtempSync(join(tmpdir(), "brewva-wal-tape-independence-"));
+    const walDir = ".orchestrator/recovery-wal";
+    mkdirSync(join(root, walDir), { recursive: true });
+    writeFileSync(join(root, walDir, "runtime.jsonl"), "this is not a valid wal row\n", "utf8");
+
+    const probes = buildDurabilityProbes({
+      workspaceRoot: root,
+      tapeEnabled: true,
+      listEvents: () => {
+        throw new Error("tape unreadable");
+      },
+      recoveryWal: { dir: walDir },
+      worlds: { dir: ".brewva/worlds", retainPerSession: 64 },
+    });
+
+    const issues = probes.walIssues("any-session");
+    expect(issues).toHaveLength(1);
+    expect(issues[0]?.domain).toBe("wal");
+  });
+});
 
 // The candidate ledger is an append-only JSONL sidecar. "Chain verification"
 // degrades on genuine byte-level corruption (an interior line that does not

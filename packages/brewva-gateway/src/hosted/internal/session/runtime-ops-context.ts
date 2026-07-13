@@ -466,12 +466,8 @@ export function createHostedRuntimeOpsContext(options: {
   });
   const projections = createHostedProjections({
     listEvents,
-    scanTape,
     clock,
-    tapeEnabled: durability.tapeEnabled,
-    walIssues: durability.walIssues,
-    ledgerIssues: durability.ledgerIssues,
-    artifactIssues: durability.artifactIssues,
+    probes: { scanTape, ...durability },
   });
 
   return {

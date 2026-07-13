@@ -353,11 +353,9 @@ export function projectIntegrity(
       ? {
           status: "degraded",
           cursor: null,
-          reason:
-            tapeIncompleteReason ??
-            (probes.tapeEnabled
-              ? "event tape integrity check did not complete"
-              : "event tape disabled; tape evidence cursor unavailable"),
+          // Reaching here with no `tapeIncompleteReason` means the scan succeeded
+          // but produced no cursor, which only happens when the tape is disabled.
+          reason: tapeIncompleteReason ?? "event tape disabled; tape evidence cursor unavailable",
           issues,
         }
       : { status: "degraded", cursor, reason: null, issues };
@@ -400,22 +398,10 @@ export function projectIntegrity(
 
 export function createHostedProjections(deps: {
   readonly listEvents: ListEvents;
-  readonly scanTape: ScanTape;
   readonly clock: () => number;
-  readonly tapeEnabled: boolean;
-  readonly walIssues: (sessionId: string) => readonly RuntimeSessionIssue[];
-  readonly ledgerIssues: () => readonly RuntimeSessionIssue[];
-  readonly artifactIssues: (sessionId: string) => readonly RuntimeSessionIssue[];
+  readonly probes: DurabilityProbes;
 }): HostedProjections {
-  const { listEvents, scanTape, clock, tapeEnabled, walIssues, ledgerIssues, artifactIssues } =
-    deps;
-  const integrityProbes: DurabilityProbes = {
-    scanTape,
-    tapeEnabled,
-    walIssues,
-    ledgerIssues,
-    artifactIssues,
-  };
+  const { listEvents, clock, probes } = deps;
   return {
     taskSpec: (sessionId) => projectTaskSpec(listEvents, sessionId),
     taskItems: (sessionId) => projectTaskItems(listEvents, sessionId),
@@ -424,7 +410,7 @@ export function createHostedProjections(deps: {
     resourceLeases: (sessionId) => projectResourceLeases(listEvents, sessionId),
     workbench: (sessionId) => projectWorkbench(listEvents, sessionId),
     workerResults: (sessionId) => projectWorkerResults(listEvents, sessionId),
-    hydration: (sessionId) => projectHydration(listEvents, scanTape, clock, sessionId),
-    integrity: (sessionId) => projectIntegrity(integrityProbes, sessionId),
+    hydration: (sessionId) => projectHydration(listEvents, probes.scanTape, clock, sessionId),
+    integrity: (sessionId) => projectIntegrity(probes, sessionId),
   };
 }

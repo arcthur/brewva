@@ -160,9 +160,20 @@ export function buildDurabilityProbes(deps: {
   const { workspaceRoot, tapeEnabled, listEvents, recoveryWal, worlds } = deps;
 
   const walIssues = (sessionId: string): readonly RuntimeSessionIssue[] => {
-    const bootstrap = listEvents(sessionId)
-      .toReversed()
-      .find((event) => event.type === "session_bootstrap")?.payload;
+    // The WAL dimension must stay independent of the tape: reading the bootstrap
+    // event only refines the WAL dir for a per-session override. A strict-reader
+    // throw (an I/O-unreadable or schema-broken tape) must NOT blind the WAL
+    // check — else real WAL damage is swallowed as `inconclusive`, defeating the
+    // `RuntimeSessionIntegrityDegradedWithoutTapeEvidence` guarantee. Fall back to
+    // the base config (which already handles an absent bootstrap) and still scan.
+    let bootstrap: unknown;
+    try {
+      bootstrap = listEvents(sessionId)
+        .toReversed()
+        .find((event) => event.type === "session_bootstrap")?.payload;
+    } catch {
+      bootstrap = undefined;
+    }
     const config = resolveRecoveryWalConfigForSessionBootstrap(recoveryWal, bootstrap);
     const walFilePath = resolve(workspaceRoot, config.dir, RUNTIME_WAL_FILENAME);
     return walIntegrityIssues(
