@@ -415,6 +415,32 @@ may touch — the permission layer stays outside.`
 state; keep the state, drop the token — safety equivalent, economy better, and a reject can
 finally reveal.`
 
+- [RFC: Skill Discipline Calibration — Hard Safety Gates, Soft Cognitive Defaults, And Rules That Earn Their Keep](./rfc-skill-discipline-calibration.md):
+  active RFC recalibrating the built-in skill corpus's wording authority after
+  a full-corpus audit plus two cross-checked external reviews: the corpus
+  writes safety invariants and depreciating cognitive-deficit patches in the
+  same absolute register, and — SkillCards being advisory — the wording IS the
+  governance, rebuilding at the skill layer the thought-path prescription
+  axiom 4 forbids at the kernel layer. Ten verified findings: a self-sealing
+  letter-compliance meta-clause, mixed-tier Iron Laws, judgment scripts that
+  consume only self-reported data, count budgets where evidence conditions
+  belong, posture formulas with downstream cascade, phase-identity constraints
+  beyond permission truth, mandated fanout/dissent topology, a live
+  `promote.sh → AGENTS.md` bypass contradicting the accepted calibration
+  standard (plus self-improve's own Iron Law and calibration-report's
+  human-review claim), adoption measuring `opened` not `followed` (a Goodhart
+  feed into calibration), and no reality-arbitration rule or retirement loop.
+  Three phases: close the mechanism gaps (promotion → reviewed candidates;
+  adoption → `opened` + conduct ladder), recalibrate wording
+  (deviation-with-disclosure + reality-beats-skill-text meta-rules, a two-tier
+  register where the tier is the wording, budgets → evidence conditions, the
+  probe/fix distinction), then retire self-report scripts, demote formulas to
+  anchors, and wire clause-level exercise receipts into calibration with
+  per-model strictness profiles. The verification ladder, honesty contracts,
+  side-effect gates, and project invariants are named appreciating assets,
+  out of subtraction scope. Under the line `Govern effects, not thought paths
+— in the skill text too.`
+
 When new unresolved design work starts, add one focused note here and link it
 from this README. If the stable docs already carry the accepted contract, create
 or update a decision/archive record instead of reopening this directory as a
