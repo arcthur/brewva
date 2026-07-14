@@ -17,6 +17,7 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
+import { toPosixPath } from "@brewva/brewva-std/text";
 import {
   BREWVA_TOOL_SURFACE_BY_NAME,
   MANAGED_BREWVA_TOOL_NAMES,
@@ -66,19 +67,26 @@ function decodeTapeLine(line: string): TapeEvent | null {
 const READ_TOOL_NAMES = new Set(["source_read", "resource_read", "look_at", "read"]);
 
 function normalizeReadTarget(target: string): string {
-  let value = target.replaceAll("\\", "/").replace(/^\.\//u, "");
+  const decode = (raw: string): string => {
+    try {
+      return decodeURIComponent(raw);
+    } catch {
+      return raw;
+    }
+  };
+  let value = target;
   if (value.startsWith("brewva-resource:///file/")) {
-    value = value.slice("brewva-resource:///file/".length);
+    value = decode(value.slice("brewva-resource:///file/".length));
   } else if (value.startsWith("file://")) {
-    value = value.slice("file://".length);
+    value = decode(value.slice("file://".length));
   }
-  return value;
+  return toPosixPath(value).replace(/^\.\//u, "");
 }
 
 function readTargetMatchesSkillFile(readTarget: string, skillFile: string): boolean {
   const target = normalizeReadTarget(readTarget.trim());
   const skill = normalizeReadTarget(skillFile.trim());
-  if (!target || !skill) return false;
+  if (!target || !skill || !target.includes("/") || !skill.includes("/")) return false;
   return target === skill || target.endsWith(`/${skill}`) || skill.endsWith(`/${target}`);
 }
 
@@ -190,9 +198,9 @@ for (const file of tapeFiles) {
   }
   totalEvents += events.length;
 
-  // Committed reads (with targets + timestamps) feed skill opened matching.
-  const committedReads: Array<{ timestamp: number; target: string }> = [];
-  for (const event of events) {
+  // Committed reads (with targets + durable event indexes) feed skill opened matching.
+  const committedReads: Array<{ eventIndex: number; target: string }> = [];
+  for (const [eventIndex, event] of events.entries()) {
     if (event.kind !== "tool.committed") continue;
     const call = isRecord(event.payload.call) ? event.payload.call : undefined;
     const toolName = readString(call?.toolName);
@@ -211,11 +219,16 @@ for (const file of tapeFiles) {
       readString(callArgs?.path) ??
       readString(callArgs?.file_path) ??
       readString(callArgs?.filePath);
-    if (target) committedReads.push({ timestamp: event.timestamp, target });
+    if (target) committedReads.push({ eventIndex, target });
   }
 
-  for (const event of events) {
+  for (const [eventIndex, event] of events.entries()) {
     if (event.kind === "skill.selection.recorded") {
+      const nextSelectionOffset = events
+        .slice(eventIndex + 1)
+        .findIndex((candidate) => candidate.kind === "skill.selection.recorded");
+      const nextSelectionIndex =
+        nextSelectionOffset < 0 ? events.length : eventIndex + 1 + nextSelectionOffset;
       selectionReceipts += 1;
       const rendered = Array.isArray(event.payload.renderedSkillReasons)
         ? event.payload.renderedSkillReasons
@@ -233,7 +246,8 @@ for (const file of tapeFiles) {
           filePath !== undefined &&
           committedReads.some(
             (read) =>
-              read.timestamp >= event.timestamp &&
+              read.eventIndex > eventIndex &&
+              read.eventIndex < nextSelectionIndex &&
               readTargetMatchesSkillFile(read.target, filePath),
           );
         if (opened) offersOpened += 1;

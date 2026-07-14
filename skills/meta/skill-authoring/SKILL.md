@@ -21,7 +21,8 @@ scripts:
 ## The Iron Law
 
 ```
-NO SKILL WITHOUT A FAILING TEST FIRST
+NO NEW SKILL BEHAVIOR WITHOUT A FAILING TEST OR RECORDED CHARACTERIZATION —
+DOCUMENTATION-ONLY CHANGES ARE EXEMPT ON EXPLICIT OPERATOR INSTRUCTION
 ```
 
 Author the behavior, not just the schema.
@@ -122,6 +123,24 @@ and `scripts/package_skill.py` when a distributable bundle is needed.
   line count. Run before and after authoring.
 - `scripts/package_skill.py` — Produce a distributable skill bundle.
 
+## Rules
+
+- `skill-authoring.authority-stays-external` (non-negotiable) — Never encode
+  tool access, effects, permissions, or routing authority in advisory skill
+  prose; capability manifests and runtime boundaries remain authoritative.
+- `skill-authoring.test-or-characterize-first` (controlled-exception) — New
+  behavior starts from a failing test; behavior-preserving migration starts
+  from a recorded characterization. Exception evidence: an explicit operator
+  instruction that the change is documentation-only and changes no trigger,
+  rule, workflow, output, or executable helper.
+- `skill-authoring.no-duplicate-territory` (controlled-exception) — Tighten an
+  existing skill or overlay before adding overlapping semantic territory.
+  Exception evidence: a boundary note naming the distinct trigger, owner, and
+  output contract that cannot be represented by the existing skill.
+- `skill-authoring.kernel-size` (adaptive-heuristic) — Default: keep the kernel
+  well below 150 non-empty lines because detailed protocols and inventories age
+  independently and belong in references.
+
 ## Decision Protocol
 
 - Does this need a new skill, or can an existing skill absorb it?
@@ -133,18 +152,10 @@ and `scripts/package_skill.py` when a distributable bundle is needed.
 - Would a model that reads only the Iron Law and the Workflow still behave safely?
 - Are description fields trigger-only, not workflow summaries?
 
-## Red Flags — STOP
-
-If you catch yourself thinking any of these, STOP and return to Phase 1:
-
-- "Ship the contract skeleton now, add behavior later"
-- "The description can summarize the workflow for convenience"
-- "This deterministic logic is simple enough to leave in prose"
-- "Skip the test, I know the structure is right"
-
 ## Common Rationalizations
 
-See `references/rationalizations.md` for the anti-pattern table.
+See `references/rationalizations.md` for the provenance-bearing anti-pattern
+inventory; do not duplicate it in the kernel.
 
 ## Concrete Example
 

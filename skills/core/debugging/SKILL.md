@@ -44,6 +44,13 @@ available.
 
 ## Workflow
 
+<!-- self-eval-strict-scaffold:start -->
+
+Until a recorded paired-calibration verdict demotes it, load
+`references/strict-protocol.md` before Phase 1 and follow its tightened rules.
+
+<!-- self-eval-strict-scaffold:end -->
+
 ### Phase 1: Reproduce or bound the failure
 
 Capture the failing command, first error line, and affected boundary.
@@ -108,11 +115,6 @@ this skill into the patch.
 caveat or return to Phase 2. Do not dress a plausible story as a confirmed
 cause.
 
-Under time pressure, after two failed fix attempts, or when you notice
-yourself patching symptoms: load `references/strict-protocol.md` and follow
-it — it is the tightened version of this workflow for exactly those
-conditions.
-
 ## Rules
 
 - `debugging.confirmed-cause-before-shipped-fix` (controlled-exception) — No
@@ -135,9 +137,10 @@ conditions.
 
 - `scripts/hypothesis_tracker.py` — Advisory format lint over the
   self-reported hypothesis list (ids, statuses, evidence fields present).
-  Useful for externalizing state across long sessions; its input is the
-  model's own report, so its output is never independent evidence, never a
-  phase gate, and never an escalation authority.
+  It reports neutral active/falsified/confirmed counts and exits non-zero only
+  for malformed input shape. Useful for externalizing state across long
+  sessions; its input is the model's own report, so its output is never
+  independent evidence, never a phase gate, and never an escalation authority.
 
 ## Decision Protocol
 

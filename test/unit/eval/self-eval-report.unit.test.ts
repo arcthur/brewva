@@ -12,7 +12,21 @@ import type { SelfEvalRunResult } from "../../eval/self-eval/types.js";
 const runs: SelfEvalRunResult[] = [
   {
     fixtureId: "fix-arithmetic-bug",
+    runIndex: 1,
     kind: "build",
+    gateClass: "utility",
+    observedModelRoutes: ["provider/glm5.2"],
+    treatmentExposure: {
+      targetRelevant: false,
+      targetSkillOffered: false,
+      targetSkillOpened: false,
+      strictScaffoldOpened: false,
+    },
+    skillContext: {
+      arm: "kernel_scaffold",
+      skillCorpusDigest: "a".repeat(64),
+      loadedSkills: [{ name: "debugging", contentDigest: "b".repeat(64) }],
+    },
     taskOutcome: "task_passed",
     exitCode: 0,
     timedOut: false,
@@ -30,7 +44,21 @@ const runs: SelfEvalRunResult[] = [
   },
   {
     fixtureId: "debug-regex",
+    runIndex: 1,
     kind: "debug",
+    gateClass: "utility",
+    observedModelRoutes: ["provider/glm5.2"],
+    treatmentExposure: {
+      targetRelevant: false,
+      targetSkillOffered: false,
+      targetSkillOpened: false,
+      strictScaffoldOpened: false,
+    },
+    skillContext: {
+      arm: "kernel_scaffold",
+      skillCorpusDigest: "a".repeat(64),
+      loadedSkills: [{ name: "debugging", contentDigest: "b".repeat(64) }],
+    },
     taskOutcome: "terminal_incomplete",
     exitCode: 1,
     timedOut: false,
@@ -50,7 +78,21 @@ const runs: SelfEvalRunResult[] = [
     // A timed-out run: terminal_incomplete task outcome, and its liveness lands
     // in the timed_out bucket (never silently folded into unknown).
     fixtureId: "implement-chunk",
+    runIndex: 1,
     kind: "build",
+    gateClass: "utility",
+    observedModelRoutes: [],
+    treatmentExposure: {
+      targetRelevant: false,
+      targetSkillOffered: false,
+      targetSkillOpened: false,
+      strictScaffoldOpened: false,
+    },
+    skillContext: {
+      arm: "kernel_scaffold",
+      skillCorpusDigest: "a".repeat(64),
+      loadedSkills: [{ name: "debugging", contentDigest: "b".repeat(64) }],
+    },
     taskOutcome: "terminal_incomplete",
     exitCode: null,
     timedOut: true,
@@ -69,17 +111,29 @@ const runs: SelfEvalRunResult[] = [
 
 const GENERATED_AT = "2026-07-11T12:00:00.000Z";
 
+const REPORT_IDENTITY = {
+  experimentId: "pilot-2026-07-11",
+  evaluationMode: "diagnostic" as const,
+  arm: "kernel_scaffold" as const,
+  pilotSkill: "debugging" as const,
+  modelTier: "strong" as const,
+  sourceRevision: "deadbeef",
+  evaluatorCorpusDigest: "e".repeat(64),
+  fixtureCorpusDigest: "c".repeat(64),
+  requestedModel: "provider/glm5.2",
+};
+
 describe("self-eval report", () => {
   test("aggregates task outcomes, liveness, tools, per-family sums, and cost deterministically", () => {
     const first = buildSelfEvalReport({
       runs,
-      model: "glm5.2",
+      ...REPORT_IDENTITY,
       runsPerFixture: 1,
       generatedAt: GENERATED_AT,
     });
     const second = buildSelfEvalReport({
       runs,
-      model: "glm5.2",
+      ...REPORT_IDENTITY,
       runsPerFixture: 1,
       generatedAt: GENERATED_AT,
     });
@@ -115,12 +169,14 @@ describe("self-eval report", () => {
   test("formats markdown with the task-outcome headline, liveness, and per-fixture rows", () => {
     const report = buildSelfEvalReport({
       runs,
-      model: "glm5.2",
+      ...REPORT_IDENTITY,
       runsPerFixture: 1,
       generatedAt: GENERATED_AT,
     });
     const markdown = formatSelfEvalReport(report);
-    expect(markdown).toContain("# Self-Eval Report — glm5.2");
+    expect(markdown).toContain("# Self-Eval Report — pilot-2026-07-11");
+    expect(markdown).toContain("Arm: kernel_scaffold");
+    expect(markdown).toContain("Requested model: provider/glm5.2");
     expect(markdown).toContain("## Task Outcome (post-run oracle — the utility signal)");
     expect(markdown).toContain("| Task passed | 1 |");
     expect(markdown).toContain("| Timed out | 1 |");
@@ -131,21 +187,40 @@ describe("self-eval report", () => {
     expect(markdown).toContain("timed_out");
   });
 
-  test("persists a dated markdown + json under .brewva/reports/self-eval", () => {
+  test("persists immutable arm-specific report paths without same-day overwrite", () => {
     const workspace = mkdtempSync(join(tmpdir(), "self-eval-report-"));
     const report = buildSelfEvalReport({
       runs,
-      model: "glm5.2",
+      ...REPORT_IDENTITY,
       runsPerFixture: 1,
       generatedAt: GENERATED_AT,
     });
     const { markdownPath, jsonPath } = persistSelfEvalReport({ workspaceRoot: workspace, report });
 
-    expect(markdownPath).toContain(join(".brewva", "reports", "self-eval", "2026-07-11.md"));
-    expect(jsonPath).toContain(join(".brewva", "reports", "self-eval", "2026-07-11.json"));
+    expect(markdownPath).toContain("pilot-2026-07-11--debugging--strong--kernel_scaffold.md");
+    expect(jsonPath).toContain("pilot-2026-07-11--debugging--strong--kernel_scaffold.json");
     expect(existsSync(markdownPath)).toBe(true);
     expect(existsSync(jsonPath)).toBe(true);
     const persisted = JSON.parse(readFileSync(jsonPath, "utf8")) as { schema: string };
-    expect(persisted.schema).toBe("brewva.self-eval.report.v2");
+    expect(persisted.schema).toBe("brewva.self-eval.report.v4");
+    expect(() => persistSelfEvalReport({ workspaceRoot: workspace, report })).toThrow("EEXIST");
+
+    const otherArm = buildSelfEvalReport({
+      runs: runs.map((run) =>
+        Object.assign({}, run, {
+          skillContext: {
+            arm: "kernel_only" as const,
+            skillCorpusDigest: "d".repeat(64),
+            loadedSkills: [],
+          },
+        }),
+      ),
+      ...REPORT_IDENTITY,
+      arm: "kernel_only",
+      runsPerFixture: 1,
+      generatedAt: GENERATED_AT,
+    });
+    const otherPaths = persistSelfEvalReport({ workspaceRoot: workspace, report: otherArm });
+    expect(otherPaths.jsonPath).not.toBe(jsonPath);
   });
 });

@@ -1,5 +1,8 @@
 ---
 name: debugging
+description: Root-cause investigation for Brewva failing tests or runtime behavior, separating durable runtime evidence from presentation symptoms before patching.
+selection:
+  when_to_use: Use when Brewva tests, replay, projection, provider, WAL, or runtime behavior fails and the cause must be reproduced or bounded before patching.
 references:
   - skills/project/shared/package-boundaries.md
   - skills/project/shared/runtime-artifacts.md

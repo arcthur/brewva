@@ -74,6 +74,8 @@ describe("readTargetMatchesSkillFile", () => {
   test("never matches partial path segments or different files", () => {
     expect(readTargetMatchesSkillFile("ills/a/SKILL.md", "/abs/skills/a/SKILL.md")).toBe(false);
     expect(readTargetMatchesSkillFile("skills/a/README.md", "/abs/skills/a/SKILL.md")).toBe(false);
+    expect(readTargetMatchesSkillFile("SKILL.md", "/abs/skills/a/SKILL.md")).toBe(false);
+    expect(readTargetMatchesSkillFile("./SKILL.md", "skills/a/SKILL.md")).toBe(false);
     expect(readTargetMatchesSkillFile("", "/abs/skills/a/SKILL.md")).toBe(false);
   });
 });
@@ -120,6 +122,31 @@ describe("projectLatestSkillOpened", () => {
       selectionId: "s2",
       offeredSkillNames: ["alpha", "beta"],
       openedSkillNames: ["alpha"],
+    });
+  });
+
+  test("uses durable array order and stops at the next selection when timestamps collide", () => {
+    const sample = projectLatestSkillOpened([
+      selectionEvent({ timestamp: 100, selectionId: "s1", rendered: [skillA] }),
+      // This read predates s2 in durable order even though the timestamp collides.
+      invocationEvent({
+        timestamp: 100,
+        toolName: "source_read",
+        args: { uri: "skills/beta/SKILL.md" },
+      }),
+      selectionEvent({ timestamp: 100, selectionId: "s2", rendered: [skillB] }),
+      // Any next selection closes s2's opened window, including an empty one.
+      selectionEvent({ timestamp: 100, selectionId: "s3", rendered: [] }),
+      invocationEvent({
+        timestamp: 100,
+        toolName: "source_read",
+        args: { uri: "skills/beta/SKILL.md" },
+      }),
+    ]);
+    expect(sample).toMatchObject({
+      selectionId: "s2",
+      offeredSkillNames: ["beta"],
+      openedSkillNames: [],
     });
   });
 
@@ -241,6 +268,39 @@ describe("queryRecentSkillProjectionInputs", () => {
     expect(inputs.recentInvocations).toHaveLength(60);
     const opened = projectLatestSkillOpened(inputs.openedEvents);
     expect(opened?.openedSkillNames).toEqual(["alpha"]);
+  });
+
+  test("fetches one ordered mixed window so same-millisecond reads keep causal order", () => {
+    const tape: SkillProjectionEvent[] = [
+      invocationEvent({
+        timestamp: 100,
+        toolName: "read",
+        args: { path: "/repo/skills/alpha/SKILL.md" },
+      }),
+      selectionEvent({ timestamp: 100, selectionId: "s1", rendered: [skillA] }),
+      { type: "msg.committed", timestamp: 100, payload: { text: "separator" } },
+    ];
+    const queries: Array<{ type?: string; after?: number; limit?: number; last?: number }> = [];
+    const inputs = queryRecentSkillProjectionInputs(
+      {
+        query: (_sessionId, query) => {
+          queries.push(query ?? {});
+          let matching = tape.filter(
+            (event) =>
+              (!query?.type || event.type === query.type) &&
+              (query?.after === undefined || event.timestamp > query.after),
+          );
+          if (typeof query?.last === "number") matching = matching.slice(-query.last);
+          if (typeof query?.limit === "number") matching = matching.slice(0, query.limit);
+          return matching;
+        },
+      },
+      "s",
+    );
+
+    expect(queries.at(-1)).toEqual({ after: 99, limit: 720 });
+    expect(inputs.openedEvents).toEqual(tape);
+    expect(projectLatestSkillOpened(inputs.openedEvents)?.openedSkillNames).toEqual([]);
   });
 });
 

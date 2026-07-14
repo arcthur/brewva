@@ -1,0 +1,7 @@
+{
+  "schema": "brewva.skill-rule-manifest.v1",
+  "tiers": ["non-negotiable", "controlled-exception", "adaptive-heuristic"],
+  "ruleIdPattern": "^[a-z0-9]+(?:-[a-z0-9]+)*(?:\\.[a-z0-9]+(?:-[a-z0-9]+)*)+$",
+  "ruleBulletPattern": "^- `([^`]+)` \\(([a-z-]+)\\) — (.+)$",
+  "exceptionEvidenceMarker": "Exception evidence:"
+}

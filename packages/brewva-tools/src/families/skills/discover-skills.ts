@@ -16,7 +16,7 @@ import { listRuntimeSkills } from "../../runtime-port/skills.js";
 import { errTextResult, inconclusiveTextResult, okTextResult } from "../../utils/result.js";
 import { getSessionId } from "../../utils/session.js";
 
-interface SkillSearchMetadata {
+export interface SkillSearchMetadata {
   name: string;
   category: string;
   description: string;
@@ -27,7 +27,7 @@ interface SkillSearchMetadata {
   requestedOutputArtifacts: readonly string[];
 }
 
-function renderSkillSearchText(metadata: SkillSearchMetadata): string {
+export function renderSkillSearchText(metadata: SkillSearchMetadata): string {
   return [
     metadata.name,
     metadata.category,

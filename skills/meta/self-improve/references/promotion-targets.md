@@ -6,6 +6,13 @@ a reviewable candidate; a human lands it in the target as a reviewed diff. No
 target file is ever written by the script — `AGENTS.md` in particular has no
 automated append path.
 
+Candidate files are a proposal control plane, not recall knowledge. They remain
+under `.brewva/learnings/candidates/` rather than the RDP knowledge store because
+they carry review lifecycle and proposed instruction changes, not replayable
+repository facts. Within that lifecycle, the candidate file is the single source
+of candidate status; source learning entries stay `pending` until a reviewed
+landing marks them `promoted`.
+
 ## Target Matrix
 
 | Learning Type       | Target                                    | When                                 |
@@ -44,13 +51,17 @@ surface.
 3. Run `scripts/promote.sh <entry-id> <target>`:
    - `agents` emits a candidate file under `.brewva/learnings/candidates/`
      carrying the qualification checklist, provenance, and a re-evaluation
-     date. The source entry's status becomes `candidate`.
+     date. Existing candidates are never overwritten, and the source entry stays
+     `pending` while review is open.
    - `docs` and `skill` print the manual path.
 4. A human reviews the candidate and, if accepted, lands the entry in the
    target as a reviewed diff, sets the source entry's status to `promoted`,
-   and records the landing commit in the candidate file (or deletes it).
-5. A candidate whose re-evaluation date passes without landing expires: reset
-   the source entry to `pending` and delete the candidate file.
+   records the target and landing commit in the source entry, and deletes the
+   candidate file. Candidate files represent open review only; there is no
+   retained terminal candidate state.
+5. A candidate whose re-evaluation date passes without landing expires: review
+   its retained notes, then delete the candidate file; the source entry is
+   already `pending`.
 6. If the learning came out of a harness candidate experiment, cite its
    `candidateId` in the promoted entry (`**Candidate**: <candidateId>`) —
    the id appears in the compare report and in
@@ -77,7 +88,8 @@ When promoting to a new skill, the extracted skill must satisfy Brewva DoD:
   `invariants`
 - Put structured outputs in `skills/producers/<name>.yaml`
 - Put external authority in capability manifests, not in `SKILL.md`
-- Sections: Objective, Trigger, Workflow, Stop Conditions, Anti-Patterns, Examples
+- Sections: Iron Law, trigger/counter-trigger, failure-branch workflow, stable
+  Rules manifest, Decision Protocol, Handoff Expectations, and Stop Conditions
 - Pass `skills/project/scripts/check-skill-dod.sh`
 
 Use `scripts/extract-skill.sh <name>` to scaffold a compliant skill from a learning.

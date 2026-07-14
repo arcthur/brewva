@@ -1,6 +1,15 @@
 import { describe, expect, it } from "bun:test";
-import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join, resolve } from "node:path";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, relative, resolve } from "node:path";
 
 // The v3 rule manifest (skills/meta/skill-authoring/references/skill-anatomy-v3.md)
 // gives every load-bearing skill rule a stable identity, a tier, and — for
@@ -10,15 +19,25 @@ import { join, resolve } from "node:path";
 // skills carrying it. quick_validate.py enforces the same grammar on the
 // authoring side; this is the repo-gate side.
 
-const LOADABLE_CATEGORIES = ["core", "domain", "operator", "meta", "internal"] as const;
-
 // Pilot skills whose Rules manifest is load-bearing (receipts may cite these
 // ids). Removing a manifest here is a contract break, not a doc edit.
 const REQUIRED_MANIFEST_SKILLS = ["core/debugging", "core/review", "core/learning-research"];
 
-const RULE_TIERS = new Set(["non-negotiable", "controlled-exception", "adaptive-heuristic"]);
-const RULE_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*(?:\.[a-z0-9]+(?:-[a-z0-9]+)*)+$/u;
-const RULE_BULLET_PATTERN = /^- `([^`]+)` \(([a-z-]+)\) — (.+)$/u;
+const repoRoot = resolve(import.meta.dirname, "../../..");
+const ruleSchema = JSON.parse(
+  readFileSync(
+    join(repoRoot, "skills/meta/skill-authoring/references/rule-manifest-schema.json"),
+    "utf8",
+  ),
+) as {
+  tiers: string[];
+  ruleIdPattern: string;
+  ruleBulletPattern: string;
+  exceptionEvidenceMarker: string;
+};
+const RULE_TIERS = new Set(ruleSchema.tiers);
+const RULE_ID_PATTERN = new RegExp(ruleSchema.ruleIdPattern, "u");
+const RULE_BULLET_PATTERN = new RegExp(ruleSchema.ruleBulletPattern, "u");
 
 interface SkillRuleEntry {
   readonly ruleId: string;
@@ -28,38 +47,45 @@ interface SkillRuleEntry {
 
 interface SkillRulesManifest {
   readonly skillRef: string;
+  readonly manifestRef: string;
   readonly skillName: string;
   readonly rules: readonly SkillRuleEntry[];
 }
 
 function collectSkillFiles(root: string): Array<{ skillRef: string; filePath: string }> {
   const files: Array<{ skillRef: string; filePath: string }> = [];
-  for (const category of [...LOADABLE_CATEGORIES, "project/overlays"] as const) {
-    const categoryDir = join(root, category);
+  const visit = (directory: string): void => {
     let entries: Array<import("node:fs").Dirent>;
     try {
-      entries = readdirSync(categoryDir, { withFileTypes: true });
+      entries = readdirSync(directory, { withFileTypes: true });
     } catch {
-      continue;
+      return;
     }
     for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
-      const filePath = join(categoryDir, entry.name, "SKILL.md");
-      try {
-        if (statSync(filePath).isFile()) {
-          files.push({ skillRef: `${category}/${entry.name}`, filePath });
-        }
-      } catch {
-        // Not a skill directory.
+      const filePath = join(directory, entry.name);
+      if (entry.isDirectory()) {
+        visit(filePath);
+      } else if (entry.isFile() && entry.name === "SKILL.md") {
+        files.push({
+          skillRef: relative(root, dirname(filePath)).split("\\").join("/"),
+          filePath,
+        });
       }
     }
-  }
+  };
+  visit(root);
   return files.toSorted((left, right) => left.skillRef.localeCompare(right.skillRef));
 }
 
 function extractRulesSection(content: string): string | null {
   const lines = content.split("\n");
-  const start = lines.findIndex((line) => line.trim() === "## Rules");
+  const headings = lines
+    .map((line, index) => ({ index, heading: line.trim() }))
+    .filter((entry) => entry.heading === "## Rules");
+  if (headings.length > 1) {
+    throw new Error("Rules section must appear at most once");
+  }
+  const start = headings[0]?.index ?? -1;
   if (start < 0) return null;
   let end = lines.length;
   for (let index = start + 1; index < lines.length; index += 1) {
@@ -91,12 +117,17 @@ function parseRuleBullets(section: string): { bullets: string[]; strayLines: str
   return { bullets, strayLines };
 }
 
-function parseManifest(skillRef: string, filePath: string): SkillRulesManifest | null {
+function parseManifest(
+  skillRef: string,
+  manifestRef: string,
+  filePath: string,
+  inheritedSkillName?: string,
+): SkillRulesManifest | null {
   const content = readFileSync(filePath, "utf8");
   const section = extractRulesSection(content);
   if (section === null) return null;
   const nameMatch = content.match(/^name:\s*(\S+)\s*$/mu);
-  const skillName = nameMatch?.[1] ?? skillRef.split("/").at(-1) ?? skillRef;
+  const skillName = nameMatch?.[1] ?? inheritedSkillName ?? skillRef.split("/").at(-1) ?? skillRef;
   const { bullets, strayLines } = parseRuleBullets(section);
   expect(strayLines, `${skillRef}: Rules section contains non-rule lines`).toEqual([]);
   expect(bullets.length, `${skillRef}: Rules section is present but empty`).toBeGreaterThan(0);
@@ -109,20 +140,97 @@ function parseManifest(skillRef: string, filePath: string): SkillRulesManifest |
     const [, ruleId, tier, statement] = match as RegExpExecArray;
     return { ruleId: ruleId ?? "", tier: tier ?? "", statement: statement ?? "" };
   });
-  return { skillRef, skillName, rules };
+  return { skillRef, manifestRef, skillName, rules };
 }
 
 describe("skill rule manifests", () => {
-  const repoRoot = resolve(import.meta.dirname, "../../..");
   const skillFiles = collectSkillFiles(resolve(repoRoot, "skills"));
-  const manifests = skillFiles
-    .map((file) => parseManifest(file.skillRef, file.filePath))
-    .filter((manifest): manifest is SkillRulesManifest => manifest !== null);
+  const manifests = skillFiles.flatMap((file): SkillRulesManifest[] => {
+    const skillName =
+      readFileSync(file.filePath, "utf8").match(/^name:\s*(\S+)\s*$/mu)?.[1] ??
+      file.skillRef.split("/").at(-1) ??
+      file.skillRef;
+    const candidates = [{ manifestRef: file.skillRef, filePath: file.filePath }];
+    const strictPath = join(file.filePath, "..", "references", "strict-protocol.md");
+    try {
+      if (statSync(strictPath).isFile()) {
+        candidates.push({
+          manifestRef: `${file.skillRef}/references/strict-protocol.md`,
+          filePath: strictPath,
+        });
+      }
+    } catch {
+      // No strict scaffold for this skill.
+    }
+    return candidates
+      .map((candidate) =>
+        parseManifest(file.skillRef, candidate.manifestRef, candidate.filePath, skillName),
+      )
+      .filter((manifest): manifest is SkillRulesManifest => manifest !== null);
+  });
+
+  it("recursively covers every SkillCard path that the production catalog can load", () => {
+    const root = mkdtempSync(join(tmpdir(), "rule-manifest-recursive-"));
+    try {
+      const nested = join(root, "domain/parent/nested");
+      mkdirSync(nested, { recursive: true });
+      writeFileSync(join(nested, "SKILL.md"), "---\nname: nested\n---\n", "utf8");
+      expect(collectSkillFiles(root).map((file) => file.skillRef)).toEqual([
+        "domain/parent/nested",
+      ]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 
   it("keeps the pilot skills carrying a Rules manifest", () => {
     const covered = new Set(manifests.map((manifest) => manifest.skillRef));
     for (const required of REQUIRED_MANIFEST_SKILLS) {
       expect(covered.has(required), `${required} must carry a Rules manifest`).toBe(true);
+    }
+  });
+
+  it("keeps every pilot strict scaffold load-bearing item inside a Rules manifest", () => {
+    for (const required of REQUIRED_MANIFEST_SKILLS) {
+      const manifestRef = `${required}/references/strict-protocol.md`;
+      expect(
+        manifests.some((manifest) => manifest.manifestRef === manifestRef),
+        `${manifestRef} must carry a Rules manifest`,
+      ).toBe(true);
+      const content = readFileSync(join(repoRoot, "skills", manifestRef), "utf8");
+      expect(content).not.toContain("## Hard caps");
+      expect(content).not.toContain("## Red flags");
+    }
+  });
+
+  it("keeps pilot rationalization inventories rule-bound and honestly provenance-limited", () => {
+    const knownRuleIds = new Set(
+      manifests.flatMap((manifest) => manifest.rules.map((rule) => rule.ruleId)),
+    );
+    for (const required of REQUIRED_MANIFEST_SKILLS) {
+      const filePath = join(repoRoot, "skills", required, "references", "rationalizations.md");
+      const content = readFileSync(filePath, "utf8");
+      expect(content).toContain("| Canonical rule");
+      expect(content).toContain("| Provenance");
+      expect(content).toContain("| Lifecycle");
+      const rows = content
+        .split("\n")
+        .filter((line) => line.startsWith("|") && !line.includes("| ---"))
+        .slice(1);
+      expect(
+        rows.length,
+        `${required}: rationalization inventory must not be empty`,
+      ).toBeGreaterThan(0);
+      for (const row of rows) {
+        expect(row).toMatch(/`[a-z0-9.-]+`/u);
+        const ruleId = row.match(/`([a-z0-9.-]+)`/u)?.[1];
+        expect(
+          knownRuleIds.has(ruleId ?? ""),
+          `${required}: rationalization row cites unknown rule '${ruleId}'`,
+        ).toBe(true);
+        expect(row).toContain("legacy-unattributed (model/date unavailable)");
+        expect(row).toContain("retirement-review-required");
+      }
     }
   });
 
@@ -149,8 +257,10 @@ describe("skill rule manifests", () => {
     for (const manifest of manifests) {
       for (const rule of manifest.rules) {
         if (rule.tier !== "controlled-exception") continue;
+        const marker = ruleSchema.exceptionEvidenceMarker;
+        const evidence = rule.statement.split(marker, 2)[1]?.trim() ?? "";
         expect(
-          rule.statement.includes("Exception evidence:"),
+          evidence.length > 0,
           `${manifest.skillRef}: controlled-exception rule '${rule.ruleId}' must name its 'Exception evidence:' class`,
         ).toBe(true);
       }
@@ -164,9 +274,11 @@ describe("skill rule manifests", () => {
       for (const rule of manifest.rules) {
         const previous = seen.get(rule.ruleId);
         if (previous !== undefined) {
-          duplicates.push(`'${rule.ruleId}' declared by both ${previous} and ${manifest.skillRef}`);
+          duplicates.push(
+            `'${rule.ruleId}' declared by both ${previous} and ${manifest.manifestRef}`,
+          );
         }
-        seen.set(rule.ruleId, manifest.skillRef);
+        seen.set(rule.ruleId, manifest.manifestRef);
       }
     }
     expect(duplicates).toEqual([]);

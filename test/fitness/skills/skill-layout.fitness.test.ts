@@ -178,9 +178,16 @@ describe("skill layout quality", () => {
 
       const rationalizations = sectionBodyLines(content, "## Common Rationalizations");
       if (rationalizations.length > 0) {
-        expect(rationalizations, `${skillFile} should link to extracted rationalizations`).toEqual([
-          "See `references/rationalizations.md` for the anti-pattern table.",
-        ]);
+        expect(
+          [
+            ["See `references/rationalizations.md` for the anti-pattern table."],
+            [
+              "See `references/rationalizations.md` for the provenance-bearing anti-pattern",
+              "inventory; do not duplicate it in the kernel.",
+            ],
+          ],
+          `${skillFile} should use one of the exact extracted-rationalization links`,
+        ).toContainEqual(rationalizations);
       }
     }
   });

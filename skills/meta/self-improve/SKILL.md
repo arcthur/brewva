@@ -35,7 +35,8 @@ Use when:
 
 Do NOT use when:
 
-- there is only a single isolated incident — route to debugging
+- there is only a single isolated incident and no explicit operator instruction
+  to promote it — route to debugging
 - the need is immediate fix, not retrospective learning — route to implementation
 - the "pattern" is based on feeling rather than traceable evidence
 - active incident response is in progress — do not interrupt with learning work
@@ -52,10 +53,14 @@ iteration-fact history. Cluster the evidence:
 - repeat escalation or rollback outcomes
 - repeat operator intervention points
 
-**If fewer than 2 independent occurrences exist**: Stop. The pattern is not
-repeated. Record the single observation and exit — do not inflate it.
-If this pass was triggered by scheduler policy, exit quietly rather than
-creating operator-facing noise.
+**If fewer than 2 independent occurrences exist and there is no explicit
+operator promotion instruction**: Stop. The pattern is not repeated. Record the
+single observation and exit — do not inflate it. If this pass was triggered by
+scheduler policy, exit quietly rather than creating operator-facing noise.
+**If an operator explicitly directs promotion of a single observation**: The
+instruction authorizes a review candidate, not a systemic claim. Preserve the
+single-occurrence scope and proceed directly to Phase 3; the reviewed landing
+still owns correctness.
 **If evidence is available**: Proceed to Phase 2.
 
 ### Phase 2: Distill improvement candidates
@@ -105,6 +110,22 @@ permanent rule. Validate before promoting.
 - `scripts/review.sh` — Review an improvement hypothesis against existing patterns.
 - `scripts/setup.sh` — Initialize the self-improve workspace state.
 
+## Rules
+
+- `self-improve.no-systemic-claim-without-recurrence` (non-negotiable) — Never
+  present one incident, one review, or one operator preference as evidence of a
+  systemic failure pattern.
+- `self-improve.candidate-qualification` (controlled-exception) — A promotion
+  candidate cites two independent occurrences. Exception evidence: an explicit
+  operator instruction to promote the bounded observation, recorded as
+  authorization rather than correctness evidence.
+- `self-improve.human-reviewed-landing` (non-negotiable) — Candidate scripts
+  never write permanent instruction targets; AGENTS.md, skill, and docs changes
+  land only through a human-reviewed diff.
+- `self-improve.correction-altitude` (adaptive-heuristic) — Default: choose the
+  smallest durable mechanism that explains the repeated waste; raise the fix
+  altitude when the same pattern recurs after the prior correction.
+
 ## Decision Protocol
 
 - What exactly repeated, and how many independent times?
@@ -116,20 +137,10 @@ permanent rule. Validate before promoting.
 - Did this pattern recur _after_ a prior fix was applied? If so the small fix is
   being absorbed — the lesson is a targeted structural change, not another increment.
 
-## Red Flags — STOP
-
-If you catch yourself thinking any of these, STOP and return to Phase 1:
-
-- "This feels like a systemic problem" (without naming 2+ occurrences)
-- "The architecture needs a broad rewrite based on this incident"
-- "This is obviously a pattern, no need to find more evidence"
-- "Let me propose the fix during this active incident"
-- "The same kind of small fix should work, we just applied it wrong" (when the
-  pattern already recurred after a prior fix — the fix altitude is wrong, go structural)
-
 ## Common Rationalizations
 
-See `references/rationalizations.md` for the anti-pattern table.
+See `references/rationalizations.md` for the provenance-bearing anti-pattern
+inventory; do not duplicate it in the kernel.
 
 ## Concrete Example
 
@@ -143,10 +154,14 @@ See `references/example.md` for the grounded example output shape.
   with evidence references for each item.
 - `improvement_plan` defines the smallest next change to test the hypothesis,
   the home where the change belongs, and the falsification condition.
+- An operator-directed single observation hands off a bounded promotion
+  candidate with the instruction as authorization; it does not emit or imply a
+  systemic `improvement_hypothesis`.
 
 ## Stop Conditions
 
-- Fewer than 2 independent occurrences of the claimed pattern.
+- Fewer than 2 independent occurrences of the claimed pattern and no explicit
+  operator instruction to promote a bounded single observation.
 - No traceable evidence anchors (fact references, report IDs, artifact paths).
 - The real need is immediate debugging or implementation, not learning.
 - Active incident response is in progress and the operator has not requested retrospective.

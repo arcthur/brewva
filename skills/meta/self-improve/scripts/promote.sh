@@ -87,23 +87,39 @@ if [ -z "$ENTRY_ID" ] || [ -z "$TARGET" ]; then
     exit 1
 fi
 
+if [[ ! "$ENTRY_ID" =~ ^[A-Z]+-[0-9]{8}-[A-Z0-9]+$ ]]; then
+    log_error "Invalid entry id: $ENTRY_ID"
+    exit 1
+fi
+
 # Find the entry across all learning files
 find_entry() {
     local id="$1"
     local file=""
     local content=""
+    local matches=()
+    local header_count=0
+    local file_match_count=0
 
     for f in "$LEARNINGS_DIR"/LEARNINGS.md "$LEARNINGS_DIR"/ERRORS.md "$LEARNINGS_DIR"/FEATURE_REQUESTS.md; do
-        if [ -f "$f" ] && grep -q "\[$id\]" "$f"; then
-            file="$f"
-            break
+        [ -f "$f" ] || continue
+        file_match_count=$(grep -Ec "^## \[$id\]([[:space:]]|$)" "$f" 2>/dev/null || true)
+        if [ "$file_match_count" -gt 0 ]; then
+            matches+=("$f")
+            header_count=$((header_count + file_match_count))
         fi
     done
 
-    if [ -z "$file" ]; then
+    if [ "$header_count" -eq 0 ]; then
         log_error "Entry $id not found in $LEARNINGS_DIR/"
         exit 1
     fi
+    if [ "$header_count" -ne 1 ]; then
+        log_error "Entry $id must have exactly one source header; found $header_count"
+        printf '  %s\n' "${matches[@]}" >&2
+        exit 1
+    fi
+    file="${matches[0]}"
 
     # Extract the entry block (from ## [ID] to next --- or EOF)
     content=$(awk "/^## \\[$id\\]/{found=1} found{print} found && /^---$/ && NR>1{exit}" "$file")
@@ -118,29 +134,34 @@ find_entry() {
     echo "$content"
 }
 
-# Update the entry's Status field in its source file.
-set_entry_status() {
-    local id="$1"
-    local file="$2"
-    local new_status="$3"
-    awk -v id="$id" -v status="$new_status" '
-        $0 ~ "^## \\[" id "\\]" { found = 1 }
-        found && /^\*\*Status\*\*:/ {
-            sub(/:.*$/, ": " status)
-            found = 0
-        }
-        { print }
-    ' "$file" > "${file}.tmp" && mv "${file}.tmp" "$file"
-}
-
 result=$(find_entry "$ENTRY_ID")
 SOURCE_FILE=$(echo "$result" | head -1)
 ENTRY_CONTENT=$(echo "$result" | sed '1d;2d')
 
 log_info "Found $ENTRY_ID in $SOURCE_FILE"
 
+SOURCE_STATUS_COUNT=$(printf '%s\n' "$ENTRY_CONTENT" | grep -c '^\*\*Status\*\*: ' || true)
+if [ "$SOURCE_STATUS_COUNT" -ne 1 ]; then
+    log_error "Entry $ENTRY_ID must declare exactly one Status field (found: $SOURCE_STATUS_COUNT)"
+    exit 1
+fi
+SOURCE_STATUS=$(printf '%s\n' "$ENTRY_CONTENT" | awk '/^\*\*Status\*\*: /{sub(/^\*\*Status\*\*: /, ""); print; exit}')
+if [ "$SOURCE_STATUS" != "pending" ]; then
+    log_error "Entry $ENTRY_ID must be pending before candidate emission (found: ${SOURCE_STATUS:-missing})"
+    exit 1
+fi
+
 # Extract summary line
-SUMMARY=$(echo "$ENTRY_CONTENT" | grep -A1 "^### Summary" | tail -1 | sed 's/^[[:space:]]*//')
+SUMMARY_COUNT=$(printf '%s\n' "$ENTRY_CONTENT" | grep -c '^### Summary$' || true)
+if [ "$SUMMARY_COUNT" -ne 1 ]; then
+    log_error "Entry $ENTRY_ID must declare exactly one Summary section (found: $SUMMARY_COUNT)"
+    exit 1
+fi
+SUMMARY=$(printf '%s\n' "$ENTRY_CONTENT" | awk '/^### Summary$/{getline; sub(/^[[:space:]]*/, ""); print; exit}')
+if [ -z "$SUMMARY" ]; then
+    log_error "Entry $ENTRY_ID must declare a non-empty Summary"
+    exit 1
+fi
 
 EMITTED_DATE=$(date +%Y-%m-%d)
 # BSD date (macOS) first, GNU date fallback.
@@ -149,6 +170,11 @@ REEVALUATE_DATE=$(date -v+90d +%Y-%m-%d 2>/dev/null || date -d "+90 days" +%Y-%m
 case "$TARGET" in
     agents)
         CANDIDATE_FILE="$CANDIDATES_DIR/$ENTRY_ID.md"
+        if [ -e "$CANDIDATE_FILE" ]; then
+            log_error "Promotion candidate already exists: $CANDIDATE_FILE"
+            log_error "Review or retire the existing candidate; promotion never overwrites reviewer state."
+            exit 1
+        fi
         CANDIDATE_CONTENT=$(cat << CANDIDATE
 # Promotion Candidate: $ENTRY_ID
 
@@ -171,24 +197,29 @@ $ENTRY_CONTENT
 
 A human reviews this candidate. If accepted, land the entry in AGENTS.md as a
 normal reviewed diff (commit + review), then set the source entry's Status to
-promoted and record the landing commit here. If rejected or expired
-(re-evaluate date passed without landing), set the source entry's Status back
-to pending and delete this file. There is no automated append path to
-AGENTS.md.
+promoted, record the target and landing commit in the source entry, and delete
+this candidate file. If rejected or expired (re-evaluate date passed without
+landing), delete this file; the source remains pending. There is no automated
+append path to AGENTS.md and no retained terminal candidate state.
 CANDIDATE
 )
         if [ "$DRY_RUN" = true ]; then
             log_info "Dry run — would write candidate to $CANDIDATE_FILE:"
             echo -e "${CYAN}${CANDIDATE_CONTENT}${NC}"
-            echo ""
-            log_info "Would update $SOURCE_FILE: Status → candidate"
         else
             mkdir -p "$CANDIDATES_DIR"
-            printf '%s\n' "$CANDIDATE_CONTENT" > "$CANDIDATE_FILE"
+            CANDIDATE_TMP=$(mktemp "$CANDIDATES_DIR/.${ENTRY_ID}.XXXXXX")
+            cleanup_candidate_tmp() { rm -f "$CANDIDATE_TMP"; }
+            trap cleanup_candidate_tmp EXIT
+            printf '%s\n' "$CANDIDATE_CONTENT" > "$CANDIDATE_TMP"
+            if ! ln "$CANDIDATE_TMP" "$CANDIDATE_FILE"; then
+                log_error "Promotion candidate already exists or could not be created: $CANDIDATE_FILE"
+                log_error "Review or retire the existing candidate; promotion never overwrites reviewer state."
+                exit 1
+            fi
+            rm -f "$CANDIDATE_TMP"
+            trap - EXIT
             log_info "Candidate written to $CANDIDATE_FILE"
-
-            set_entry_status "$ENTRY_ID" "$SOURCE_FILE" "candidate"
-            log_info "Updated $ENTRY_ID status to candidate in $SOURCE_FILE"
             echo ""
             log_info "Candidate emitted — NOT landed."
             echo "  Entry: $ENTRY_ID"

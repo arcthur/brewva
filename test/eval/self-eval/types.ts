@@ -49,15 +49,23 @@ export type SelfEvalTaskOutcome = "task_passed" | "task_failed" | "terminal_inco
  * tape. `readonly_unchanged` remains available for narrow constraint-only checks,
  * but is not a task-success oracle for the comprehension fixture.
  */
+export interface SelfEvalCommandOracleFields {
+  readonly command: readonly string[];
+  /** Final model-produced files copied into the isolated verifier. */
+  readonly subjectFiles: readonly string[];
+  /** Frozen test inputs written only after the model process has exited. */
+  readonly verifierFiles: Readonly<Record<string, string>>;
+}
+
 export type SelfEvalOracle =
-  | {
-      readonly kind: "command";
-      readonly command: readonly string[];
-      /** Final model-produced files copied into the isolated verifier. */
-      readonly subjectFiles: readonly string[];
-      /** Frozen test inputs written only after the model process has exited. */
-      readonly verifierFiles: Readonly<Record<string, string>>;
-    }
+  | ({ readonly kind: "command" } & SelfEvalCommandOracleFields)
+  | ({
+      readonly kind: "command_with_exception_evidence";
+      readonly receiptFile: string;
+      readonly expectedRuleId: string;
+      readonly requiredEvidence: readonly string[];
+      readonly allowedEvidence: readonly string[];
+    } & SelfEvalCommandOracleFields)
   | { readonly kind: "readonly_unchanged"; readonly paths: readonly string[] }
   | {
       readonly kind: "architecture_response";
@@ -88,7 +96,8 @@ export interface SelfEvalArchitectureModuleExpectation {
  */
 export interface SelfEvalReviewFindingExpectation {
   readonly path: string;
-  readonly terms: readonly string[];
+  /** Every group must contribute at least one term to the same finding. */
+  readonly termGroups: readonly (readonly string[])[];
 }
 
 /**
@@ -119,11 +128,29 @@ export interface SelfEvalRunMetrics {
 }
 
 /**
- * The task shapes under evaluation: the three the n=12 recipe exercised, plus
- * `review` (pilot fixtures for the skill-discipline-calibration gate — a
- * read-only adversarial read scored on seeded-defect detection).
+ * The task shapes under evaluation: `build`, `debug`, and `comprehension` (the
+ * three the tool-surface measurement corpus exercised), plus `review` (pilot
+ * fixtures for the skill-discipline-calibration gate — a read-only adversarial
+ * read scored on seeded-defect detection).
  */
 export type SelfEvalTaskKind = "build" | "debug" | "comprehension" | "review";
+
+export type SelfEvalSkillArm = "no_skill" | "kernel_only" | "kernel_scaffold";
+export type SelfEvalPilotSkill = "debugging" | "learning-research" | "review";
+export type SelfEvalModelTier = "strong" | "weak";
+export type SelfEvalGateClass = "utility" | "safety_honesty";
+export type SelfEvalEvaluationMode = "retirement" | "diagnostic";
+
+export interface SelfEvalSkillIdentity {
+  readonly name: string;
+  readonly contentDigest: string;
+}
+
+export interface SelfEvalSkillContext {
+  readonly arm: SelfEvalSkillArm;
+  readonly skillCorpusDigest: string;
+  readonly loadedSkills: readonly SelfEvalSkillIdentity[];
+}
 
 /**
  * One frozen self-eval task (an evaluator definition, D6). Fixtures are DATA,
@@ -133,6 +160,10 @@ export type SelfEvalTaskKind = "build" | "debug" | "comprehension" | "review";
 export interface SelfEvalFixture {
   readonly id: string;
   readonly kind: SelfEvalTaskKind;
+  /** Pilot whose treatment this fixture is designed to exercise, when any. */
+  readonly targetPilotSkill?: SelfEvalPilotSkill;
+  /** Safety/honesty regressions are never absorbed by the utility margin. */
+  readonly gateClass: SelfEvalGateClass;
   /** One-line human summary of what the task exercises. */
   readonly description: string;
   /** The task prompt handed verbatim to the print turn. */
@@ -159,7 +190,21 @@ export interface SelfEvalFixture {
 
 export interface SelfEvalRunResult {
   readonly fixtureId: string;
+  /** Stable ordinal within the fixture, used as the paired-run identity. */
+  readonly runIndex: number;
   readonly kind: SelfEvalTaskKind;
+  readonly gateClass: SelfEvalGateClass;
+  /** Every route that produced usage, derived from durable cost receipts. */
+  readonly observedModelRoutes: readonly string[];
+  /** Receipt-backed proof that a target-relevant treatment was actually consumed. */
+  readonly treatmentExposure: {
+    readonly targetRelevant: boolean;
+    readonly targetSkillOffered: boolean;
+    readonly targetSkillOpened: boolean;
+    readonly strictScaffoldOpened: boolean;
+  };
+  /** Exact skill corpus staged where the production catalog reads it. */
+  readonly skillContext: SelfEvalSkillContext;
   readonly metrics: SelfEvalRunMetrics;
   /**
    * Task success from the post-run oracle — the utility signal. Distinct from
@@ -212,11 +257,25 @@ export interface SelfEvalAggregate {
  * (never read from a clock inside the builder) so the builder stays pure.
  */
 export interface SelfEvalReport {
-  /** v2 introduced an evaluator that the model cannot rewrite during a run. */
-  readonly schema: "brewva.self-eval.report.v2";
+  /** v4 adds per-skill/tier/evaluator identity and complete per-run route sets. */
+  readonly schema: "brewva.self-eval.report.v4";
   readonly generatedAt: string;
-  readonly model: string;
+  readonly requestedModel: string;
+  readonly observedModelRoutes: readonly string[];
   readonly runsPerFixture: number;
+  readonly experiment: {
+    readonly id: string;
+    /** Only retirement reports may participate in a demotion decision. */
+    readonly evaluationMode: SelfEvalEvaluationMode;
+    readonly arm: SelfEvalSkillArm;
+    readonly pilotSkill: SelfEvalPilotSkill;
+    readonly modelTier: SelfEvalModelTier;
+    readonly sourceRevision: string;
+    readonly evaluatorCorpusDigest: string;
+    readonly fixtureCorpusDigest: string;
+    readonly skillCorpusDigest: string;
+    readonly loadedSkills: readonly SelfEvalSkillIdentity[];
+  };
   readonly runs: readonly SelfEvalRunResult[];
   readonly aggregate: SelfEvalAggregate;
 }

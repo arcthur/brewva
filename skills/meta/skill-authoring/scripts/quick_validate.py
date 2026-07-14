@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 import sys
 from pathlib import Path
@@ -61,9 +62,12 @@ RETIREMENT_SENSITIVITIES = set(CONVENTION_KIND_RETIREMENT.values())
 V3_REQUIRED_SECTIONS_CORE_DOMAIN = {"## The Iron Law"}
 V3_REQUIRED_SECTIONS_ALL = {"## When to Use", "## Workflow", "## Stop Conditions"}
 V3_BODY_LINE_LIMIT = 150
-RULE_TIERS = {"non-negotiable", "controlled-exception", "adaptive-heuristic"}
-RULE_ID_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*(?:\.[a-z0-9]+(?:-[a-z0-9]+)*)+$")
-RULE_BULLET_PATTERN = re.compile(r"^- `([^`]+)` \(([a-z-]+)\) — (.+)$")
+RULE_SCHEMA_PATH = Path(__file__).resolve().parent.parent / "references" / "rule-manifest-schema.json"
+RULE_SCHEMA = json.loads(RULE_SCHEMA_PATH.read_text(encoding="utf8"))
+RULE_TIERS = set(RULE_SCHEMA["tiers"])
+RULE_ID_PATTERN = re.compile(RULE_SCHEMA["ruleIdPattern"])
+RULE_BULLET_PATTERN = re.compile(RULE_SCHEMA["ruleBulletPattern"])
+EXCEPTION_EVIDENCE_MARKER = RULE_SCHEMA["exceptionEvidenceMarker"]
 CANONICAL_EXAMPLE_REFERENCE = (
     "See `references/example.md` for the grounded example output shape."
 )
@@ -267,7 +271,9 @@ def extract_body_section(body: str, heading: str) -> str | None:
     return "\n".join(lines[start + 1 : end])
 
 
-def validate_rules_manifest(body: str) -> tuple[bool, str | None]:
+def validate_rules_manifest(
+    body: str, skill_name: str, seen_rule_ids: set[str] | None = None
+) -> tuple[bool, str | None]:
     """Validate the optional `## Rules` manifest block (v3 rule grammar).
 
     Absent section: valid (skills migrate incrementally). Present section:
@@ -275,6 +281,12 @@ def validate_rules_manifest(body: str) -> tuple[bool, str | None]:
     known tier, and controlled-exception rules must name their exception
     evidence class.
     """
+    rules_heading_count = sum(
+        1 for line in body.split("\n") if line.strip() == "## Rules"
+    )
+    if rules_heading_count > 1:
+        return False, "Rules section must appear at most once"
+
     section = extract_body_section(body, "## Rules")
     if section is None:
         return True, None
@@ -298,6 +310,7 @@ def validate_rules_manifest(body: str) -> tuple[bool, str | None]:
     if not bullets:
         return False, "Rules section is present but declares no rules"
 
+    seen = seen_rule_ids if seen_rule_ids is not None else set()
     for bullet in bullets:
         match = RULE_BULLET_PATTERN.match(bullet)
         if not match:
@@ -311,16 +324,30 @@ def validate_rules_manifest(body: str) -> tuple[bool, str | None]:
                 f"Rule id '{rule_id}' must be '<skill>.<rule-slug>' "
                 "(kebab-case segments joined by dots)"
             )
+        if not rule_id.startswith(f"{skill_name}."):
+            return False, (
+                f"Rule id '{rule_id}' must be prefixed with the skill name "
+                f"'{skill_name}.'"
+            )
+        if rule_id in seen:
+            return False, f"Duplicate rule id '{rule_id}'"
+        seen.add(rule_id)
         if tier not in RULE_TIERS:
             return False, (
                 f"Rule '{rule_id}' has unknown tier '{tier}' "
                 f"(allowed: {', '.join(sorted(RULE_TIERS))})"
             )
-        if tier == "controlled-exception" and "Exception evidence:" not in statement:
-            return False, (
-                f"Rule '{rule_id}' is controlled-exception but names no "
-                "'Exception evidence:' clause"
-            )
+        if tier == "controlled-exception":
+            if EXCEPTION_EVIDENCE_MARKER not in statement:
+                return False, (
+                    f"Rule '{rule_id}' is controlled-exception but names no "
+                    f"'{EXCEPTION_EVIDENCE_MARKER}' clause"
+                )
+            evidence = statement.split(EXCEPTION_EVIDENCE_MARKER, 1)[1].strip()
+            if not evidence:
+                return False, (
+                    f"Rule '{rule_id}' has an empty '{EXCEPTION_EVIDENCE_MARKER}' clause"
+                )
     return True, None
 
 
@@ -330,10 +357,33 @@ def validate_v3_doctrine(
     skill_dir: Path,
 ) -> tuple[bool, str | None]:
     overlay = is_overlay_skill(skill_dir)
+    category = derive_category(skill_dir)
+    match = re.match(r"^---\n.*?\n---\n(.*)", content, re.DOTALL)
+    if not match:
+        return True, None
+    body = match.group(1)
+
+    skill_name = frontmatter.get("name")
+    if not isinstance(skill_name, str) or not skill_name:
+        return False, "Skill name is required before validating Rules"
+    seen_rule_ids: set[str] = set()
+    ok, message = validate_rules_manifest(body, skill_name, seen_rule_ids)
+    if not ok:
+        return False, message
+    strict_protocol = skill_dir / "references" / "strict-protocol.md"
+    if strict_protocol.is_file():
+        ok, message = validate_rules_manifest(
+            strict_protocol.read_text(encoding="utf8"), skill_name, seen_rule_ids
+        )
+        if not ok:
+            return False, f"references/strict-protocol.md: {message}"
+
+    # Overlays are delta documents, but any Rules they declare still enter the
+    # same receipt namespace as base skills. Skip full-kernel doctrine only
+    # after validating that shared grammar.
     if overlay:
         return True, None
 
-    category = derive_category(skill_dir)
     description = frontmatter.get("description", "")
     if isinstance(description, str):
         for pattern in WORKFLOW_LEAK_PATTERNS:
@@ -344,11 +394,6 @@ def validate_v3_doctrine(
                     "Description must contain trigger conditions only, never workflow summary.",
                 )
 
-    match = re.match(r"^---\n.*?\n---\n(.*)", content, re.DOTALL)
-    if not match:
-        return True, None
-    body = match.group(1)
-
     body_lines = [line for line in body.split("\n") if line.strip()]
     if len(body_lines) > V3_BODY_LINE_LIMIT:
         return (
@@ -356,10 +401,6 @@ def validate_v3_doctrine(
             f"SKILL.md body has {len(body_lines)} non-empty lines (limit: {V3_BODY_LINE_LIMIT}). "
             "Move heavy content to references/.",
         )
-
-    ok, message = validate_rules_manifest(body)
-    if not ok:
-        return False, message
 
     for section in V3_REQUIRED_SECTIONS_ALL:
         if section not in body:

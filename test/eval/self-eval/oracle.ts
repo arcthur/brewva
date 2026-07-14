@@ -9,7 +9,11 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import type { SelfEvalArchitectureModuleExpectation, SelfEvalOracle } from "./types.js";
+import type {
+  SelfEvalArchitectureModuleExpectation,
+  SelfEvalCommandOracleFields,
+  SelfEvalOracle,
+} from "./types.js";
 
 /** Bound the oracle's own subprocess so a hung test cannot wedge the report job. */
 const DEFAULT_ORACLE_TIMEOUT_MS = 60_000;
@@ -49,6 +53,11 @@ export async function runFixtureOracle(input: {
       stagedFiles: input.stagedFiles,
       assistantText: input.assistantText,
     });
+  }
+  if (input.oracle.kind === "command_with_exception_evidence") {
+    if (checkExceptionEvidence(input.oracle, input.workspace) !== "task_passed") {
+      return "task_failed";
+    }
   }
   return runTrustedCommandOracle({
     oracle: input.oracle,
@@ -146,7 +155,7 @@ function copyRegularSubjectFile(input: {
 }
 
 async function runTrustedCommandOracle(input: {
-  readonly oracle: Extract<SelfEvalOracle, { readonly kind: "command" }>;
+  readonly oracle: SelfEvalCommandOracleFields;
   readonly workspace: string;
   readonly timeoutMs: number;
 }): Promise<"task_passed" | "task_failed"> {
@@ -189,6 +198,38 @@ async function runTrustedCommandOracle(input: {
       rmSync(verifierWorkspace, { recursive: true, force: true });
     }
   }
+}
+
+function checkExceptionEvidence(
+  oracle: Extract<SelfEvalOracle, { readonly kind: "command_with_exception_evidence" }>,
+  workspace: string,
+): "task_passed" | "task_failed" {
+  if (
+    oracle.subjectFiles.includes(oracle.receiptFile) ||
+    Object.hasOwn(oracle.verifierFiles, oracle.receiptFile)
+  ) {
+    return "task_failed";
+  }
+  const receiptPath = resolveRegularWorkspaceFile(workspace, oracle.receiptFile);
+  if (!receiptPath) return "task_failed";
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(receiptPath, "utf8"));
+  } catch {
+    return "task_failed";
+  }
+  if (
+    !isRecord(parsed) ||
+    parsed.decision !== "controlled_exception" ||
+    parsed.ruleId !== oracle.expectedRuleId
+  ) {
+    return "task_failed";
+  }
+  const evidence = readStringArray(parsed.evidence);
+  if (!evidence || new Set(evidence).size !== evidence.length) return "task_failed";
+  if (evidence.some((entry) => !oracle.allowedEvidence.includes(entry))) return "task_failed";
+  if (oracle.requiredEvidence.some((entry) => !evidence.includes(entry))) return "task_failed";
+  return "task_passed";
 }
 
 function checkReadonlyUnchanged(
@@ -325,7 +366,9 @@ function checkReviewResponse(input: {
     const matched = findings.some(
       (finding) =>
         finding.path === expected.path &&
-        expected.terms.some((term) => finding.issue.includes(term.toLowerCase())),
+        expected.termGroups.every((group) =>
+          group.some((term) => finding.issue.includes(term.toLowerCase())),
+        ),
     );
     if (!matched) return "task_failed";
   }

@@ -25,7 +25,7 @@ Govern effects, not thought paths: a kernel states what must be true and
 what must never happen; a scaffold suggests how a model with known weak spots
 should get there. Only the first is written in absolute register.
 
-## Three Content Types (unchanged from v2)
+## Three Content Types
 
 | Type                               | Where it lives | Examples                                                                           |
 | ---------------------------------- | -------------- | ---------------------------------------------------------------------------------- |
@@ -83,8 +83,23 @@ One bullet per rule inside `## Rules`:
 
 `quick_validate.py` and the rule-manifest fitness enforce this grammar. A
 deviation from a `controlled-exception` rule is declared in the produced
-artifact citing the `ruleId` — that citation is what makes deviations
-countable from the tape.
+artifact citing the `ruleId`. The current harness can grade that artifact in a
+fixture; tape-level counting waits for a typed deviation receipt and is not
+inferred from prose.
+
+### Rule promotion and retirement
+
+- Mint a new discipline default as `adaptive-heuristic` unless the failure can
+  corrupt authority, persisted truth, external effects, or claim honesty.
+- Promote to `controlled-exception` only after repeated, attributable failures
+  show that silent deviation is harmful and the required evidence class is
+  available at decision time.
+- Promote to `non-negotiable` only for a boundary the model must never
+  self-exempt. Do not promote merely because a heuristic often helps.
+- Keep the `ruleId` stable across wording and tier changes so receipts remain
+  comparable. If semantics split, retire the old id and mint distinct ids.
+- Retire or demote when paired behavior evidence shows no utility on current
+  model tiers and removal does not weaken authority or honesty boundaries.
 
 ## SKILL.md Kernel Anatomy
 
@@ -186,12 +201,13 @@ also exhausted".
 1. A scaffold file names the failure mode it counters in its first paragraph
    ("models under time pressure guess-and-patch; this protocol counters
    that").
-2. Scaffolds are loaded from the kernel by a conditional pointer, not pasted
-   inline: "Under time pressure, after repeated failed fixes, or on a
-   weak-model profile, load `references/strict-protocol.md` and follow it."
-3. A scaffold carries its eval contract: it earns default-loading only while
-   the three-arm paired eval (no-skill / kernel-only / kernel+scaffold)
-   shows it helps; a strong-tier tax demotes it to on-demand.
+2. A new or uncalibrated scaffold is default-loaded from the kernel. The
+   three-arm harness removes that pointer only for the kernel-only arm; runtime
+   selection gains no model-profile branch.
+3. A scaffold carries its eval contract: it stays default-loaded until a
+   same-experiment paired eval (no-skill / kernel-only / kernel+scaffold)
+   shows non-inferior task success and the strong-tier ritual-cost check supports
+   demotion to on-demand. Inconclusive evidence keeps the safer default.
 4. Rationalization tables live in scaffolds, and every row carries
    provenance: the model generation and date it was observed on. A row
    unfired across consecutive calibration windows on current-tier models

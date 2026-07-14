@@ -28,7 +28,7 @@
 - Code anchors:
   - `packages/brewva-vocabulary/src/internal/iteration.ts`
   - `packages/brewva-tools/src/families/workflow/verification-record.ts`
-  - `packages/brewva-gateway/src/hosted/internal/session/skills/skill-adoption.ts`
+  - `packages/brewva-gateway/src/hosted/internal/session/skills/skill-projections.ts`
   - `packages/brewva-gateway/src/hosted/internal/session/skills/skill-selection.ts`
   - `packages/brewva-std/src/command-class.ts`
   - `packages/brewva-tools/src/families/execution/exec-process-registry/sessions.ts`
@@ -49,8 +49,11 @@
 - Skill nudges are data, not branches: a forced-candidates map (name → reason)
   feeds the generic scorer and the receipt records `forcedCandidates`; only
   the lifecycle names `review`. Demotion is deterministic, receipt-derived,
-  fails closed on a truncated window; adoption keeps its narrow since-latest
-  window because `after`+`limit` returns the FIRST N events.
+  fails closed on a truncated window; the historical feedback projection was
+  then called adoption, but measured only whether a rendered SKILL.md was
+  subsequently opened. Its surviving `opened` projection keeps a narrow,
+  ordered since-latest window because `after`+`limit` returns the FIRST N
+  events.
 - Pacing is operator policy plus a static table: `classifyCommandClass` picks
   the class, `autoBackground.verificationForegroundWaitMs` owns the wait, and
   `until="exit"` blocks on `waitForManagedSessionExitEffect` (both backends

@@ -55,6 +55,24 @@ Do NOT use this skill when:
 
 TODO: describe the first meaningful action.
 
+## Rules
+
+- `{skill_name}.hard-boundary` (non-negotiable) — TODO: state the safety,
+  honesty, permission, or external-effect boundary that cannot be self-exempted.
+- `{skill_name}.discipline-default` (controlled-exception) — TODO: state the
+  default discipline. Exception evidence: TODO: name the receipt, artifact, or
+  explicit operator approval required for deviation.
+- `{skill_name}.work-width` (adaptive-heuristic) — Default: TODO: state the
+  tunable default and why it is useful.
+
+## Decision Protocol
+
+- TODO: name the question that changes the next action.
+
+## Handoff Expectations
+
+- TODO: name the minimum evidence and decisions downstream work must receive.
+
 ## Stop Conditions
 
 - TODO: call out what should stay out of scope
@@ -62,10 +80,6 @@ TODO: describe the first meaningful action.
 ## Anti-Patterns
 
 - TODO: document the common boundary mistakes
-
-## Red Flags
-
-- TODO: name shortcuts that require stopping or returning to an earlier step
 
 ## Example
 
@@ -110,6 +124,24 @@ Do NOT use this skill when:
 
 TODO: describe the first meaningful action.
 
+## Rules
+
+- `{skill_name}.hard-boundary` (non-negotiable) — TODO: state the safety,
+  honesty, permission, or external-effect boundary that cannot be self-exempted.
+- `{skill_name}.discipline-default` (controlled-exception) — TODO: state the
+  default discipline. Exception evidence: TODO: name the receipt, artifact, or
+  explicit operator approval required for deviation.
+- `{skill_name}.work-width` (adaptive-heuristic) — Default: TODO: state the
+  tunable default and why it is useful.
+
+## Decision Protocol
+
+- TODO: name the question that changes the next action.
+
+## Handoff Expectations
+
+- TODO: name the minimum evidence and decisions downstream work must receive.
+
 ## Stop Conditions
 
 - TODO: call out what should stay out of scope
@@ -117,10 +149,6 @@ TODO: describe the first meaningful action.
 ## Anti-Patterns
 
 - TODO: document the common boundary mistakes
-
-## Red Flags
-
-- TODO: name shortcuts that require stopping or returning to an earlier step
 
 ## Example
 

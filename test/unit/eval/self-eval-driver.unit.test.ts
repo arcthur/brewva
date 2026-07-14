@@ -6,6 +6,7 @@ import {
   assertOperatorConfigOutsideWorkspace,
   buildOperatorEnvelope,
   collectRunOutcome,
+  selfEvalReadTargetMatches,
 } from "../../eval/self-eval/driver.js";
 import type { SelfEvalOracle } from "../../eval/self-eval/types.js";
 import { committedToolEvent } from "../../helpers/tool-events.js";
@@ -36,11 +37,117 @@ const FAIL_ORACLE: SelfEvalOracle = {
   verifierFiles: {},
 };
 
+describe("self-eval skill-open evidence matching", () => {
+  test("rejects basename-only reads while accepting a scoped skill path", () => {
+    const skillPath = "/tmp/workspace/skills/core/debugging/SKILL.md";
+    expect(selfEvalReadTargetMatches("SKILL.md", skillPath)).toBe(false);
+    expect(selfEvalReadTargetMatches("skills/core/debugging/SKILL.md", skillPath)).toBe(true);
+  });
+});
+
 function fixtureRef(oracle: SelfEvalOracle) {
-  return { id: "fix-arithmetic-bug", kind: "build" as const, oracle, workspaceFiles: {} };
+  return {
+    id: "fix-arithmetic-bug",
+    kind: "build" as const,
+    gateClass: "utility" as const,
+    oracle,
+    workspaceFiles: {},
+  };
 }
 
 describe("self-eval driver run-outcome collection (no live provider)", () => {
+  test("derives target and scaffold exposure from durable selection/read evidence", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "self-eval-exposure-"));
+    const skillPath = join(workspace, "skills", "core", "debugging", "SKILL.md");
+    stageTape(workspace, [
+      { type: "turn.started", payload: {}, timestamp: 1 },
+      {
+        type: "custom",
+        payload: {
+          kind: "skill.selection.recorded",
+          payload: { renderedSkillReasons: [{ name: "debugging", filePath: skillPath }] },
+        },
+        timestamp: 2,
+      },
+      committedToolEvent({ toolName: "source_read", args: { uri: skillPath }, timestamp: 3 }),
+      committedToolEvent({
+        toolName: "source_read",
+        args: { uri: "skills/core/debugging/references/strict-protocol.md" },
+        timestamp: 4,
+      }),
+      { type: "turn.ended", payload: { cause: "terminal_commit" }, timestamp: 5 },
+    ]);
+    const result = await collectRunOutcome({
+      fixture: {
+        ...fixtureRef(PASS_ORACLE),
+        targetPilotSkill: "debugging",
+      },
+      pilotSkill: "debugging",
+      workspace,
+      stdout: "",
+      exitCode: 0,
+      timedOut: false,
+    });
+    expect(result.treatmentExposure).toEqual({
+      targetRelevant: true,
+      targetSkillOffered: true,
+      targetSkillOpened: true,
+      strictScaffoldOpened: true,
+    });
+  });
+
+  test("attributes a skill read to the first offer even after a later selection drops the target", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "self-eval-exposure-multi-"));
+    const skillPath = join(workspace, "skills", "core", "debugging", "SKILL.md");
+    stageTape(workspace, [
+      { type: "turn.started", payload: {}, timestamp: 1 },
+      {
+        type: "custom",
+        payload: {
+          kind: "skill.selection.recorded",
+          payload: { renderedSkillReasons: [{ name: "debugging", filePath: skillPath }] },
+        },
+        timestamp: 2,
+      },
+      // A later selection that no longer offers the target. Under a per-window
+      // scan the read below would fall into this selection's window and be lost.
+      {
+        type: "custom",
+        payload: {
+          kind: "skill.selection.recorded",
+          payload: {
+            renderedSkillReasons: [{ name: "review", filePath: "skills/core/review/SKILL.md" }],
+          },
+        },
+        timestamp: 3,
+      },
+      committedToolEvent({ toolName: "source_read", args: { uri: skillPath }, timestamp: 4 }),
+      committedToolEvent({
+        toolName: "source_read",
+        args: { uri: "skills/core/debugging/references/strict-protocol.md" },
+        timestamp: 5,
+      }),
+      { type: "turn.ended", payload: { cause: "terminal_commit" }, timestamp: 6 },
+    ]);
+    const result = await collectRunOutcome({
+      fixture: {
+        ...fixtureRef(PASS_ORACLE),
+        targetPilotSkill: "debugging",
+      },
+      pilotSkill: "debugging",
+      workspace,
+      stdout: "",
+      exitCode: 0,
+      timedOut: false,
+    });
+    expect(result.treatmentExposure).toEqual({
+      targetRelevant: true,
+      targetSkillOffered: true,
+      targetSkillOpened: true,
+      strictScaffoldOpened: true,
+    });
+  });
+
   test("reads structural metrics from the durable tape and cost from stdout", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "self-eval-collect-"));
     stageTape(workspace, [
@@ -48,7 +155,15 @@ describe("self-eval driver run-outcome collection (no live provider)", () => {
       committedToolEvent({ toolName: "read", timestamp: 2 }),
       committedToolEvent({ toolName: "edit", timestamp: 3 }),
       committedToolEvent({ toolName: "exec", timestamp: 4 }),
-      { type: "turn.ended", payload: { cause: "terminal_commit" }, timestamp: 5 },
+      {
+        type: "custom",
+        payload: {
+          kind: "cost.observed",
+          payload: { model: "provider/actual-model", totalTokens: 1234 },
+        },
+        timestamp: 5,
+      },
+      { type: "turn.ended", payload: { cause: "terminal_commit" }, timestamp: 6 },
     ]);
     const stdout = JSON.stringify({
       schema: "brewva.stream.v1",
@@ -64,11 +179,20 @@ describe("self-eval driver run-outcome collection (no live provider)", () => {
       stdout,
       exitCode: 0,
       timedOut: false,
+      runIndex: 2,
+      skillContext: {
+        arm: "kernel_scaffold",
+        skillCorpusDigest: "a".repeat(64),
+        loadedSkills: [{ name: "debugging", contentDigest: "b".repeat(64) }],
+      },
     });
 
     expect(result.tapePresent).toBe(true);
     expect(result.fixtureId).toBe("fix-arithmetic-bug");
     expect(result.kind).toBe("build");
+    expect(result.runIndex).toBe(2);
+    expect(result.observedModelRoutes).toEqual(["provider/actual-model"]);
+    expect(result.skillContext.arm).toBe("kernel_scaffold");
     expect(result.metrics.distinctTools).toEqual(["edit", "exec", "read"]);
     expect(result.metrics.toolCallCount).toBe(3);
     expect(result.metrics.terminalOutcome).toBe("completed");
@@ -76,6 +200,31 @@ describe("self-eval driver run-outcome collection (no live provider)", () => {
     // A completed turn runs the oracle: a passing oracle -> task_passed.
     expect(result.taskOutcome).toBe("task_passed");
     expect(result.timedOut).toBe(false);
+  });
+
+  test("retains every route when a live run falls back mid-turn", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "self-eval-collect-"));
+    stageTape(workspace, [
+      {
+        type: "custom",
+        payload: { kind: "cost.observed", payload: { model: "provider/model-a" } },
+        timestamp: 1,
+      },
+      {
+        type: "custom",
+        payload: { kind: "cost.observed", payload: { model: "fallback/model-b" } },
+        timestamp: 2,
+      },
+      { type: "turn.ended", payload: { cause: "terminal_commit" }, timestamp: 3 },
+    ]);
+    const result = await collectRunOutcome({
+      fixture: fixtureRef(PASS_ORACLE),
+      workspace,
+      stdout: "",
+      exitCode: 0,
+      timedOut: false,
+    });
+    expect(result.observedModelRoutes).toEqual(["provider/model-a", "fallback/model-b"]);
   });
 
   test("a completed turn whose oracle fails scores task_failed, not task_passed", async () => {
@@ -151,6 +300,7 @@ describe("self-eval driver run-outcome collection (no live provider)", () => {
       fixture: {
         id: "implement-missing-functions",
         kind: "build",
+        gateClass: "utility",
         oracle: PASS_ORACLE,
         workspaceFiles: {},
       },
@@ -173,7 +323,13 @@ describe("self-eval driver run-outcome collection (no live provider)", () => {
     ]);
 
     const result = await collectRunOutcome({
-      fixture: { id: "debug-regex", kind: "debug", oracle: PASS_ORACLE, workspaceFiles: {} },
+      fixture: {
+        id: "debug-regex",
+        kind: "debug",
+        gateClass: "utility",
+        oracle: PASS_ORACLE,
+        workspaceFiles: {},
+      },
       workspace,
       stdout: "",
       exitCode: 1,
@@ -209,7 +365,13 @@ describe("self-eval driver run-outcome collection (no live provider)", () => {
     const workspace = mkdtempSync(join(tmpdir(), "self-eval-collect-"));
 
     const result = await collectRunOutcome({
-      fixture: { id: "no-tape", kind: "comprehension", oracle: PASS_ORACLE, workspaceFiles: {} },
+      fixture: {
+        id: "no-tape",
+        kind: "comprehension",
+        gateClass: "safety_honesty",
+        oracle: PASS_ORACLE,
+        workspaceFiles: {},
+      },
       workspace,
       stdout: "",
       exitCode: null,
@@ -251,6 +413,7 @@ describe("self-eval driver run-outcome collection (no live provider)", () => {
       fixture: {
         id: "summarize-architecture",
         kind: "comprehension",
+        gateClass: "safety_honesty",
         workspaceFiles: { "src/types.ts": source },
         oracle: {
           kind: "architecture_response",

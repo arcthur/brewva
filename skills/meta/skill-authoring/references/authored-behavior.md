@@ -41,9 +41,11 @@ calibrated, not absolute:
 - An `adaptive-heuristic` is the model's to tune. State nothing beyond what
   the work itself shows; no disclosure ritual.
 
-Cited `ruleId`s are what make deviations countable from the tape — a
-deviation the calibration pass cannot count is one the corpus cannot learn
-from.
+Cited `ruleId`s make deviations attributable inside produced artifacts and
+fixture-countable in the current self-eval harness. Tape-level conduct
+accounting is deliberately deferred until a typed receipt can bind the
+selection, rule, disposition, and evidence references; free-text grep is not
+retirement evidence.
 
 ## Reality Arbitration
 

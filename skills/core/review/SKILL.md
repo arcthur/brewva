@@ -46,6 +46,13 @@ merge safety explicit.
 
 ## Workflow
 
+<!-- self-eval-strict-scaffold:start -->
+
+Until a recorded paired-calibration verdict demotes it, load
+`references/strict-protocol.md` before Phase 1 and follow its tightened rules.
+
+<!-- self-eval-strict-scaffold:end -->
+
 ### Phase 1: Build review context
 
 Summarize scope, intent, critical paths, and available evidence. Treat
@@ -111,9 +118,6 @@ independence.
 ### Phase 5: Emit findings-first output
 
 Produce `review_findings`, `review_report`, `merge_decision`.
-
-Under pressure to approve, on your own freshly-authored code, or on a
-weak-model profile: load `references/strict-protocol.md` and follow it.
 
 ## Rules
 

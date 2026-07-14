@@ -51,6 +51,10 @@ describe("skill-authoring init script default paths", () => {
       expect(skillText).toContain("selection:");
       expect(skillText).toContain("path_globs:");
       expect(skillText).toContain("references:");
+      expect(skillText).toContain("## Rules");
+      expect(skillText).toContain("## Decision Protocol");
+      expect(skillText).toContain("## Handoff Expectations");
+      expect(skillText).not.toContain("## Red Flags");
       expect(skillText).not.toContain("intent:");
       expect(skillText).not.toContain("execution_hints:");
     } finally {

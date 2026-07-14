@@ -75,7 +75,12 @@ function pathFromUriLike(value: string): string {
 export function readTargetMatchesSkillFile(readTarget: string, skillFilePath: string): boolean {
   const target = normalizePath(pathFromUriLike(readTarget.trim()));
   const skillFile = normalizePath(pathFromUriLike(skillFilePath.trim()));
-  if (target.length === 0 || skillFile.length === 0) {
+  if (
+    target.length === 0 ||
+    skillFile.length === 0 ||
+    !target.includes("/") ||
+    !skillFile.includes("/")
+  ) {
     return false;
   }
   return (
@@ -163,6 +168,7 @@ function readInvocationReadTarget(payload: unknown): string | null {
 
 interface VisibleSelection {
   readonly event: SkillProjectionEvent;
+  readonly eventIndex: number;
   readonly refs: RenderedSkillRef[];
 }
 
@@ -170,13 +176,11 @@ function findLatestVisibleSelection(
   events: readonly SkillProjectionEvent[],
 ): VisibleSelection | null {
   let latestSelection: VisibleSelection | null = null;
-  for (const event of events) {
+  for (const [eventIndex, event] of events.entries()) {
     if (event.type !== SKILL_SELECTION_RECORDED_EVENT_TYPE) continue;
     const refs = readRenderedSkillRefs(event.payload);
     if (refs.length === 0) continue;
-    if (!latestSelection || event.timestamp >= latestSelection.event.timestamp) {
-      latestSelection = { event, refs };
-    }
+    latestSelection = { event, eventIndex, refs };
   }
   return latestSelection;
 }
@@ -199,9 +203,18 @@ export function projectLatestSkillOpened(
       ? (latestSelection.event.payload as { selectionId: string }).selectionId
       : "unknown_selection";
   const opened = new Set<string>();
-  for (const event of events) {
+  for (
+    let eventIndex = latestSelection.eventIndex + 1;
+    eventIndex < events.length;
+    eventIndex += 1
+  ) {
+    const event = events[eventIndex];
+    if (!event) continue;
+    // A selection receipt closes the previous offer window even when it renders
+    // zero SkillCards. Event-array order is the durable causal order; timestamps
+    // are display metadata and may collide within one millisecond.
+    if (event.type === SKILL_SELECTION_RECORDED_EVENT_TYPE) break;
     if (event.type !== TOOL_COMMITTED_EVENT_TYPE) continue;
-    if (event.timestamp < latestSelection.event.timestamp) continue;
     const target = readInvocationReadTarget(event.payload);
     if (!target) continue;
     for (const ref of latestSelection.refs) {
@@ -325,7 +338,7 @@ export interface SkillProjectionQueryPort {
 export interface RecentSkillProjectionInputs {
   /** Tail window of tool invocations feeding the recent_path signal. */
   readonly recentInvocations: readonly SkillProjectionEvent[];
-  /** Selection receipts plus invocations SINCE the latest visible one. */
+  /** Ordered mixed-event window starting with the latest visible selection. */
   readonly openedEvents: readonly SkillProjectionEvent[];
 }
 
@@ -340,16 +353,18 @@ const RECENT_SELECTION_WINDOW = 8;
 // side; the deduplicated output is capped separately by the selection-side
 // RECENT_TOOL_PATH_LIMIT.
 const RECENT_INVOCATION_QUERY_WINDOW = 60;
-// Invocations examined after a visible selection when measuring opened status;
-// skill reads happen early in a turn, so a generous cap suffices.
-const OPENED_INVOCATION_SCAN_LIMIT = 240;
+// Mixed tape events examined from the latest visible selection. This is larger
+// than the old invocation-only cap because message and advisory events remain in
+// the window to preserve cross-type durable order.
+const OPENED_EVENT_SCAN_LIMIT = 720;
 
 /**
  * Bounded tape queries instead of one unbounded scan: per-turn projection cost
- * must stay flat as the session tape grows. Opened reads come from a NARROW
- * query since the latest visible selection — `after`+`limit` returns the FIRST N
- * matches, so a wide window could exhaust its budget on old events and falsely
- * report "0/N read" for the current turn.
+ * must stay flat as the session tape grows. The opened window is deliberately
+ * unfiltered by type: separate selection/read queries destroy causal order when
+ * timestamps collide. `after` includes the latest selection's millisecond, and
+ * projectLatestSkillOpened uses array order to reject earlier same-ms reads and
+ * stop at the next selection receipt.
  */
 export function queryRecentSkillProjectionInputs(
   records: SkillProjectionQueryPort | undefined,
@@ -373,24 +388,18 @@ export function queryRecentSkillProjectionInputs(
     for (const event of selections) {
       if (event.type !== SKILL_SELECTION_RECORDED_EVENT_TYPE) continue;
       if (readRenderedSkillRefs(event.payload).length === 0) continue;
-      if (
-        latestVisibleSelectionTimestamp === null ||
-        event.timestamp > latestVisibleSelectionTimestamp
-      ) {
-        latestVisibleSelectionTimestamp = event.timestamp;
-      }
+      latestVisibleSelectionTimestamp = event.timestamp;
     }
-    const sinceLatest =
+    const openedEvents =
       latestVisibleSelectionTimestamp === null
         ? []
         : (records.query(sessionId, {
-            type: TOOL_COMMITTED_EVENT_TYPE,
             after: latestVisibleSelectionTimestamp - 1,
-            limit: OPENED_INVOCATION_SCAN_LIMIT,
+            limit: OPENED_EVENT_SCAN_LIMIT,
           }) ?? []);
     return {
       recentInvocations,
-      openedEvents: [...selections, ...sinceLatest],
+      openedEvents,
     };
   } catch {
     // Selection must never fail because a projection surface is unavailable.

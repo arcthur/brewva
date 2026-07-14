@@ -1,8 +1,8 @@
 ---
 name: calibration-report
-description: Run the recurring harness calibration pass — aggregate advisory receipts, run the
-  offline evals, and write a dated report with subtraction and calibration proposals for human
-  review.
+description: The recurring, report-only harness calibration pass — a measured check of whether
+  the harness's advisory surfaces still earn their keep, emitting human-reviewed subtraction and
+  calibration proposals rather than direct rule changes.
 selection:
   when_to_use: Use when a scheduled or requested pass should measure whether the harness's
     advisory surfaces earn their keep — receipts, eval outcomes, and deltas distilled into a
@@ -50,13 +50,29 @@ Do NOT use when:
 3. Run the recall runtime eval with `exec`: `bun run eval:recall`. Record
    per-scenario pass/fail. A scenario that flipped since the previous report is
    a regression finding, not a footnote.
-4. Score end-to-end outcome quality with `exec`: `bun run report:self-eval`
-   (add `--fixture <id>` to scope, or record the leg as skipped when no provider
-   or budget is available). It drives the frozen build/debug/comprehension
-   fixtures through the embedded runtime and reads per-run tape metrics. Capture
-   the completion rate (completed vs fail-closed suspended), the per-family
-   tool-surface exercise profile, and deltas vs the previous report under
-   `.brewva/reports/self-eval/`.
+4. Score end-to-end skill behavior as one immutable experiment, one pilot at a
+   time. Choose different explicit strong- and weak-tier model routes. For each
+   tier, run the full canonical fixture cohort. The two decision-bearing arms
+   use the fixed retirement policy (30 runs per fixture, 95% confidence, 10%
+   margin); `no_skill` is a diagnostic control only:
+   - `bun run report:self-eval --experiment <id> --skill <pilot> --model-tier <strong|weak> --arm no_skill --mode diagnostic --model <route> --runs 30`
+   - `bun run report:self-eval --experiment <id> --skill <pilot> --model-tier <strong|weak> --arm kernel_only --mode retirement --model <route>`
+   - `bun run report:self-eval --experiment <id> --skill <pilot> --model-tier <strong|weak> --arm kernel_scaffold --mode retirement --model <route>`
+     The target arm varies only `<pilot>`; the other pilot skills remain constant.
+     Capture every unique JSON path. The decision-bearing command consumes both
+     tier legs at once:
+     `bun run report:self-eval:compare -- --strong-baseline <strong-scaffold.json>
+--strong-candidate <strong-kernel.json> --weak-baseline <weak-scaffold.json>
+--weak-candidate <weak-kernel.json>`. Only matrix exit `0` makes the scaffold
+     eligible for a reviewed demotion; `2` keeps it default-loaded and `3` is
+     inconclusive. Compare `no_skill` to `kernel_scaffold` only with `--mode
+diagnostic`; it is not a retirement gate. The comparator refuses same-arm or
+     backwards comparisons, mixed routes, different source/evaluator/fixture/
+     target/tier/cohort identity, safety/honesty regression, and point-estimate
+     passes whose confidence bound is insufficient. It also requires receipt-backed
+     target `SKILL.md` opens on relevant runs and a strict-scaffold open on the
+     scaffold baseline; missing treatment exposure is inconclusive. Record skipped legs; never
+     reuse an older arm to complete a matrix.
 5. If the harness trace surface is available, run `brewva harness patrol` and
    note drift clusters; if the command is unavailable, record that the patrol
    leg was skipped rather than silently omitting it.
@@ -83,9 +99,9 @@ Do NOT use when:
    - `## Zero-Firing Advisories` — surfaces with no receipts this window; say
      "unexercised, not unnecessary" when the corpus cannot distinguish.
    - `## Eval Outcomes` — recall scenarios (and any other suites you ran).
-   - `## Self-Eval` — completion rate and per-family tool-surface exercise
-     profile with deltas vs the prior self-eval report; the standing chart the
-     tool-surface RFC's one-off n=12 table became (or "leg skipped").
+   - `## Self-Eval` — experiment id, model route, three arm identities and
+     content digests, exact cohort size, comparison exit/verdict, task-success
+     deltas, and per-family tool-surface profile (or "leg skipped").
    - `## Promotion Readiness` — per-note gates declared/passed and prose
      criteria remaining.
    - `## Distilled Precedent Candidates` — new RDP candidates this window with
@@ -114,6 +130,21 @@ Do NOT use when:
   ran.
 - Keep the report under ~200 lines; link evidence rather than inlining raw
   command output.
+
+## Rules
+
+- `calibration-report.no-direct-calibration-write` (non-negotiable) — Never
+  turn a measurement pass into a rule, config, threshold, or surface mutation;
+  emit evidence-backed proposals for reviewed code.
+- `calibration-report.comparable-self-eval-cohort` (non-negotiable) — Never
+  compare self-eval arms across different experiment, source/evaluator,
+  fixture-corpus, target-skill, model-tier, `(fixture, runIndex)`, or observed
+  single-route identities.
+- `calibration-report.inconclusive-stays-inconclusive` (non-negotiable) — Never
+  report missing, insufficient, or incomparable evidence as a pass.
+- `calibration-report.zero-firing-posture` (adaptive-heuristic) — Default:
+  classify zero observations as unexercised until an eligible-opportunity
+  denominator and outcome evidence make subtraction informative.
 
 ## Stop Conditions
 

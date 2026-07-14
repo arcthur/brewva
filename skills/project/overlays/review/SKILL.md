@@ -1,5 +1,8 @@
 ---
 name: review
+description: Findings-first review of Brewva diffs and change plans for merge readiness, project invariants, regression risk, and package or runtime boundary drift.
+selection:
+  when_to_use: Use when a Brewva diff or plan needs adversarial review, merge readiness, compatibility assessment, or conformance checks after implementation.
 references:
   - skills/project/shared/critical-rules.md
   - skills/project/shared/package-boundaries.md

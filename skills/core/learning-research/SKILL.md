@@ -15,8 +15,8 @@ references:
 ## The Iron Law
 
 ```
-HIGH-RISK PLANNING CONSULTS PRECEDENT OR STATES WHY NOT — NEVER SKIPS IT
-SILENTLY
+PLANNING AT MODERATE RISK OR ABOVE CONSULTS PRECEDENT OR STATES WHY NOT —
+NEVER SKIPS IT SILENTLY
 ```
 
 A consult is often minutes against hours of repeated churn; when it is not,
@@ -38,6 +38,13 @@ Do NOT use when:
 - repository mapping is needed, not precedent lookup (use `repository-analysis`)
 
 ## Workflow
+
+<!-- self-eval-strict-scaffold:start -->
+
+Until a recorded paired-calibration verdict demotes it, load
+`references/strict-protocol.md` before Phase 1 and follow its tightened rules.
+
+<!-- self-eval-strict-scaffold:end -->
 
 ### Phase 1: Establish the retrieval target
 
@@ -74,10 +81,6 @@ Produce `knowledge_brief`, `precedent_refs`, `preventive_checks`, `precedent_que
 
 **If `precedent_query_summary` does not include search terms, filters, and scope**: Return to Phase 2 and record them. The consult must be auditable.
 **If artifacts are complete**: Hand off to downstream skills.
-
-When skipping the consult under this skill's exception rule, or on a
-weak-model profile, load `references/strict-protocol.md` for the tightened
-checklist.
 
 ## Rules
 

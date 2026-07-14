@@ -1,41 +1,33 @@
 # Learning-Research Strict Protocol (scaffold)
 
-Failure mode this scaffold counters: models either skip the precedent layer
-("I already know what it says") and re-derive lessons the repository already
-paid for, or anchor on the first retrieved record without checking whether it
-still describes the current code. Load this when the kernel points here (a
-consult is being skipped under the exception rule, or a weak-model profile is
-active).
+Failure mode this scaffold counters: models skip repository precedent from
+memory, treat one narrow miss as evidence of absence, or follow the first
+record without checking whether it still describes current code.
 
-Eval contract: this scaffold earns default-loading only while the three-arm
-paired eval (no-skill / kernel-only / kernel+scaffold) shows it helps the
-active model tier; a strong-tier tax demotes it to on-demand.
+Calibration posture: default-loaded until a same-experiment three-arm paired
+evaluation records non-inferiority and the strong-tier ritual-cost check
+supports demotion to on-demand.
 
-## Strict consult checklist
+## Rules
 
-- Run the consult even when the exception rule would allow skipping; record
-  the result either way.
-- Two query shapes minimum before concluding `no_relevant_precedent_found`:
-  one by problem class, one by module/boundary. Zero results from one narrow
-  query is a query-quality signal, not evidence of absence.
-- For every consulted record, name one concrete file or behavior it predicts
-  and check it — a precedent that predicts nothing checkable steers nothing.
-
-## Red flags — stop and repair
-
-If you catch yourself thinking any of these, stop, name the violated
-precondition, repair it, then continue:
-
-- "I already know what the precedent says from prior context"
-- "No results means no precedent exists" (without checking query specificity)
-- "I'll summarize the whole docs folder instead of targeting the query"
-- "This research is taking too long, I'll skip the consult" (skipping is
-  legal only with the stated-reason exception — silence is not an exception)
-- Following a precedent whose described code no longer exists
+- `learning-research.strict-consult-despite-exception` (controlled-exception) —
+  Run the consult even when the kernel exception could permit a skip.
+  Exception evidence: explicit operator deferral naming the follow-up owner and
+  the decision that must not rely on unconsulted precedent.
+- `learning-research.strict-query-diversity` (adaptive-heuristic) — Default:
+  use at least two query shapes before concluding
+  `no_relevant_precedent_found`: one by problem class and one by module or
+  boundary, because a narrow miss measures query quality rather than absence.
+- `learning-research.strict-checkable-prediction` (controlled-exception) —
+  Every precedent used to steer the plan names a current file or behavior it
+  predicts and checks that prediction. Exception evidence: a recorded
+  unavailable source plus the bounded claim that remains safe without it.
+- `learning-research.strict-no-memory-as-consult` (non-negotiable) — Never
+  report prior context or model memory as a completed repository consult; a
+  claimed consult names the source actually read.
 
 ## Common rationalizations
 
-See `references/rationalizations.md` for the anti-pattern table. Rows carry
-provenance (model generation and date observed); rows unfired across
-consecutive calibration windows on current-tier models enter the retirement
-watchlist.
+See `references/rationalizations.md` for the provenance-bearing inventory.
+Unfired rows enter the calibration retirement watchlist instead of accumulating
+forever.

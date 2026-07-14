@@ -3,23 +3,23 @@
 
 The input is the model's own report, so the output is never independent
 evidence, never a phase gate, and never an escalation authority (the
-validator authority ceiling in skill-anatomy-v3). The `should_escalate`
-signal and the max-active cap are consumed by the strict-protocol scaffold,
-which owns those numbers.
+validator authority ceiling in skill-anatomy-v3). Counts are neutral
+observations over a structurally valid list; they never decide whether an
+investigation continues, stops, or escalates.
 
 Input JSON (stdin):
   {
     "hypotheses": [
       {"id": int, "claim": str, "status": "active"|"falsified"|"confirmed", "evidence": str}
-    ],
-    "max_active": int          # optional, defaults to 3
+    ]
   }
 
 Output JSON (stdout):
   {
     "valid": bool,
     "active_count": int,
-    "should_escalate": bool,
+    "falsified_count": int,
+    "confirmed_count": int,
     "reason": str
   }
 """
@@ -27,24 +27,32 @@ Output JSON (stdout):
 import json
 import sys
 
-HARD_MAX_ACTIVE = 3
 ALLOWED_STATUSES = {"active", "falsified", "confirmed"}
 
 
-def validate(data: dict) -> dict:
+def invalid_result(
+    reason: str,
+    *,
+    active_count: int = 0,
+    falsified_count: int = 0,
+    confirmed_count: int = 0,
+) -> dict:
+    return {
+        "valid": False,
+        "active_count": active_count,
+        "falsified_count": falsified_count,
+        "confirmed_count": confirmed_count,
+        "reason": reason,
+    }
+
+
+def validate(data: object) -> dict:
+    if not isinstance(data, dict):
+        return invalid_result("input must be an object")
+
     hypotheses = data.get("hypotheses")
     if not isinstance(hypotheses, list):
-        return {
-            "valid": False,
-            "active_count": 0,
-            "should_escalate": False,
-            "reason": "hypotheses must be a non-empty list",
-        }
-
-    max_active = data.get("max_active", HARD_MAX_ACTIVE)
-    if not isinstance(max_active, int) or max_active < 1:
-        max_active = HARD_MAX_ACTIVE
-    max_active = min(max_active, HARD_MAX_ACTIVE)
+        return invalid_result("hypotheses must be a list")
 
     seen_ids: set[int] = set()
     active_count = 0
@@ -58,7 +66,7 @@ def validate(data: dict) -> dict:
             continue
 
         hid = h.get("id")
-        if not isinstance(hid, int):
+        if type(hid) is not int:
             errors.append(f"hypothesis[{i}]: id must be int")
         elif hid in seen_ids:
             errors.append(f"hypothesis[{i}]: duplicate id {hid}")
@@ -70,7 +78,7 @@ def validate(data: dict) -> dict:
             errors.append(f"hypothesis[{i}]: claim must be non-empty string")
 
         status = h.get("status", "")
-        if status not in ALLOWED_STATUSES:
+        if not isinstance(status, str) or status not in ALLOWED_STATUSES:
             errors.append(
                 f"hypothesis[{i}]: status must be one of {sorted(ALLOWED_STATUSES)}"
             )
@@ -90,39 +98,18 @@ def validate(data: dict) -> dict:
             )
 
     if errors:
-        return {
-            "valid": False,
-            "active_count": active_count,
-            "should_escalate": False,
-            "reason": "; ".join(errors),
-        }
-
-    if active_count > max_active:
-        return {
-            "valid": False,
-            "active_count": active_count,
-            "should_escalate": False,
-            "reason": f"active hypotheses ({active_count}) exceeds max ({max_active})",
-        }
-
-    all_falsified_at_cap = (
-        falsified_count >= max_active
-        and active_count == 0
-        and confirmed_count == 0
-    )
-
-    if all_falsified_at_cap:
-        return {
-            "valid": True,
-            "active_count": 0,
-            "should_escalate": True,
-            "reason": f"all {falsified_count} hypotheses falsified at max_active={max_active}; escalate instead of inventing more",
-        }
+        return invalid_result(
+            "; ".join(errors),
+            active_count=active_count,
+            falsified_count=falsified_count,
+            confirmed_count=confirmed_count,
+        )
 
     return {
         "valid": True,
         "active_count": active_count,
-        "should_escalate": False,
+        "falsified_count": falsified_count,
+        "confirmed_count": confirmed_count,
         "reason": "ok",
     }
 
@@ -131,15 +118,7 @@ def main() -> None:
     try:
         data = json.load(sys.stdin)
     except json.JSONDecodeError as exc:
-        json.dump(
-            {
-                "valid": False,
-                "active_count": 0,
-                "should_escalate": False,
-                "reason": f"invalid JSON input: {exc}",
-            },
-            sys.stdout,
-        )
+        json.dump(invalid_result(f"invalid JSON input: {exc}"), sys.stdout)
         sys.exit(1)
 
     result = validate(data)

@@ -12,7 +12,18 @@ import { spawnPrintTurn } from "../print-turn.js";
 import { stageWorkspaceFiles } from "../workspace-staging.js";
 import { extractSelfEvalRunMetrics } from "./metrics.js";
 import { runFixtureOracle } from "./oracle.js";
-import type { SelfEvalCostObservation, SelfEvalFixture, SelfEvalRunResult } from "./types.js";
+import { materializeSelfEvalSkillArm } from "./skill-materialization.js";
+import type {
+  SelfEvalCostObservation,
+  SelfEvalFixture,
+  SelfEvalPilotSkill,
+  SelfEvalRunResult,
+  SelfEvalSkillArm,
+  SelfEvalSkillContext,
+  SelfEvalTapeEvent,
+} from "./types.js";
+
+const EMPTY_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 
 function readCostObservation(stdout: string): SelfEvalCostObservation | undefined {
   const summary = findFinalBundle(parseJsonLines(stdout))?.costSummary;
@@ -26,9 +37,7 @@ function readCostObservation(stdout: string): SelfEvalCostObservation | undefine
   };
 }
 
-function readFinalAssistantText(
-  events: readonly { type?: string; payload?: Record<string, unknown> }[],
-): string | undefined {
+function readFinalAssistantText(events: readonly SelfEvalTapeEvent[]): string | undefined {
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index];
     if (event?.type !== "msg.committed") continue;
@@ -36,6 +45,147 @@ function readFinalAssistantText(
     if (typeof text === "string" && text.trim().length > 0) return text;
   }
   return undefined;
+}
+
+function readObservedModelRoutes(events: readonly SelfEvalTapeEvent[]): readonly string[] {
+  const routes = new Set<string>();
+  for (const event of events) {
+    const directPayload = event.type === "cost.observed" ? event.payload : undefined;
+    const customPayload =
+      event.type === "custom" && event.payload?.kind === "cost.observed"
+        ? event.payload.payload
+        : undefined;
+    const payload =
+      typeof customPayload === "object" && customPayload !== null
+        ? (customPayload as Record<string, unknown>)
+        : directPayload;
+    if (!payload) continue;
+    const model = payload.model;
+    const provider = payload.provider;
+    if (typeof model !== "string" || model.length === 0) continue;
+    routes.add(
+      typeof provider === "string" && provider.length > 0 && !model.includes("/")
+        ? `${provider}/${model}`
+        : model,
+    );
+  }
+  return [...routes];
+}
+
+const READ_TOOL_NAMES = new Set(["source_read", "resource_read", "look_at", "read"]);
+
+function readCommittedTarget(event: SelfEvalTapeEvent): string | undefined {
+  if (event.type !== "tool.committed") return undefined;
+  const call = event.payload?.call;
+  if (typeof call !== "object" || call === null) return undefined;
+  const toolName = (call as Record<string, unknown>).toolName;
+  const args = (call as Record<string, unknown>).args;
+  if (!READ_TOOL_NAMES.has(String(toolName)) || typeof args !== "object" || args === null) {
+    return undefined;
+  }
+  const record = args as Record<string, unknown>;
+  for (const key of ["uri", "path", "file_path", "filePath"] as const) {
+    if (typeof record[key] === "string" && record[key].length > 0) return record[key];
+  }
+  return undefined;
+}
+
+function normalizedPath(path: string): string {
+  let value = path;
+  if (value.startsWith("brewva-resource:///file/")) {
+    value = value.slice("brewva-resource:///file/".length);
+  } else if (value.startsWith("file://")) {
+    value = value.slice("file://".length);
+  }
+  try {
+    value = decodeURIComponent(value);
+  } catch {
+    // Preserve the durable target when it is not URI-encoded.
+  }
+  return value.replaceAll("\\", "/").replace(/^\.\//u, "");
+}
+
+export function selfEvalReadTargetMatches(left: string, right: string): boolean {
+  const normalizedLeft = normalizedPath(left);
+  const normalizedRight = normalizedPath(right);
+  if (!normalizedLeft.includes("/") || !normalizedRight.includes("/")) return false;
+  return (
+    normalizedLeft === normalizedRight ||
+    normalizedLeft.endsWith(`/${normalizedRight}`) ||
+    normalizedRight.endsWith(`/${normalizedLeft}`)
+  );
+}
+
+function readTreatmentExposure(
+  events: readonly SelfEvalTapeEvent[],
+  targetPilotSkill: SelfEvalPilotSkill | undefined,
+  evaluatedPilotSkill: SelfEvalPilotSkill | undefined,
+): SelfEvalRunResult["treatmentExposure"] {
+  const targetRelevant = targetPilotSkill !== undefined && targetPilotSkill === evaluatedPilotSkill;
+  if (!targetRelevant) {
+    return {
+      targetRelevant: false,
+      targetSkillOffered: false,
+      targetSkillOpened: false,
+      strictScaffoldOpened: false,
+    };
+  }
+
+  // Find the FIRST selection that offered the target skill, then attribute every
+  // later read to it. Scanning from the first offer onward — rather than only the
+  // window up to the next selection — keeps the evidence intact when the runtime
+  // emits more than one selection per run and the target drops out of a later one.
+  let offeredIndex = -1;
+  let skillPath: string | undefined;
+  for (const [eventIndex, event] of events.entries()) {
+    if (event.type !== "custom" || event.payload?.kind !== "skill.selection.recorded") continue;
+    const body = event.payload.payload;
+    if (typeof body !== "object" || body === null) continue;
+    const rendered = (body as Record<string, unknown>).renderedSkillReasons;
+    if (!Array.isArray(rendered)) continue;
+    const offered = rendered.find(
+      (entry) =>
+        typeof entry === "object" &&
+        entry !== null &&
+        (entry as Record<string, unknown>).name === targetPilotSkill,
+    );
+    if (typeof offered !== "object" || offered === null) continue;
+    offeredIndex = eventIndex;
+    const path = (offered as Record<string, unknown>).filePath;
+    skillPath = typeof path === "string" ? path : undefined;
+    break;
+  }
+  if (offeredIndex < 0) {
+    return {
+      targetRelevant,
+      targetSkillOffered: false,
+      targetSkillOpened: false,
+      strictScaffoldOpened: false,
+    };
+  }
+
+  let targetSkillOpened = false;
+  let strictScaffoldOpened = false;
+  for (const readEvent of events.slice(offeredIndex + 1)) {
+    const target = readCommittedTarget(readEvent);
+    if (!target) continue;
+    if (skillPath !== undefined && selfEvalReadTargetMatches(target, skillPath)) {
+      targetSkillOpened = true;
+    }
+    if (
+      normalizedPath(target).endsWith(
+        `skills/core/${targetPilotSkill}/references/strict-protocol.md`,
+      )
+    ) {
+      strictScaffoldOpened = true;
+    }
+  }
+  return {
+    targetRelevant,
+    targetSkillOffered: true,
+    targetSkillOpened,
+    strictScaffoldOpened,
+  };
 }
 
 /**
@@ -53,11 +203,17 @@ function readFinalAssistantText(
  * does not (the oracle runs the fixture's own test, no provider).
  */
 export async function collectRunOutcome(input: {
-  readonly fixture: Pick<SelfEvalFixture, "id" | "kind" | "oracle" | "workspaceFiles">;
+  readonly fixture: Pick<
+    SelfEvalFixture,
+    "id" | "kind" | "gateClass" | "targetPilotSkill" | "oracle" | "workspaceFiles"
+  >;
   readonly workspace: string;
   readonly stdout: string;
   readonly exitCode: number | null;
   readonly timedOut: boolean;
+  readonly runIndex?: number;
+  readonly pilotSkill?: SelfEvalPilotSkill;
+  readonly skillContext?: SelfEvalSkillContext;
 }): Promise<SelfEvalRunResult> {
   const tapeFile = latestCanonicalTapeFile(input.workspace);
   // Parse RAW, not the runtime.ops-operational remap: the embedded run commits
@@ -82,7 +238,20 @@ export async function collectRunOutcome(input: {
         });
   return {
     fixtureId: input.fixture.id,
+    runIndex: input.runIndex ?? 1,
     kind: input.fixture.kind,
+    gateClass: input.fixture.gateClass,
+    observedModelRoutes: readObservedModelRoutes(events),
+    treatmentExposure: readTreatmentExposure(
+      events,
+      input.fixture.targetPilotSkill,
+      input.pilotSkill,
+    ),
+    skillContext: input.skillContext ?? {
+      arm: "no_skill",
+      skillCorpusDigest: EMPTY_SHA256,
+      loadedSkills: [],
+    },
     metrics,
     taskOutcome,
     exitCode: input.exitCode,
@@ -193,6 +362,10 @@ export function assertOperatorConfigOutsideWorkspace(
 export async function driveSelfEvalRun(input: {
   readonly fixture: SelfEvalFixture;
   readonly model: string;
+  readonly runIndex: number;
+  readonly arm: SelfEvalSkillArm;
+  readonly pilotSkill: SelfEvalPilotSkill;
+  readonly sourceRoot: string;
   readonly timeoutMs?: number;
   readonly workspaceParentDir?: string;
 }): Promise<SelfEvalRunResult> {
@@ -204,6 +377,13 @@ export async function driveSelfEvalRun(input: {
     workspace,
     `Self-eval fixture ${input.fixture.id}`,
   );
+  const materialized = materializeSelfEvalSkillArm({
+    arm: input.arm,
+    pilotSkill: input.pilotSkill,
+    sourceRoot: input.sourceRoot,
+    workspace,
+  });
+  const skillContext: SelfEvalSkillContext = { arm: input.arm, ...materialized };
   const operatorConfigPath = stageOperatorEnvelopeConfig(input.fixture, parentDir);
   assertOperatorConfigOutsideWorkspace(operatorConfigPath, workspace);
   const { stdout, exitCode, timedOut } = await spawnPrintTurn({
@@ -219,5 +399,14 @@ export async function driveSelfEvalRun(input: {
     extraArgs: ["--config", operatorConfigPath],
     ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs } : {}),
   });
-  return collectRunOutcome({ fixture: input.fixture, workspace, stdout, exitCode, timedOut });
+  return collectRunOutcome({
+    fixture: input.fixture,
+    workspace,
+    stdout,
+    exitCode,
+    timedOut,
+    runIndex: input.runIndex,
+    pilotSkill: input.pilotSkill,
+    skillContext,
+  });
 }

@@ -1,9 +1,8 @@
 import { describe, expect, it } from "bun:test";
-import { readdirSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { scoreDocumentsByTfIdf } from "@brewva/brewva-search";
-import { parseSkillDocument } from "@brewva/brewva-vocabulary/session";
-import type { SkillCategory } from "@brewva/brewva-vocabulary/session";
+import { composeSkillCatalog } from "../../../packages/brewva-gateway/src/hosted/internal/session/runtime-ops-builders/skills.js";
+import { renderSkillSearchText } from "../../../packages/brewva-tools/src/families/skills/discover-skills.js";
 
 // Trigger-quality sets for the pilot skills (RFC skill-discipline-calibration
 // Phase 1): the description/when_to_use pair is the activation surface, so its
@@ -14,8 +13,8 @@ import type { SkillCategory } from "@brewva/brewva-vocabulary/session";
 // and TF-IDF ranking, so a description edit that degrades discovery fails
 // here before it ships.
 
-const PROMPT_VISIBLE_CATEGORIES = ["core", "domain", "operator"] as const;
 const SHOULD_TRIGGER_TOP_K = 5;
+const SHOULD_NOT_TRIGGER_MAX_OWNER_SCORE_RATIO = 0.25;
 
 interface TriggerCase {
   readonly query: string;
@@ -86,45 +85,29 @@ const PILOT_TRIGGER_SETS: readonly PilotTriggerSet[] = [
 
 function collectCatalogDocuments(): Array<{ id: string; text: string }> {
   const repoRoot = resolve(import.meta.dirname, "../../..");
-  const documents: Array<{ id: string; text: string }> = [];
-  for (const category of PROMPT_VISIBLE_CATEGORIES) {
-    const categoryDir = join(repoRoot, "skills", category);
-    let entries: Array<import("node:fs").Dirent>;
-    try {
-      entries = readdirSync(categoryDir, { withFileTypes: true });
-    } catch {
-      continue;
-    }
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
-      const filePath = join(categoryDir, entry.name, "SKILL.md");
-      try {
-        if (!statSync(filePath).isFile()) continue;
-      } catch {
-        continue;
-      }
-      const parsed = parseSkillDocument(filePath, category as SkillCategory);
-      // Mirror discover_skills' renderSkillSearchText: name, category,
-      // description, when_to_use, filePath.
-      const text = [
-        parsed.name,
-        parsed.category,
-        parsed.description,
-        parsed.card.selection?.whenToUse ?? null,
-        parsed.filePath,
-      ]
-        .filter((value): value is string => Boolean(value))
-        .join("\n");
-      documents.push({ id: parsed.name, text });
-    }
-  }
-  return documents;
+  const catalog = composeSkillCatalog({
+    workspaceRoot: repoRoot,
+    roots: [{ root: join(repoRoot, "skills"), overlay: false, projectRoot: repoRoot }],
+  });
+  return catalog.skills
+    .filter((skill) => skill.category !== "internal")
+    .map((skill) => ({
+      id: skill.name,
+      text: renderSkillSearchText({
+        name: skill.name,
+        category: skill.category,
+        description: skill.description,
+        whenToUse: skill.card.selection?.whenToUse ?? null,
+        filePath: skill.filePath,
+        resourceRefs: [],
+        argumentHints: [],
+        requestedOutputArtifacts: [],
+      }),
+    }));
 }
 
-function rankedSkillNames(query: string, documents: Array<{ id: string; text: string }>): string[] {
-  return scoreDocumentsByTfIdf(query, documents, { limit: documents.length }).map(
-    (entry) => entry.document.id,
-  );
+function rankedSkills(query: string, documents: Array<{ id: string; text: string }>) {
+  return scoreDocumentsByTfIdf(query, documents, { limit: documents.length });
 }
 
 describe("pilot skill trigger quality", () => {
@@ -140,7 +123,8 @@ describe("pilot skill trigger quality", () => {
   for (const set of PILOT_TRIGGER_SETS) {
     it(`surfaces ${set.skill} for its should-trigger queries`, () => {
       for (const testCase of set.shouldTrigger) {
-        const ranked = rankedSkillNames(testCase.query, documents);
+        const scored = rankedSkills(testCase.query, documents);
+        const ranked = scored.map((entry) => entry.document.id);
         const rank = ranked.indexOf(set.skill);
         expect(
           rank >= 0 && rank < SHOULD_TRIGGER_TOP_K,
@@ -152,7 +136,8 @@ describe("pilot skill trigger quality", () => {
 
     it(`does not outrank the owning skill on ${set.skill}'s should-not-trigger queries`, () => {
       for (const testCase of set.shouldNotTrigger) {
-        const ranked = rankedSkillNames(testCase.query, documents);
+        const scored = rankedSkills(testCase.query, documents);
+        const ranked = scored.map((entry) => entry.document.id);
         const pilotRank = ranked.indexOf(set.skill);
         const ownerRank = ranked.indexOf(testCase.expectedInstead);
         expect(
@@ -164,6 +149,14 @@ describe("pilot skill trigger quality", () => {
           ownerRank < pilotEffectiveRank,
           `'${testCase.expectedInstead}' must outrank '${set.skill}' for "${testCase.query}" ` +
             `(owner rank ${ownerRank + 1}, pilot rank ${pilotRank < 0 ? "unranked" : pilotRank + 1})`,
+        ).toBe(true);
+        const ownerScore = scored[ownerRank]?.score ?? 0;
+        const pilotScore = pilotRank < 0 ? 0 : (scored[pilotRank]?.score ?? 0);
+        expect(ownerScore).toBeGreaterThan(0);
+        expect(
+          pilotScore / ownerScore <= SHOULD_NOT_TRIGGER_MAX_OWNER_SCORE_RATIO,
+          `'${set.skill}' must stay below the negative-query relevance cutoff for ` +
+            `"${testCase.query}" (pilot ${pilotScore}, owner ${ownerScore})`,
         ).toBe(true);
       }
     });

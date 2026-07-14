@@ -9,7 +9,7 @@
   paired-eval evidence). No new runtime plane; one new authored surface (the
   rule manifest, budgeted below).
 - Owner: skills-catalog / harness-calibration maintainers
-- Last reviewed: `2026-07-13`
+- Last reviewed: `2026-07-14`
 - Depends on / relates to:
   - [Design Axioms](../../architecture/design-axioms.md) — axiom 1 `Attention
 belongs to the model.`, axiom 3 `Subtraction beats switches.`, axiom 4
@@ -356,7 +356,8 @@ number[]`). Softening the single shared text would strip weak-model
   diagnose. **Absorbed:** a minimal **rule manifest** (stable `ruleId`, tier,
   exception-evidence class) becomes the precondition for any softening;
   disclosures must cite a `ruleId` and attach evidence, making them
-  deterministically countable from the tape; the zero-new-authored-surface
+  attributable in artifacts and deterministically gradeable by fixtures;
+  tape-level conduct accounting waits for a typed receipt. The zero-new-authored-surface
   claim is honestly withdrawn (Surface Budget below carries the debt).
 - **Two tiers are not enough (reviewer one).** Safety/default collapses two
   different non-safety cases: high-impact cognitive processes (release,
@@ -431,8 +432,8 @@ number[]`). Softening the single shared text would strip weak-model
   observed-deficit countermeasures — step workflows, count budgets,
   rationalization tables, detailed checklists, and the strict-era material
   relocated (never deleted) from kernels. Each scaffold names the failure
-  mode it counters and carries an eval contract: it earns default-loading
-  only while the paired eval shows it helps.
+  mode it counters and carries an eval contract: an uncalibrated scaffold is
+  default-loaded, and only a complete paired gate may demote it to on-demand.
 - **Deterministic capability** (`scripts/`): world-reading or
   world-transforming code, unchanged. Self-report validators live under the
   authority ceiling (advisory lint at most — never independent evidence,
@@ -460,10 +461,11 @@ Three tiers replace the draft's two:
 ### Phase 0 — Close the mechanism gaps (deterministic, immediate)
 
 1. **Retire the `AGENTS.md` direct-write path.** `promote.sh agents` stops
-   appending; it emits a promotion candidate for human review, following the
-   existing RDP candidate pattern (files under a candidates directory, never
-   active records — the harness ledger is not reused; its payload is
-   manifest deltas, not learning text). Rewrite `promotion-targets.md`
+   appending; it emits a promotion candidate for human review under the
+   learning proposal lane. This is deliberately separate from RDP: RDP stores
+   recall knowledge, while promotion candidates carry review lifecycle for a
+   proposed instruction change. The candidate file is the single source of
+   candidate status; it is atomic and never overwritten. Rewrite `promotion-targets.md`
    criteria from "any of these" to recurrence-or-reviewed: repeated evidence
    per self-improve's own Iron Law, or an explicit human instruction that
    still lands as a reviewed diff. Candidates carry scope, provenance, and a
@@ -485,11 +487,16 @@ Three tiers replace the draft's two:
    don't assume it).
 3. **Eval extension:** pilot-targeted fixtures in `report:self-eval`
    covering what the generic five cannot — a review task, a stale-precedent
-   trap, a non-reproducible failure, and a deviation-laundering probe (a
+   trap, a non-reproducible failure, a symptom-patch trap, and a
+   deviation-laundering probe (a
    tempting shortcut where the correct behavior is a cited exception, the
    wrong one a silent skip). Report gains paired comparison (same fixture,
    same model, wording variants), repetition counts, and a declared
-   non-inferiority threshold on oracle task-success.
+   non-inferiority threshold on oracle task-success. Every run materializes
+   its selected arm into the production catalog root and reports experiment,
+   fixture-corpus, evaluator-content, target-skill, skill-content,
+   source-revision, run-ordinal, declared model tier, requested-model, and the
+   complete observed provider/model-route set.
 
 ### Phase 2 — Pilot rewrite (2–3 skills, kernel + scaffold)
 
@@ -514,13 +521,26 @@ Three tiers replace the draft's two:
 
 ### Phase 3 — Gate, expand, and only then retire
 
-1. **The pilot gate:** three-arm paired eval per pilot skill — no-skill /
-   kernel-only / kernel+scaffold — on strong- and weak-tier fixtures.
-   Primary metric: oracle task-success non-inferiority (declared threshold,
-   paired runs, repetitions reported). Secondary: safety/honesty failure
+1. **The pilot gate:** a two-arm decision-bearing paired eval per pilot skill —
+   kernel-only vs kernel+scaffold — plus a no-skill diagnostic control, on
+   distinct declared strong- and weak-model routes. Primary metric: oracle
+   task-success non-inferiority with a fixed 10% margin, 95% one-sided exact
+   confidence bound, and exactly 30 paired runs for every fixture in the full
+   canonical corpus.
+   Secondary: safety/honesty failure
    count (never worse), then round-trip cost. A weak-tier regression on
-   kernel-only keeps the scaffold default-loaded; a strong-tier tax from the
-   scaffold demotes it to on-demand for that skill.
+   kernel-only keeps the scaffold default-loaded. Because this RFC adds no
+   per-model runtime profile, demotion is global for that skill and requires
+   the complete tier set to support it; a strong-tier tax paired with weak-tier
+   utility remains default-loaded and becomes an investigation proposal.
+   The decision-bearing comparison is directional: `kernel+scaffold` is the
+   baseline and `kernel-only` is the candidate. `no-skill` remains a value
+   diagnostic, not a substitute for that retirement comparison.
+   Every target-relevant fixture explicitly activates its pilot. Retirement
+   additionally requires receipt-backed treatment liveness on every relevant
+   run: both arms offered and opened the target `SKILL.md`, while the scaffold
+   baseline also opened `references/strict-protocol.md`. Missing exposure is
+   inconclusive, never evidence for demotion.
 2. **Corpus expansion** only after the gate passes, skill by skill, same
    mechanics.
 3. **Retirement semantics** (replacing the draft's zero-firing watchlist):
@@ -545,9 +565,11 @@ Three tiers replace the draft's two:
   if the manifest's receipts are not consulted by then, the manifest is
   itself retirement-eligible.
 - Offsetting retirements: two meta anti-deviation clauses deleted; the
-  add-only rationalization-table rule deleted; `promote.sh`'s `agents`
-  branch removed; self-report scripts stripped of gate authority (three
-  fewer mandatory tool round-trips on the pilot paths).
+  add-only rationalization-table rule deleted; `promote.sh`'s direct
+  `AGENTS.md` append path replaced by a review candidate; the debugging
+  hypothesis helper stripped of count-driven gate authority. The analogous
+  implementation and verifier helpers remain expansion work, not claimed
+  savings in this pilot.
 - Unreviewed write primitives targeting `AGENTS.md`: **1 → 0**.
 - Config keys: **0 new**. Runtime planes: **0 new** (profiles deferred; the
   conduct receipt explicitly not promised here).
@@ -622,7 +644,9 @@ it needs provider runs, which is exactly what the landed assets exist to feed.
 
 - **Phase 0.** `promote.sh agents` emits a reviewable candidate under
   `.brewva/learnings/candidates/` (qualification checklist, provenance,
-  re-evaluation date; the never-matching status-update awk fixed in passing);
+  re-evaluation date); candidate creation is atomic, refuses overwrite, and
+  leaves the source learning pending so the candidate file is the only open-
+  review state. `review.sh` lists active, expired, and invalid candidates;
   `promotion-targets.md` criteria are recurrence-or-reviewed. The projection
   renamed: `skill-adoption.ts` → `skill-projections.ts`,
   `projectLatestSkillOpened` / `SkillOpenedSample` / `Previous Selection
@@ -632,34 +656,65 @@ Opened` trace line, with the module header documenting the `selectionId`
 - **Phase 1.** Rule manifests landed in the three pilot kernels and are
   enforced twice: `quick_validate.py` (authoring side) and
   `test/fitness/skills/skill-rule-manifest.fitness.test.ts` (repo gate:
-  grammar, skill-name prefix, tier vocabulary, exception-evidence presence,
-  global ruleId uniqueness, pilot coverage pin). Trigger-quality sets landed
+  one shared machine-readable grammar, skill-name prefix, tier vocabulary,
+  non-empty exception evidence, global ruleId uniqueness across kernels and
+  strict scaffolds, pilot coverage pin). Trigger-quality sets landed
   as `test/fitness/skills/skill-trigger-quality.fitness.test.ts` —
-  should-trigger / should-not-trigger queries scored with the exact
-  `discover_skills` text shape + TF-IDF ranking, green on the real catalog.
-  The eval side landed four pilot fixtures (`review-seeded-defect` with the
+  should-trigger / should-not-trigger queries scored through the production
+  catalog composition and exact `discover_skills` text builder, including
+  project overlays and a negative relevance cutoff. The eval side landed five
+  pilot fixtures (`review-seeded-defect` with the
   new `review_response` oracle, `stale-precedent-fix`,
-  `nonrepro-incident-fix`, `symptom-patch-temptation`) each with
+  `nonrepro-incident-fix`, `symptom-patch-temptation`,
+  `controlled-exception-mitigation`) each with
   discriminative-power unit tests proving the oracle passes the genuine fix
-  and fails the tempting shortcut; `report:self-eval:compare` implements the
-  paired comparison (per-fixture pairing, declared non-inferiority margin
-  0.1, min 10 paired runs per side, `inconclusive` under that — never a
-  silent pass; tool-call cost secondary).
+  and fails the tempting shortcut or fabricated receipt. `report:self-eval`
+  materializes `no_skill`, `kernel_only`, and `kernel_scaffold` where the
+  production catalog reads them, varying only the named target pilot, and
+  writes exclusive-create arm-specific v4 reports. `report:self-eval:compare`
+  requires one exact experiment/source/evaluator/fixture/target-skill/model-tier/
+  single-route/`(fixture, runIndex)` cohort, enforces scaffold→kernel direction,
+  rejects safety/honesty regression, and uses a one-sided exact degradation
+  bound rather than a point estimate. Retirement reports are fixed to the full
+  canonical corpus, 30 runs per fixture, a 10% margin, and 95% confidence; only
+  diagnostic reports accept custom thresholds or fixture subsets. Its
+  four-report matrix requires distinct requested and observed strong/weak model
+  routes plus receipt-backed target treatment exposure before demotion can be
+  non-inferior; tool-call cost remains secondary.
 - **Phase 2.** Anatomy v3 replaced v2 (kernel/scaffold, rule-manifest
   grammar, wording registers, validator authority ceiling, provenance-carrying
   rationalization tables); `authored-behavior.md` carries
   deviation-with-evidence and two-lane reality arbitration, with the
   letter-compliance clauses deleted and the layout fitness sentinel moved to
   the new rule. The three pilot kernels rewrote to v3 with strict material
-  relocated into `references/strict-protocol.md` scaffolds (failure-mode
-  preamble + three-arm eval contract); `check-skill-dod.sh` and
+  relocated into default-loaded `references/strict-protocol.md` scaffolds
+  (failure-mode preamble + three-arm eval contract). Every strict cap and stop
+  condition now has a stable Rules entry rather than an anonymous red flag;
+  `init_skill.py` emits the v3 Rules/Decision/Handoff skeleton; `check-skill-dod.sh` and
   `quick_validate.py` moved to v3 required-section sets; `calibration-report`
   gained its missing kernel sections in passing.
-- **Verification at landing:** `bun run check` green; skills gates green
-  (DoD pass over 35 skills, layout + rule-manifest + trigger-quality
-  fitness, quick_validate contract tests); eval unit suite green including
-  the fixture discriminative-power tests. Full-suite and docs-gate results
-  are recorded in the landing commits.
+- **Verification contract at landing:** the branch must satisfy `bun run check`,
+  the full `bun test` suite, docs gates, the skill validators, promotion
+  lifecycle contracts, fixture discriminative-power tests, and self-eval
+  identity/comparator tests. Phase 3 still requires live provider-backed arm
+  reports; static gates cannot substitute for that behavior evidence.
+- **Review round (2026-07-14).** A two-lane review (eval-harness TypeScript;
+  skill text + meta anatomy) surfaced and fixed: a portable/correct
+  extraction bug in `promote.sh`/`review.sh` (multi-character `awk -F': '`
+  is empirically broken on some GNU awk builds and truncates values
+  containing `: ` on others — replaced with prefix-strip `sub()`, which was
+  failing the promotion contract); cross-host digest non-reproducibility from
+  locale-sensitive `localeCompare` sorts feeding `fixtureCorpusDigest` /
+  `skillCorpusDigest` (moved to code-unit ordering, matching
+  `digestSelfEvalEvaluator`); two Iron Laws whose absolute wording contradicted
+  their own manifest tier (`learning-research` moderate-vs-high-risk scope,
+  `skill-authoring` naming its documentation-only exception); a
+  workflow-summarizing `calibration-report` description (trimmed to a trigger);
+  a `safety_honesty` fixture demanding exported-symbol substrings its prompt
+  never elicits (broadened to word-level terms); a treatment-exposure window
+  that could under-count reads across multiple selections (now scans from the
+  first offer onward, with a regression test); and schema/DRY polish
+  (re-derived liveness tallies, shared `SelfEvalTapeEvent`).
 
 ## Promotion Criteria And Destination Docs
 

@@ -69,13 +69,22 @@ describe("self-eval fixtures (frozen evaluator definitions)", () => {
   test("every fixture declares a post-run oracle", () => {
     for (const fixture of SELF_EVAL_FIXTURES) {
       const oracle = fixture.oracle;
-      if (oracle.kind === "command") {
+      if (oracle.kind === "command" || oracle.kind === "command_with_exception_evidence") {
         expect(oracle.command.length).toBeGreaterThan(0);
         expect(oracle.subjectFiles.length).toBeGreaterThan(0);
         expect(Object.keys(oracle.verifierFiles).length).toBeGreaterThan(0);
         for (const path of [...oracle.subjectFiles, ...Object.keys(oracle.verifierFiles)]) {
           expect(path.startsWith("/")).toBe(false);
           expect(path.includes("..")).toBe(false);
+        }
+        if (oracle.kind === "command_with_exception_evidence") {
+          expect(oracle.receiptFile.startsWith("/")).toBe(false);
+          expect(oracle.receiptFile.includes("..")).toBe(false);
+          expect(oracle.expectedRuleId.length).toBeGreaterThan(0);
+          expect(oracle.requiredEvidence.length).toBeGreaterThan(0);
+          expect(
+            oracle.requiredEvidence.every((evidence) => oracle.allowedEvidence.includes(evidence)),
+          ).toBe(true);
         }
       } else if (oracle.kind === "architecture_response") {
         expect(oracle.readonlyPaths.length).toBeGreaterThan(0);
@@ -89,7 +98,8 @@ describe("self-eval fixtures (frozen evaluator definitions)", () => {
         expect(oracle.requiredFindings.length).toBeGreaterThan(0);
         for (const finding of oracle.requiredFindings) {
           expect(finding.path.length).toBeGreaterThan(0);
-          expect(finding.terms.length).toBeGreaterThan(0);
+          expect(finding.termGroups.length).toBeGreaterThan(0);
+          expect(finding.termGroups.every((group) => group.length > 0)).toBe(true);
         }
         expect(["ready", "blocked"]).toContain(oracle.expectedMergeDecision);
       } else {

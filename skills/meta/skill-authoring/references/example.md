@@ -29,6 +29,6 @@ Output:
       "artifact_findings": { "kind": "json", "min_items": 0 }
     }
   },
-  "skill_scaffold": "SKILL.md with v2 anatomy: Iron Law, 4-phase workflow with failure branches, 1 script, decision protocol, red flags, rationalizations table, concrete example with real JSON"
+  "skill_scaffold": "SKILL.md with v3 kernel anatomy: Iron Law, failure-branch workflow, stable Rules manifest, decision protocol, handoff expectations, and lazy scaffold references"
 }
 ```

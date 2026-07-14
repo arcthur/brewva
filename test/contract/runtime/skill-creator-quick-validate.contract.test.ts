@@ -219,4 +219,152 @@ describe("skill-authoring quick validator", () => {
       rmSync(workspace, { recursive: true, force: true });
     }
   });
+
+  test("enforces rule prefix, uniqueness, and non-empty exception evidence", () => {
+    const cases = [
+      {
+        name: "wrong-prefix",
+        rules: ["- `other.rule` (non-negotiable) — Keep the boundary."],
+        expected: "must be prefixed with the skill name 'rule-check.'",
+      },
+      {
+        name: "duplicate",
+        rules: [
+          "- `rule-check.same-rule` (non-negotiable) — Keep the first boundary.",
+          "- `rule-check.same-rule` (adaptive-heuristic) — Default: keep the second boundary.",
+        ],
+        expected: "Duplicate rule id 'rule-check.same-rule'",
+      },
+      {
+        name: "empty-evidence",
+        rules: [
+          "- `rule-check.exception` (controlled-exception) — A deviation is allowed. Exception evidence:",
+        ],
+        expected: "has an empty 'Exception evidence:' clause",
+      },
+    ] as const;
+
+    for (const testCase of cases) {
+      const workspace = mkdtempSync(join(tmpdir(), `brewva-rule-${testCase.name}-`));
+      try {
+        const skillDirectory = join(workspace, "skills/domain/rule-check");
+        mkdirSync(skillDirectory, { recursive: true });
+        writeFileSync(
+          join(skillDirectory, "SKILL.md"),
+          [
+            "---",
+            "name: rule-check",
+            "description: Use when a rule manifest needs validation.",
+            "---",
+            "# Rule Check",
+            "",
+            "## The Iron Law",
+            "",
+            "```",
+            "KEEP RULE IDENTITIES STABLE",
+            "```",
+            "",
+            "## When to Use",
+            "",
+            "- Validate rule manifests.",
+            "",
+            "## Workflow",
+            "",
+            "Validate the manifest.",
+            "",
+            "## Rules",
+            "",
+            ...testCase.rules,
+            "",
+            "## Decision Protocol",
+            "",
+            "- Is the rule load-bearing?",
+            "",
+            "## Handoff Expectations",
+            "",
+            "- Pass the stable rule id.",
+            "",
+            "## Stop Conditions",
+            "",
+            "- Stop on invalid grammar.",
+          ].join("\n"),
+          "utf8",
+        );
+
+        const result = runQuickValidate({ scriptPath, cwd: workspace, skillDirectory });
+        expect(result.status).toBe(1);
+        expect(toTextOutput(result.stdout)).toContain(testCase.expected);
+      } finally {
+        rmSync(workspace, { recursive: true, force: true });
+      }
+    }
+  });
+
+  test("enforces the shared Rules grammar on project overlays", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-overlay-rule-invalid-"));
+    try {
+      const skillDirectory = join(workspace, "skills/project/overlays/rule-check");
+      mkdirSync(skillDirectory, { recursive: true });
+      writeFileSync(
+        join(skillDirectory, "SKILL.md"),
+        [
+          "---",
+          "name: rule-check",
+          "description: Tighten the rule-check skill for this project.",
+          "---",
+          "# Rule Check Overlay",
+          "",
+          "## Rules",
+          "",
+          "- `other.rule` (made-up-tier) — This must not enter the receipt namespace.",
+        ].join("\n"),
+        "utf8",
+      );
+
+      const result = runQuickValidate({ scriptPath, cwd: workspace, skillDirectory });
+      expect(result.status).toBe(1);
+      expect(toTextOutput(result.stdout)).toContain(
+        "must be prefixed with the skill name 'rule-check.'",
+      );
+    } finally {
+      rmSync(workspace, { recursive: true, force: true });
+    }
+  });
+
+  test("rejects a second Rules section instead of validating only the first", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-duplicate-rules-section-"));
+    try {
+      const skillDirectory = join(workspace, "skills/project/overlays/rule-check");
+      mkdirSync(skillDirectory, { recursive: true });
+      writeFileSync(
+        join(skillDirectory, "SKILL.md"),
+        [
+          "---",
+          "name: rule-check",
+          "description: Tighten the rule-check skill for this project.",
+          "---",
+          "# Rule Check Overlay",
+          "",
+          "## Rules",
+          "",
+          "- `rule-check.valid` (non-negotiable) — Keep the first boundary.",
+          "",
+          "## Notes",
+          "",
+          "A second manifest must not hide below this section.",
+          "",
+          "## Rules",
+          "",
+          "- `other.invalid` (unknown-tier) — Hidden authority.",
+        ].join("\n"),
+        "utf8",
+      );
+
+      const result = runQuickValidate({ scriptPath, cwd: workspace, skillDirectory });
+      expect(result.status).toBe(1);
+      expect(toTextOutput(result.stdout)).toContain("Rules section must appear at most once");
+    } finally {
+      rmSync(workspace, { recursive: true, force: true });
+    }
+  });
 });
