@@ -4,7 +4,7 @@ import { isRecord } from "@brewva/brewva-std/unknown";
  * The canonical read-model for "a tool ran this session."
  *
  * Every attention/feedback/provenance projection (fresh-code, recent paths,
- * skill adoption, review debt, session-touched files) needs the same fact:
+ * skill-opened, review debt, session-touched files) needs the same fact:
  * which tools executed, named what, touching which paths. That fact has a
  * single authoritative home on the tape — the kernel COMMITMENT boundary
  * (`tool.committed`), which is brewva's transaction-of-record: a tool that

@@ -12,12 +12,18 @@ export interface SkillProjectionEvent {
   readonly payload?: unknown;
 }
 
-// Offered -> read adoption, projected from committed receipts. The selection
-// receipt records what was OFFERED to the model; whether an offered SkillCard
-// was actually opened is the signal that makes "hit rate" measurable at all
-// (account -> grade -> calibrate). Adoption here means: after the selection
-// receipt landed, a read-class tool invocation targeted the rendered skill's
-// SKILL.md. Tape-derived and replay-consistent — never an in-memory counter.
+// Offered -> opened, projected from committed receipts. The selection receipt
+// records what was OFFERED to the model; `opened` means a read-class tool
+// invocation targeted the rendered skill's SKILL.md after the receipt landed.
+// Tape-derived and replay-consistent — never an in-memory counter.
+//
+// The metric is named for exactly what the tape can support: a TEMPORAL join
+// (tool events carry no selectionId), and opening a file proves neither that
+// the skill was followed nor that it helped. Any stronger "conduct" claim
+// requires a receipt binding selectionId + skill identity + the producer
+// artifact — a runtime change deliberately not smuggled into this projection.
+// Calibration passes consuming this signal must treat it as opened-rate, not
+// adoption or effectiveness.
 //
 // Tool names and argument fields below cover BOTH registered tool surfaces:
 // the canonical families (packages/brewva-tools/src/families — source_read/
@@ -28,10 +34,10 @@ export interface SkillProjectionEvent {
 
 const READ_TOOL_NAMES = new Set(["source_read", "resource_read", "look_at", "read"]);
 
-export interface SkillAdoptionSample {
+export interface SkillOpenedSample {
   readonly selectionId: string;
   readonly offeredSkillNames: readonly string[];
-  readonly adoptedSkillNames: readonly string[];
+  readonly openedSkillNames: readonly string[];
 }
 
 interface RenderedSkillRef {
@@ -176,14 +182,14 @@ function findLatestVisibleSelection(
 }
 
 /**
- * Adoption of the most recent VISIBLE selection (rendered count > 0): which of
- * its rendered SkillCards had their SKILL.md opened by a read-class invocation
- * after the receipt was committed. Returns null when no visible selection
- * exists yet.
+ * Opened status of the most recent VISIBLE selection (rendered count > 0):
+ * which of its rendered SkillCards had their SKILL.md opened by a read-class
+ * invocation after the receipt was committed. Returns null when no visible
+ * selection exists yet.
  */
-export function projectLatestSkillAdoption(
+export function projectLatestSkillOpened(
   events: readonly SkillProjectionEvent[],
-): SkillAdoptionSample | null {
+): SkillOpenedSample | null {
   const latestSelection = findLatestVisibleSelection(events);
   if (!latestSelection) {
     return null;
@@ -192,7 +198,7 @@ export function projectLatestSkillAdoption(
     typeof (latestSelection.event.payload as { selectionId?: unknown })?.selectionId === "string"
       ? (latestSelection.event.payload as { selectionId: string }).selectionId
       : "unknown_selection";
-  const adopted = new Set<string>();
+  const opened = new Set<string>();
   for (const event of events) {
     if (event.type !== TOOL_COMMITTED_EVENT_TYPE) continue;
     if (event.timestamp < latestSelection.event.timestamp) continue;
@@ -200,14 +206,14 @@ export function projectLatestSkillAdoption(
     if (!target) continue;
     for (const ref of latestSelection.refs) {
       if (readTargetMatchesSkillFile(target, ref.filePath)) {
-        adopted.add(ref.name);
+        opened.add(ref.name);
       }
     }
   }
   return {
     selectionId,
     offeredSkillNames: latestSelection.refs.map((ref) => ref.name),
-    adoptedSkillNames: [...adopted].toSorted((left, right) => left.localeCompare(right)),
+    openedSkillNames: [...opened].toSorted((left, right) => left.localeCompare(right)),
   };
 }
 
@@ -293,14 +299,14 @@ export function projectRecentToolTargetPaths(
   return paths;
 }
 
-export function formatSkillAdoptionLine(sample: SkillAdoptionSample | null): string {
+export function formatSkillOpenedLine(sample: SkillOpenedSample | null): string {
   if (!sample) {
-    return "Previous Selection Adoption: none recorded";
+    return "Previous Selection Opened: none recorded";
   }
-  const adopted = sample.adoptedSkillNames.length;
+  const opened = sample.openedSkillNames.length;
   const offered = sample.offeredSkillNames.length;
-  const names = adopted > 0 ? ` (${sample.adoptedSkillNames.join(", ")})` : "";
-  return `Previous Selection Adoption: ${adopted}/${offered} rendered SkillCards read${names}`;
+  const names = opened > 0 ? ` (${sample.openedSkillNames.join(", ")})` : "";
+  return `Previous Selection Opened: ${opened}/${offered} rendered SkillCards opened${names}`;
 }
 
 // The tape-query composition lives HERE, next to the event vocabulary it
@@ -320,27 +326,27 @@ export interface RecentSkillProjectionInputs {
   /** Tail window of tool invocations feeding the recent_path signal. */
   readonly recentInvocations: readonly SkillProjectionEvent[];
   /** Selection receipts plus invocations SINCE the latest visible one. */
-  readonly adoptionEvents: readonly SkillProjectionEvent[];
+  readonly openedEvents: readonly SkillProjectionEvent[];
 }
 
 const EMPTY_PROJECTION_INPUTS: RecentSkillProjectionInputs = {
   recentInvocations: [],
-  adoptionEvents: [],
+  openedEvents: [],
 };
 
-// Selection receipts scanned back for the previous-adoption trace line.
+// Selection receipts scanned back for the previous-opened trace line.
 const RECENT_SELECTION_WINDOW = 8;
 // Tail of tool.committed events QUERIED for the recent_path signal — the INPUT
 // side; the deduplicated output is capped separately by the selection-side
 // RECENT_TOOL_PATH_LIMIT.
 const RECENT_INVOCATION_QUERY_WINDOW = 60;
-// Invocations examined after a visible selection when measuring adoption;
+// Invocations examined after a visible selection when measuring opened status;
 // skill reads happen early in a turn, so a generous cap suffices.
-const ADOPTION_INVOCATION_SCAN_LIMIT = 240;
+const OPENED_INVOCATION_SCAN_LIMIT = 240;
 
 /**
  * Bounded tape queries instead of one unbounded scan: per-turn projection cost
- * must stay flat as the session tape grows. Adoption reads come from a NARROW
+ * must stay flat as the session tape grows. Opened reads come from a NARROW
  * query since the latest visible selection — `after`+`limit` returns the FIRST N
  * matches, so a wide window could exhaust its budget on old events and falsely
  * report "0/N read" for the current turn.
@@ -380,11 +386,11 @@ export function queryRecentSkillProjectionInputs(
         : (records.query(sessionId, {
             type: TOOL_COMMITTED_EVENT_TYPE,
             after: latestVisibleSelectionTimestamp - 1,
-            limit: ADOPTION_INVOCATION_SCAN_LIMIT,
+            limit: OPENED_INVOCATION_SCAN_LIMIT,
           }) ?? []);
     return {
       recentInvocations,
-      adoptionEvents: [...selections, ...sinceLatest],
+      openedEvents: [...selections, ...sinceLatest],
     };
   } catch {
     // Selection must never fail because a projection surface is unavailable.

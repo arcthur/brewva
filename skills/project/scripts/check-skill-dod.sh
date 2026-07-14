@@ -93,10 +93,6 @@ while IFS= read -r file; do
     missing+=("stop_conditions")
   fi
 
-  if ! grep -Eq '^## (Anti-Patterns|Red Flags)' "${file}"; then
-    missing+=("anti_patterns_or_red_flags")
-  fi
-
   for field in routing intent effects resources execution_hints consumes requires composable_with stability budget tools dispatch; do
     if grep -Eq "^${field}:" "${file}"; then
       removed+=("${field}")
@@ -117,7 +113,7 @@ while IFS= read -r file; do
     category="operator"
   fi
 
-  # Overlays are delta documents — skip v2-specific checks
+  # Overlays are delta documents — skip v3-specific checks
   if [ "${is_overlay}" = true ]; then
     if [ "${#removed[@]}" -gt 0 ]; then
       status=1
@@ -136,7 +132,7 @@ while IFS= read -r file; do
       overlay_missing=()
       for m in "${missing[@]}"; do
         case "${m}" in
-          frontmatter|workflow|stop_conditions|anti_patterns_or_red_flags) overlay_missing+=("${m}") ;;
+          frontmatter|workflow|stop_conditions) overlay_missing+=("${m}") ;;
         esac
       done
       if [ "${#overlay_missing[@]}" -gt 0 ]; then
@@ -156,20 +152,15 @@ while IFS= read -r file; do
     missing+=("description")
   fi
 
+  # v3: core/domain kernels anchor on the Iron Law; Red Flags are scaffold
+  # material under references/ and are no longer a required section.
   if [ "${category}" = "core" ] || [ "${category}" = "domain" ]; then
     if ! grep -Eq '^## The Iron Law' "${file}"; then
-      missing+=("iron_law_v2")
+      missing+=("iron_law_v3")
     fi
   fi
 
-  # v2 check: Red Flags section for core and domain skills
-  if [ "${category}" = "core" ] || [ "${category}" = "domain" ]; then
-    if ! grep -Eq '^## Red Flags' "${file}"; then
-      missing+=("red_flags_v2")
-    fi
-  fi
-
-  # v2 check: scripts/ directory should exist for domain and operator skills
+  # v3 check: scripts/ directory should exist for domain and operator skills
   # that have conditional/deterministic logic (check if scripts field in frontmatter)
   if [ "${category}" = "domain" ] || [ "${category}" = "operator" ]; then
     if grep -Eq '^scripts:' "${file}"; then

@@ -1,7 +1,10 @@
 # Promotion Targets
 
-When a learning proves broadly applicable, promote it out of `.brewva/learnings/` to a
-permanent location. Use `scripts/promote.sh` or apply manually.
+When a learning proves broadly applicable, promote it out of `.brewva/learnings/`
+to a permanent location. Promotion is a two-step act: `scripts/promote.sh` emits
+a reviewable candidate; a human lands it in the target as a reviewed diff. No
+target file is ever written by the script — `AGENTS.md` in particular has no
+automated append path.
 
 ## Target Matrix
 
@@ -19,34 +22,49 @@ permanent location. Use `scripts/promote.sh` or apply manually.
 
 ## Promotion Criteria
 
-A learning qualifies for promotion when **any** of these hold:
+A learning qualifies for a promotion candidate through exactly one of two
+paths — matching the self-improve Iron Law (`NO SYSTEMIC CLAIM WITHOUT
+REPEATED EVIDENCE`):
 
-| Criterion          | Signal                                                   |
-| ------------------ | -------------------------------------------------------- |
-| Recurring          | 2+ `See Also` links or `Recurrence-Count >= 2`           |
-| Verified           | Status is `resolved` with working fix                    |
-| Non-obvious        | Required actual debugging/investigation                  |
-| Broadly applicable | Not session-specific; useful across sessions             |
-| User-flagged       | User says "save this" / "remember this" / "promote this" |
+| Path                  | Requirement                                                                                                                                                                         |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Recurrence**        | 2+ independent occurrences, cited in the candidate (`See Also` links, `Recurrence-Count >= 2`, or evidence anchors from distinct sessions)                                          |
+| **Operator-directed** | An explicit human instruction ("save this", "remember this", "promote this"). This is an authorization signal, not a correctness signal — the reviewed landing carries correctness. |
+
+Signals that support a candidate but never qualify one on their own:
+`resolved` status with a working fix, "required actual debugging",
+"broadly applicable". A single resolved incident routes to
+`knowledge-capture` (a solution record), not to a permanent instruction
+surface.
 
 ## Promotion Workflow
 
 1. Verify the learning is still accurate and complete.
-2. Choose target from the matrix above.
-3. Run `scripts/promote.sh <entry-id> <target>` or apply manually.
-4. Update the original entry: `**Status**: promoted`, `**Promoted**: <target>`.
-5. If the learning came out of a harness candidate experiment, cite its
+2. Choose the target from the matrix above.
+3. Run `scripts/promote.sh <entry-id> <target>`:
+   - `agents` emits a candidate file under `.brewva/learnings/candidates/`
+     carrying the qualification checklist, provenance, and a re-evaluation
+     date. The source entry's status becomes `candidate`.
+   - `docs` and `skill` print the manual path.
+4. A human reviews the candidate and, if accepted, lands the entry in the
+   target as a reviewed diff, sets the source entry's status to `promoted`,
+   and records the landing commit in the candidate file (or deletes it).
+5. A candidate whose re-evaluation date passes without landing expires: reset
+   the source entry to `pending` and delete the candidate file.
+6. If the learning came out of a harness candidate experiment, cite its
    `candidateId` in the promoted entry (`**Candidate**: <candidateId>`) —
    the id appears in the compare report and in
    `.brewva/harness/candidates.jsonl`, so the promoted guidance stays
    traceable to the evaluation and accept/reject receipts behind it.
 
-## Quality Gates Before Promotion
+## Quality Gates Before Landing
 
-- [ ] Solution is tested and still working
-- [ ] Description is self-contained (no implicit session context)
-- [ ] Code examples run without project-specific hardcoded values
-- [ ] Target location doesn't already contain equivalent guidance
+- [ ] The qualification path (recurrence or operator-directed) is confirmed
+      with citations, not asserted.
+- [ ] Solution is tested and still working.
+- [ ] Description is self-contained (no implicit session context).
+- [ ] Code examples run without project-specific hardcoded values.
+- [ ] Target location doesn't already contain equivalent guidance.
 
 ## Skill Extraction (Special Case)
 

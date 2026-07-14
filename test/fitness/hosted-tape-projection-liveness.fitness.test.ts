@@ -23,7 +23,7 @@ import { buildTapeReviewDebt } from "../../packages/brewva-cli/src/operator/insp
 import { buildCompactionInputProvenance } from "../../packages/brewva-gateway/src/hosted/internal/context/compaction-input-provenance.js";
 import { createContextNudgeCadenceTracker } from "../../packages/brewva-gateway/src/hosted/internal/context/context-lifecycle.js";
 import { buildRuntimeBriefBlockForSession } from "../../packages/brewva-gateway/src/hosted/internal/context/workbench-context.js";
-import { projectRecentToolTargetPaths } from "../../packages/brewva-gateway/src/hosted/internal/session/skills/skill-adoption.js";
+import { projectRecentToolTargetPaths } from "../../packages/brewva-gateway/src/hosted/internal/session/skills/skill-projections.js";
 
 // DYNAMIC projection-liveness tripwire, complementary to the STATIC
 // event-contract-liveness fitness. That test credits a vocabulary literal as
@@ -31,7 +31,7 @@ import { projectRecentToolTargetPaths } from "../../packages/brewva-gateway/src/
 // producer for `tool.invocation.started` does exist (the runtime-ops in-process
 // path emits it). Its own header names the blind spot: a producer can exist in
 // code while the HOSTED managed-session execution path never invokes it. That
-// is precisely where the review-debt / fresh-code / recent-path / skill-adoption
+// is precisely where the review-debt / fresh-code / recent-path / skill-opened
 // / session-touched-files projections died — every one read
 // `tool.invocation.started`, which is absent from every real hosted tape, so
 // the whole family shipped green on synthetic unit fixtures and ran dead in

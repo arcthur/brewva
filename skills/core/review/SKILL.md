@@ -11,6 +11,7 @@ references:
   - references/contract-drift.md
   - references/review-lanes.md
   - references/security-concurrency.md
+  - references/strict-protocol.md
   - references/example.md
   - references/rationalizations.md
 invariants:
@@ -22,7 +23,8 @@ invariants:
 ## The Iron Law
 
 ```
-NO MERGE DECISION WITHOUT EVIDENCE FROM EVERY ACTIVATED LANE
+NO MERGE DECISION WITHOUT EVIDENCE FROM EVERY ACTIVATED LANE — A SKIPPED LANE
+IS DECLARED WITH ITS REASON, NEVER SILENT
 ```
 
 Judge risk, not style. Surface the highest-value findings first and make
@@ -71,10 +73,12 @@ Always-on: `review-correctness`, `review-boundaries`, `review-operability`.
 Conditional: `review-security`, `review-concurrency`, `review-compatibility`,
 `review-performance` — activated deterministically by the lane rules.
 
-For non-trivial review, treat each activated lane as an independent slice:
-enumerate the lanes, then fan them out in one `subagent_fanout` message so each
-runs as a bounded consult against its own dimension. Synthesize their
-dispositions in Phase 4; a lane that returns no findings must have actually run.
+Choose the execution shape by evidence independence, not by ritual: fan the
+lanes out as parallel consults when they are genuinely independent slices and
+the parallel budget buys information; a single-context review that works each
+lane explicitly is equally legal — same-context passes are correlated reads,
+so what matters is that every activated lane produced its own recorded
+disposition. State which shape you chose and why in `review_report`.
 
 **If the lane rules widen to the full conditional set**: Review evidence is weak.
 Proceed with all lanes rather than guessing which to skip.
@@ -93,16 +97,44 @@ Synthesize lane dispositions with the invariant inputs: `activated_lanes` from
 Phase 2 and all `lane_outcomes`. Apply the missing-lane rule manually.
 
 **If lanes disagree materially**: Keep the disagreement visible in
-`review_report`. Do not smooth it away.
+`review_report`, with the falsification condition that would settle it. Do
+not smooth it away and do not manufacture disagreement where the evidence
+converges.
 **If missing_lanes is non-empty**: The review is incomplete. Do not override.
 
-Autofix routing rule: this skill is read-only. If a fix is obvious, record it
-as a disposition or handoff target (`implementation` for parent-owned edits,
-`worker` for delegated patch work). Do not mutate files from review.
+Fix routing: findings are handed off (`implementation` for parent-owned
+edits, `worker` for delegated patch work). One exception exists — see
+`review.fixes-are-routed` in the Rules below; anything wider than that
+exception widens silently into implementation and voids the review's
+independence.
 
 ### Phase 5: Emit findings-first output
 
 Produce `review_findings`, `review_report`, `merge_decision`.
+
+Under pressure to approve, on your own freshly-authored code, or on a
+weak-model profile: load `references/strict-protocol.md` and follow it.
+
+## Rules
+
+- `review.evidence-from-every-activated-lane` (controlled-exception) — The
+  merge decision cites a recorded disposition from every activated lane.
+  Exception evidence: a per-lane inapplicability note in `review_report`
+  naming why the lane cannot apply to this target.
+- `review.secret-exposure-gate` (non-negotiable) — The secret-exposure gate
+  runs on every review; any finding blocks merge readiness regardless of
+  other lane outcomes.
+- `review.no-silent-scope-blessing` (non-negotiable) — Scope drift against
+  the stated plan is surfaced as a finding, never absorbed because the code
+  looks better than the plan.
+- `review.fixes-are-routed` (controlled-exception) — Review does not mutate
+  the target; fixes are routed with context. Exception evidence: an
+  inline-fix disposition in `review_report` for a single-line, uncontested
+  correction applied under existing write authority.
+- `review.lane-fanout` (adaptive-heuristic) — Default: parallel consults for
+  independent lanes when the budget buys information; explicit per-lane
+  passes in one context otherwise. The recorded per-lane dispositions are
+  the invariant, not the topology.
 
 ## Invariants
 
@@ -122,22 +154,7 @@ Use these questions to keep the review anchored in behavior, not style:
 - Has the diff drifted outside `implementation_targets` or the stated plan?
 - Is this review shallow because the target is too large, too stale, or missing
   critical context?
-
-## Red Flags — STOP
-
-If you catch yourself thinking any of these, STOP:
-
-- "The code looks clean" — without checking behavior risk
-- "Style issues are the main problem" — while skipping correctness
-- "Merge is safe" — without evidence from every activated lane
-- "This lane has no findings" — when you didn't actually run the lane
-- "The disagreement isn't important" — if two lanes disagree, keep it visible
-- "I'll just fix it while reviewing" — fixes must be routed, not applied here
-- "Scope drift is fine because the code is better" — unplanned scope is a review finding
-
-## Common Rationalizations
-
-See `references/rationalizations.md` for the anti-pattern table.
+- For each lane: did it actually run, and what would falsify its disposition?
 
 ## Concrete Example
 
@@ -147,11 +164,13 @@ See `references/example.md` for the grounded example output shape.
 
 - `review_findings` ordered from highest to lowest value. May be empty when all
   lanes clear — do not invent findings to pad output.
-- `review_report` records activated lanes, activation basis, blind spots, and
-  precedent consult status.
+- `review_report` records activated lanes, activation basis, execution shape
+  (fanned-out or single-context, and why), blind spots, and precedent consult
+  status.
 - `merge_decision` matches the findings. Never a detached summary label.
-- Fixes are never applied by this skill. They are handed off with enough context
-  for implementation or a patch worker to act.
+- Routed fixes carry enough context for implementation or a patch worker to
+  act; an inline-fix disposition records what was applied and why it
+  qualified.
 
 ## Stop Conditions
 
@@ -159,4 +178,5 @@ See `references/example.md` for the grounded example output shape.
 - Verification evidence is too weak to support a merge decision
 - The real work is debugging or repository analysis
 - Scope drift makes the target no longer match the plan being reviewed
-- Any activated lane, secret scan, or hard-stop gate is missing
+- Any activated lane, secret scan, or hard-stop gate is missing a recorded
+  disposition or declared inapplicability

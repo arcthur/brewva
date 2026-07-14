@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import {
-  formatSkillAdoptionLine,
-  projectLatestSkillAdoption,
+  formatSkillOpenedLine,
+  projectLatestSkillOpened,
   projectRecentToolTargetPaths,
   queryRecentSkillProjectionInputs,
   readTargetMatchesSkillFile,
   type SkillProjectionEvent,
-} from "../../../../packages/brewva-gateway/src/hosted/internal/session/skills/skill-adoption.js";
+} from "../../../../packages/brewva-gateway/src/hosted/internal/session/skills/skill-projections.js";
 
 function selectionEvent(input: {
   timestamp: number;
@@ -78,21 +78,19 @@ describe("readTargetMatchesSkillFile", () => {
   });
 });
 
-describe("projectLatestSkillAdoption", () => {
+describe("projectLatestSkillOpened", () => {
   const skillA = { name: "alpha", filePath: "/repo/skills/alpha/SKILL.md" };
   const skillB = { name: "beta", filePath: "/repo/skills/beta/SKILL.md" };
 
   test("returns null when no visible selection exists", () => {
-    expect(projectLatestSkillAdoption([])).toBeNull();
+    expect(projectLatestSkillOpened([])).toBeNull();
     expect(
-      projectLatestSkillAdoption([
-        selectionEvent({ timestamp: 1, selectionId: "s0", rendered: [] }),
-      ]),
+      projectLatestSkillOpened([selectionEvent({ timestamp: 1, selectionId: "s0", rendered: [] })]),
     ).toBeNull();
   });
 
   test("attributes reads after the latest visible selection only", () => {
-    const sample = projectLatestSkillAdoption([
+    const sample = projectLatestSkillOpened([
       selectionEvent({ timestamp: 10, selectionId: "s1", rendered: [skillA, skillB] }),
       // Read BEFORE the latest selection must not count for it.
       invocationEvent({
@@ -106,7 +104,7 @@ describe("projectLatestSkillAdoption", () => {
         toolName: "source_read",
         args: { uri: "skills/alpha/SKILL.md" },
       }),
-      // Patch preparation is not a read-class adoption signal; beta stays unadopted.
+      // Patch preparation is not a read-class opened signal; beta stays unopened.
       invocationEvent({
         timestamp: 26,
         toolName: "source_patch_prepare",
@@ -121,12 +119,12 @@ describe("projectLatestSkillAdoption", () => {
     expect(sample).toMatchObject({
       selectionId: "s2",
       offeredSkillNames: ["alpha", "beta"],
-      adoptedSkillNames: ["alpha"],
+      openedSkillNames: ["alpha"],
     });
   });
 
-  test("builtin read counts as adoption; blocked invocations never do", () => {
-    const sample = projectLatestSkillAdoption([
+  test("builtin read counts as opened; blocked invocations never do", () => {
+    const sample = projectLatestSkillOpened([
       selectionEvent({ timestamp: 10, selectionId: "s1", rendered: [skillA, skillB] }),
       invocationEvent({
         timestamp: 11,
@@ -141,11 +139,11 @@ describe("projectLatestSkillAdoption", () => {
         allowed: false,
       }),
     ]);
-    expect(sample?.adoptedSkillNames).toEqual(["alpha"]);
+    expect(sample?.openedSkillNames).toEqual(["alpha"]);
   });
 
-  test("resource_read and look_at count as adoption and missing args are ignored", () => {
-    const sample = projectLatestSkillAdoption([
+  test("resource_read and look_at count as opened and missing args are ignored", () => {
+    const sample = projectLatestSkillOpened([
       selectionEvent({ timestamp: 10, selectionId: "s1", rendered: [skillA, skillB] }),
       invocationEvent({
         timestamp: 11,
@@ -155,29 +153,29 @@ describe("projectLatestSkillAdoption", () => {
       invocationEvent({
         timestamp: 12,
         toolName: "look_at",
-        args: { file_path: "/repo/skills/beta/SKILL.md", goal: "adopt" },
+        args: { file_path: "/repo/skills/beta/SKILL.md", goal: "inspect" },
       }),
       invocationEvent({ timestamp: 13, toolName: "source_read" }),
     ]);
-    expect(sample?.adoptedSkillNames).toEqual(["alpha", "beta"]);
+    expect(sample?.openedSkillNames).toEqual(["alpha", "beta"]);
   });
 
-  test("formatSkillAdoptionLine renders counts and names", () => {
-    expect(formatSkillAdoptionLine(null)).toBe("Previous Selection Adoption: none recorded");
+  test("formatSkillOpenedLine renders counts and names", () => {
+    expect(formatSkillOpenedLine(null)).toBe("Previous Selection Opened: none recorded");
     expect(
-      formatSkillAdoptionLine({
+      formatSkillOpenedLine({
         selectionId: "s1",
         offeredSkillNames: ["alpha", "beta"],
-        adoptedSkillNames: ["alpha"],
+        openedSkillNames: ["alpha"],
       }),
-    ).toBe("Previous Selection Adoption: 1/2 rendered SkillCards read (alpha)");
+    ).toBe("Previous Selection Opened: 1/2 rendered SkillCards opened (alpha)");
     expect(
-      formatSkillAdoptionLine({
+      formatSkillOpenedLine({
         selectionId: "s1",
         offeredSkillNames: ["alpha"],
-        adoptedSkillNames: [],
+        openedSkillNames: [],
       }),
-    ).toBe("Previous Selection Adoption: 0/1 rendered SkillCards read");
+    ).toBe("Previous Selection Opened: 0/1 rendered SkillCards opened");
   });
 });
 
@@ -187,7 +185,7 @@ describe("queryRecentSkillProjectionInputs", () => {
   test("degrades to empty inputs without a query surface", () => {
     expect(queryRecentSkillProjectionInputs(undefined, "s")).toEqual({
       recentInvocations: [],
-      adoptionEvents: [],
+      openedEvents: [],
     });
     expect(
       queryRecentSkillProjectionInputs(
@@ -200,11 +198,11 @@ describe("queryRecentSkillProjectionInputs", () => {
       ),
     ).toEqual({
       recentInvocations: [],
-      adoptionEvents: [],
+      openedEvents: [],
     });
   });
 
-  test("fetches adoption reads since the visible selection, past any tail window", () => {
+  test("fetches opened reads since the visible selection, past any tail window", () => {
     const tape: SkillProjectionEvent[] = [
       selectionEvent({ timestamp: 100, selectionId: "s1", rendered: [skillA] }),
       invocationEvent({
@@ -241,8 +239,8 @@ describe("queryRecentSkillProjectionInputs", () => {
       "s",
     );
     expect(inputs.recentInvocations).toHaveLength(60);
-    const adoption = projectLatestSkillAdoption(inputs.adoptionEvents);
-    expect(adoption?.adoptedSkillNames).toEqual(["alpha"]);
+    const opened = projectLatestSkillOpened(inputs.openedEvents);
+    expect(opened?.openedSkillNames).toEqual(["alpha"]);
   });
 });
 

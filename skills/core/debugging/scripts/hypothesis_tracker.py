@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Validate and track debugging hypotheses.
+"""Advisory format lint for the externalized debugging-hypothesis list.
+
+The input is the model's own report, so the output is never independent
+evidence, never a phase gate, and never an escalation authority (the
+validator authority ceiling in skill-anatomy-v3). The `should_escalate`
+signal and the max-active cap are consumed by the strict-protocol scaffold,
+which owns those numbers.
 
 Input JSON (stdin):
   {

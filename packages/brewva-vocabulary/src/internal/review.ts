@@ -263,7 +263,7 @@ export function reviewTargetRefMatchesTapeOnly(
  * `file_digests` key or a patch's `appliedPaths`, both workspace-relative).
  * Absolute paths outside the cwd stay absolute (and correctly never match a
  * workspace-relative attested set). Mirrors the path handling already used by
- * the gateway skill-adoption projection so the two normalizers agree.
+ * the gateway skill-opened projection so the two normalizers agree.
  */
 export function normalizeReviewPath(path: string, cwd: string | null = null): string {
   let value = toPosixPath(path).trim();

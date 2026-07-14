@@ -6,7 +6,7 @@ references:
   - references/authored-behavior.md
   - references/output-patterns.md
   - references/workflows.md
-  - references/skill-anatomy-v2.md
+  - references/skill-anatomy-v3.md
   - references/example.md
   - references/rationalizations.md
 scripts:
@@ -33,7 +33,7 @@ Use when:
 - adding a new skill to the catalog
 - redesigning an existing SkillCard boundary or ProducerContract
 - tightening producer artifact schemas or output contracts
-- migrating a skill body to the v2 anatomy (`references/skill-anatomy-v2.md`)
+- migrating a skill body to the v3 kernel/scaffold anatomy (`references/skill-anatomy-v3.md`)
 
 Do NOT use when:
 
@@ -61,7 +61,7 @@ clear enough to author. Return to plan.
 
 State the semantic boundary, trigger conditions, and what stays out of scope.
 Classify every piece of content using the three-type rule from
-`references/skill-anatomy-v2.md`: executable deterministic logic → `scripts/`
+`references/skill-anatomy-v3.md`: executable deterministic logic → `scripts/`
 when `local_exec` is allowed, read-only deterministic rules → `invariants/`,
 judgment → SKILL.md body, knowledge → references.
 
@@ -90,15 +90,17 @@ Produce:
   optional `selection`, and resource links only
 - `producer_contract`: `producers/<name>.yaml` output names,
   `output_contracts`, and `semantic_bindings`
-- `skill_scaffold`: minimal SKILL.md skeleton following v2 anatomy
+- `skill_scaffold`: minimal SKILL.md skeleton following v3 anatomy
 
 Do not put authority, tool access, effects, resources, routing, budgets, or
 outputs in SKILL.md. Capability manifests own external action authority.
 Producer contracts own structured output shape.
 
-Apply the v2 section order: Iron Law → When to Use → Workflow (with failure
-branches) → Invariants or Scripts → Decision Protocol → Red Flags → Common
-Rationalizations → Concrete Example → Handoff Expectations → Stop Conditions.
+Apply the v3 kernel section order: Iron Law → When to Use → Workflow (with
+failure branches) → Rules → Invariants or Scripts → Decision Protocol →
+Handoff Expectations → Stop Conditions. Classify every rule's tier in the
+`## Rules` manifest; Red Flags and rationalization tables are scaffold
+material under `references/`, linked from the kernel, never inlined.
 
 **If the body exceeds 150 lines**: Extract tables, schemas, or protocol details
 to `references/`. Extract executable deterministic logic to `scripts/` only
@@ -156,7 +158,7 @@ See `references/example.md` for the grounded example output shape.
 - `producer_contract` captures the structured output boundary so downstream
   consumers do not infer artifact shape from prose.
 - `skill_scaffold` gives a maintainer enough structure to finish the skill body
-  following v2 anatomy without reinventing sections.
+  following v3 anatomy without reinventing sections.
 
 ## Stop Conditions
 

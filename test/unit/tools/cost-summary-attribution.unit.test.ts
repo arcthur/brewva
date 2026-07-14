@@ -52,7 +52,7 @@ describe("session cost summary attribution", () => {
 
     // Faithful to the real SKILL_SELECTION_RECORDED payload: entries are
     // RenderedSkillReason, whose skill name lives on `name` (see skill-selection.ts
-    // and the existing skill-adoption consumer), not `skillName`.
+    // and the existing skill-projections consumer), not `skillName`.
     runtime.ops.skills.selection.record(sessionId, {
       selectionId: "sel-1",
       renderedSkillReasons: [{ name: "investigate" }],

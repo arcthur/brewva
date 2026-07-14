@@ -11,19 +11,40 @@ selection:
 
 # Calibration Report Skill
 
+## The Iron Law
+
+```
+REPORTS AND PROPOSALS ONLY — NEVER A DIRECT RULE, CONFIG, OR SURFACE CHANGE
+```
+
 Produce one dated report that answers: which advisory surfaces earned their
 keep since the last pass, what regressed, and what should a human consider
 subtracting or recalibrating. You derive reports and proposals only — you never
 change rules, weights, thresholds, config, or tool surfaces yourself
 (calibration derives reports; rule changes land as reviewed code).
 
-## Pass Procedure
+## When to Use / When NOT to Use
+
+Use when:
+
+- a scheduled calibration pass fires, or an operator requests one
+- advisory surfaces need a measured earn-their-keep check against the live
+  tape corpus and offline evals
+
+Do NOT use when:
+
+- the need is a one-off metric lookup (run the specific `analyze:*` command
+  directly)
+- the intent is to change a rule, threshold, or surface — that is reviewed
+  code, never a calibration pass
+
+## Workflow
 
 1. Read the previous report, if any: list `.brewva/reports/calibration/` and
    read the latest file so deltas are against the prior pass, not absolute.
 2. Aggregate the advisory receipts over the live tape corpus with `exec`:
    `bun run analyze:advisory-receipts`. Capture: sessions/events scanned, skill
-   offer-vs-adoption, stall decisions, distiller firings, and the per-family
+   offer-vs-opened, stall decisions, distiller firings, and the per-family
    tool-surface invocation table (zero-committed families are the subtraction
    watchlist).
 3. Run the recall runtime eval with `exec`: `bun run eval:recall`. Record
@@ -93,3 +114,12 @@ change rules, weights, thresholds, config, or tool surfaces yourself
   ran.
 - Keep the report under ~200 lines; link evidence rather than inlining raw
   command output.
+
+## Stop Conditions
+
+- No tape corpus exists yet — there is nothing to measure; record that and
+  exit without a report.
+- The requested action is a rule, config, or surface change rather than a
+  measurement pass — route it to reviewed code.
+- A previous pass's report for the same window already exists and no new
+  evidence has landed since.

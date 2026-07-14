@@ -75,7 +75,7 @@ function readSelectionSkillNames(payload: ProtocolRecord): readonly string[] {
   for (const entry of rendered) {
     const record = readRecord(entry);
     // Each entry is a RenderedSkillReason; the skill name lives on `name`
-    // (matching the skill-adoption consumer), not `skillName`.
+    // (matching the skill-projections consumer), not `skillName`.
     const name = typeof record.name === "string" ? record.name.trim() : "";
     if (name) {
       names.add(name);

@@ -21,13 +21,13 @@ import {
 import { extractPromptTargetPaths, pathGlobMatches } from "../prompt-paths.js";
 import { recordRuntimeSkillSelection } from "../runtime-ports.js";
 import {
-  formatSkillAdoptionLine,
-  projectLatestSkillAdoption,
+  formatSkillOpenedLine,
+  projectLatestSkillOpened,
   projectRecentToolTargetPaths,
   queryRecentSkillProjectionInputs,
-  type SkillAdoptionSample,
+  type SkillOpenedSample,
   type SkillProjectionQueryPort,
-} from "./skill-adoption.js";
+} from "./skill-projections.js";
 
 const MAX_RENDERED_SKILLCARDS = 8;
 const HIDDEN_CATEGORIES = new Set<LoadableSkillCategory>(["internal"]);
@@ -39,7 +39,7 @@ const CATALOG_MAX_ENTRIES = 40;
 const CATALOG_LINE_MAX_CHARS = 120;
 // Cap on the deduplicated recent paths surfaced in the receipt and matched
 // against path_globs — the OUTPUT side. The queried event-tail size lives in
-// skill-adoption.ts as RECENT_INVOCATION_QUERY_WINDOW (the INPUT side).
+// skill-projections.ts as RECENT_INVOCATION_QUERY_WINDOW (the INPUT side).
 const RECENT_TOOL_PATH_LIMIT = 8;
 export type SkillSelectionTrigger = "user_message" | "discover_skills";
 export type SkillSelectionMode =
@@ -79,7 +79,7 @@ export interface SkillSelectionRuntime {
     };
     /**
      * Optional tape access: recently touched tool paths become a selection
-     * signal and the previous selection's adoption becomes trace evidence.
+     * signal and the previous selection's opened status becomes trace evidence.
      * Absent in narrow fixtures; both features degrade to silence.
      */
     events?: {
@@ -705,7 +705,7 @@ export function formatSkillSelectionSection(selection: SkillSelectionResult): st
 
 function formatSkillSelectionTraceMessage(
   receipt: SkillSelectionReceipt,
-  previousAdoption: SkillAdoptionSample | null,
+  previousOpened: SkillOpenedSample | null,
 ): BrewvaHostCustomMessage {
   const explicitSkillMentionNames = explicitSkillMentionNamesFromReceipt(receipt);
   const visibleSelection = receipt.renderedSkillCount > 0 || explicitSkillMentionNames.length > 0;
@@ -728,7 +728,7 @@ function formatSkillSelectionTraceMessage(
       `Explicit Brewva SkillCard Mentions: ${
         explicitSkillMentionNames.length > 0 ? explicitSkillMentionNames.join(", ") : "none"
       }`,
-      formatSkillAdoptionLine(previousAdoption),
+      formatSkillOpenedLine(previousOpened),
       `Selection ID: ${receipt.selectionId}`,
       `Selection Mode: ${receipt.selectionMode}`,
     ].join("\n"),
@@ -749,7 +749,7 @@ function formatSkillSelectionTraceMessage(
       renderedSkillContext: receipt.renderedSkillContext,
       selectionMode: receipt.selectionMode,
       trigger: receipt.trigger,
-      ...(previousAdoption ? { previousAdoption } : {}),
+      ...(previousOpened ? { previousOpened } : {}),
     },
   };
 }
@@ -781,7 +781,7 @@ export function createSkillSelectionLifecycle(
         RECENT_TOOL_PATH_LIMIT,
         runtime.identity?.workspaceRoot ?? null,
       );
-      const previousAdoption = projectLatestSkillAdoption(sessionEvents.adoptionEvents);
+      const previousOpened = projectLatestSkillOpened(sessionEvents.openedEvents);
       const selection = buildSkillShortlistContextForPrompt({
         runtime,
         prompt,
@@ -795,7 +795,7 @@ export function createSkillSelectionLifecycle(
       const section = `${selection.catalogSection}${shortlistSection}`;
       const systemPrompt = typeof rawEvent.systemPrompt === "string" ? rawEvent.systemPrompt : "";
       const result: BrewvaHostBeforeAgentStartResult = {
-        message: formatSkillSelectionTraceMessage(selection.receipt, previousAdoption),
+        message: formatSkillSelectionTraceMessage(selection.receipt, previousOpened),
       };
       if (section) {
         result.systemPrompt = appendBrewvaSystemPromptTextSection({

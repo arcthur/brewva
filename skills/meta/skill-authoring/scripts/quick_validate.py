@@ -56,9 +56,14 @@ CONVENTION_KIND_RETIREMENT = {
     "compliance_rule": "pinned",
 }
 RETIREMENT_SENSITIVITIES = set(CONVENTION_KIND_RETIREMENT.values())
-V2_REQUIRED_SECTIONS_CORE_DOMAIN = {"## The Iron Law", "## Red Flags"}
-V2_REQUIRED_SECTIONS_ALL = {"## When to Use", "## Workflow", "## Stop Conditions"}
-V2_BODY_LINE_LIMIT = 150
+# v3: Red Flags are scaffold material under references/, no longer a required
+# kernel section. Core/domain kernels still anchor on the Iron Law.
+V3_REQUIRED_SECTIONS_CORE_DOMAIN = {"## The Iron Law"}
+V3_REQUIRED_SECTIONS_ALL = {"## When to Use", "## Workflow", "## Stop Conditions"}
+V3_BODY_LINE_LIMIT = 150
+RULE_TIERS = {"non-negotiable", "controlled-exception", "adaptive-heuristic"}
+RULE_ID_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*(?:\.[a-z0-9]+(?:-[a-z0-9]+)*)+$")
+RULE_BULLET_PATTERN = re.compile(r"^- `([^`]+)` \(([a-z-]+)\) — (.+)$")
 CANONICAL_EXAMPLE_REFERENCE = (
     "See `references/example.md` for the grounded example output shape."
 )
@@ -249,7 +254,77 @@ def validate_project_guidance(path: Path) -> tuple[bool, str]:
     return True, "Project guidance is valid!"
 
 
-def validate_v2_doctrine(
+def extract_body_section(body: str, heading: str) -> str | None:
+    lines = body.split("\n")
+    start = next((i for i, line in enumerate(lines) if line.strip() == heading), None)
+    if start is None:
+        return None
+    end = len(lines)
+    for index in range(start + 1, len(lines)):
+        if re.match(r"^##\s+", lines[index] or ""):
+            end = index
+            break
+    return "\n".join(lines[start + 1 : end])
+
+
+def validate_rules_manifest(body: str) -> tuple[bool, str | None]:
+    """Validate the optional `## Rules` manifest block (v3 rule grammar).
+
+    Absent section: valid (skills migrate incrementally). Present section:
+    every bullet must be `- \\`<ruleId>\\` (<tier>) — <statement>` with a
+    known tier, and controlled-exception rules must name their exception
+    evidence class.
+    """
+    section = extract_body_section(body, "## Rules")
+    if section is None:
+        return True, None
+
+    bullets: list[str] = []
+    current: list[str] = []
+    for line in section.split("\n"):
+        if line.startswith("- `"):
+            if current:
+                bullets.append(" ".join(current))
+            current = [line.strip()]
+        elif not line.strip():
+            continue
+        elif line.startswith("  ") and current:
+            current.append(line.strip())
+        else:
+            return False, f"Rules section contains a non-rule line: '{line.strip()}'"
+    if current:
+        bullets.append(" ".join(current))
+
+    if not bullets:
+        return False, "Rules section is present but declares no rules"
+
+    for bullet in bullets:
+        match = RULE_BULLET_PATTERN.match(bullet)
+        if not match:
+            return False, (
+                "Rule bullet must match '- `<ruleId>` (<tier>) — <statement>', got: "
+                + bullet[:100]
+            )
+        rule_id, tier, statement = match.groups()
+        if not RULE_ID_PATTERN.fullmatch(rule_id):
+            return False, (
+                f"Rule id '{rule_id}' must be '<skill>.<rule-slug>' "
+                "(kebab-case segments joined by dots)"
+            )
+        if tier not in RULE_TIERS:
+            return False, (
+                f"Rule '{rule_id}' has unknown tier '{tier}' "
+                f"(allowed: {', '.join(sorted(RULE_TIERS))})"
+            )
+        if tier == "controlled-exception" and "Exception evidence:" not in statement:
+            return False, (
+                f"Rule '{rule_id}' is controlled-exception but names no "
+                "'Exception evidence:' clause"
+            )
+    return True, None
+
+
+def validate_v3_doctrine(
     frontmatter: dict[str, object],
     content: str,
     skill_dir: Path,
@@ -275,23 +350,27 @@ def validate_v2_doctrine(
     body = match.group(1)
 
     body_lines = [line for line in body.split("\n") if line.strip()]
-    if len(body_lines) > V2_BODY_LINE_LIMIT:
+    if len(body_lines) > V3_BODY_LINE_LIMIT:
         return (
             False,
-            f"SKILL.md body has {len(body_lines)} non-empty lines (limit: {V2_BODY_LINE_LIMIT}). "
+            f"SKILL.md body has {len(body_lines)} non-empty lines (limit: {V3_BODY_LINE_LIMIT}). "
             "Move heavy content to references/.",
         )
 
-    for section in V2_REQUIRED_SECTIONS_ALL:
+    ok, message = validate_rules_manifest(body)
+    if not ok:
+        return False, message
+
+    for section in V3_REQUIRED_SECTIONS_ALL:
         if section not in body:
             alt = section.replace("## When to Use", "## Trigger")
             if alt not in body and section not in body:
-                return False, f"Missing required v2 section: '{section}' (or equivalent)"
+                return False, f"Missing required v3 section: '{section}' (or equivalent)"
 
     if category in {"core", "domain"}:
-        for section in V2_REQUIRED_SECTIONS_CORE_DOMAIN:
+        for section in V3_REQUIRED_SECTIONS_CORE_DOMAIN:
             if section not in body:
-                return False, f"Missing required v2 section for {category} skill: '{section}'"
+                return False, f"Missing required v3 section for {category} skill: '{section}'"
 
     if category in {"core", "domain"}:
         phase_headers = re.findall(r"^###\s+Phase\s+\d+", body, re.MULTILINE)
@@ -430,9 +509,9 @@ def validate_skill(skill_path: str | Path) -> tuple[bool, str]:
     if not ok:
         return False, message or "Invalid file references"
 
-    ok, message = validate_v2_doctrine(frontmatter, content, skill_dir)
+    ok, message = validate_v3_doctrine(frontmatter, content, skill_dir)
     if not ok:
-        return False, message or "v2 doctrine violation"
+        return False, message or "v3 doctrine violation"
 
     return True, "SkillCard is valid!"
 

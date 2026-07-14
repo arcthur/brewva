@@ -4,7 +4,7 @@
 // Reads tape JSONL only (axiom 6: tape is commitment memory — no parallel
 // telemetry store) and aggregates, per advisory surface, what its receipts
 // already record:
-//   - skill selection  (`skill.selection.recorded` + adoption = SKILL.md reads)
+//   - skill selection  (`skill.selection.recorded` + opened = SKILL.md reads)
 //   - task-stall watch (`task.stuck.detected` / `task.stall.adjudicated`)
 //   - output distiller (`tool_output_distilled` + eligible-tool denominators)
 //
@@ -161,7 +161,7 @@ const tapeFiles = readdirSync(tapeDir)
 // --- skill selection ---
 let selectionReceipts = 0;
 let offersTotal = 0;
-let offersAdopted = 0;
+let offersOpened = 0;
 const offerReasonCounts = new Map<string, number>();
 // --- task stall ---
 let stuckDetected = 0;
@@ -190,7 +190,7 @@ for (const file of tapeFiles) {
   }
   totalEvents += events.length;
 
-  // Committed reads (with targets + timestamps) feed skill adoption matching.
+  // Committed reads (with targets + timestamps) feed skill opened matching.
   const committedReads: Array<{ timestamp: number; target: string }> = [];
   for (const event of events) {
     if (event.kind !== "tool.committed") continue;
@@ -229,14 +229,14 @@ for (const file of tapeFiles) {
           if (label) bump(offerReasonCounts, label);
         }
         const filePath = readString(entry.filePath);
-        const adopted =
+        const opened =
           filePath !== undefined &&
           committedReads.some(
             (read) =>
               read.timestamp >= event.timestamp &&
               readTargetMatchesSkillFile(read.target, filePath),
           );
-        if (adopted) offersAdopted += 1;
+        if (opened) offersOpened += 1;
       }
       continue;
     }
@@ -284,7 +284,7 @@ if (selectionReceipts === 0) {
 } else {
   console.log(`  receipts: ${selectionReceipts}  offered SkillCards: ${offersTotal}`);
   console.log(
-    `  adopted (SKILL.md read after offer): ${offersAdopted} (${percent(offersAdopted, offersTotal)})`,
+    `  opened (SKILL.md read after offer): ${offersOpened} (${percent(offersOpened, offersTotal)})`,
   );
   console.log("  offer reasons:");
   for (const line of formatCounts(offerReasonCounts)) console.log(line);

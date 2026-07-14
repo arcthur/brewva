@@ -8,19 +8,60 @@ manifests tell Brewva which external actions may be authorized. The skill body
 tells the model how a capable specialist should behave while doing the work.
 Strong skills keep those boundaries separate.
 
-Violating the letter of a skill's hard rule is violating the spirit of that
-rule.
+A skill's rules are tiered (see the anatomy's rule manifest): non-negotiable
+rules admit no self-exemption; controlled-exception rules may be deviated
+from with cited evidence; adaptive heuristics are the model's to tune. The
+two behavior rules below — deviation with evidence, and reality arbitration —
+apply across every skill.
 
-## v2 Anatomy Reference
+## v3 Anatomy Reference
 
-For the canonical skill structure, content-type classification (deterministic /
-judgment / knowledge), and writing patterns (Iron Laws, Red Flags,
-rationalization tables, concrete examples), see
-`references/skill-anatomy-v2.md`.
+For the canonical kernel/scaffold structure, content-type classification
+(deterministic / judgment / knowledge), the rule manifest and its three
+tiers, wording registers, and the validator authority ceiling, see
+`references/skill-anatomy-v3.md`.
 
-The patterns below remain valid and complement the v2 anatomy. Skills should
-use both: v2 anatomy for structure, authored-behavior patterns for specialist
+The patterns below remain valid and complement the v3 anatomy. Skills should
+use both: v3 anatomy for structure, authored-behavior patterns for specialist
 depth.
+
+## Deviation With Evidence
+
+Skills are advisory; their force is in their wording. That force is
+calibrated, not absolute:
+
+- A `non-negotiable` rule (permissions, external side effects, secrets,
+  persisted formats, honesty-of-claims) is never self-exempted. If it seems
+  wrong, escalate — do not deviate.
+- A `controlled-exception` rule may be deviated from, but the deviation is a
+  commitment and leaves a receipt: declare it in the produced artifact,
+  citing the `ruleId` and the evidence class its manifest entry requires (or
+  an explicit operator approval). An exception needs evidence, not
+  eloquence. A silent skip is not a deviation; it is a violation.
+- An `adaptive-heuristic` is the model's to tune. State nothing beyond what
+  the work itself shows; no disclosure ritual.
+
+Cited `ruleId`s are what make deviations countable from the tape — a
+deviation the calibration pass cannot count is one the corpus cannot learn
+from.
+
+## Reality Arbitration
+
+When skill text and observed reality disagree, arbitrate by the kind of
+claim, not by which document is louder:
+
+- **Descriptive claims** (paths, behavior descriptions, "the usual root
+  cause is X" experience claims): authoritative code/runtime evidence wins.
+  Proceed on the evidence and route the contradiction to `self-improve` as a
+  candidate correction — a stale claim left in place misleads the next
+  session.
+- **Normative rules** (safety boundaries, project invariants, protocol
+  requirements): observing the rule being violated in the codebase is not
+  evidence the rule is wrong — the code may be the regression. A normative
+  conflict escalates (the live `question` tool, or a `self-improve`
+  candidate); it is never silently overridden in either direction.
+
+Evidence refutes claims; it does not repeal rules.
 
 ## What To Encode In The Skill Body
 
@@ -195,15 +236,17 @@ applies.
 
 ## Cross-Skill Anti-Rationalizations
 
-These excuses apply across all skills. Every skill activation should resist them.
+These excuses apply across all skills. Every skill activation should resist
+them. Rows are accountable inventory, not permanent law: per the anatomy's
+scaffold rules, a row unfired across consecutive calibration windows on
+current-tier models enters the retirement watchlist.
 
-| Excuse                                       | Reality                                                                                                                        |
-| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| "This skill doesn't apply to my task"        | Check the selection criteria. If ambiguous, prefer the smallest advisory context and do not infer tool authority from a skill. |
-| "I'll skip the skill and just do the work"   | Skills encode hard-won failure modes. Skipping is betting you won't hit them.                                                  |
-| "I know the answer, the process is overhead" | Process produces evidence. Knowing without evidence is guessing with confidence.                                               |
-| "The user wants speed, not process"          | The fastest path is the one that doesn't require rework. Process prevents rework.                                              |
-| "I'll follow the spirit, not the letter"     | Spirit without steps produces inconsistent outputs. Follow the steps, then adapt.                                              |
+| Excuse                                       | Reality                                                                                                                         |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| "This skill doesn't apply to my task"        | Check the selection criteria. If ambiguous, prefer the smallest advisory context and do not infer tool authority from a skill.  |
+| "I'll skip the skill and just do the work"   | Skills encode hard-won failure modes. If a rule does not fit, deviate with a cited `ruleId` and evidence — never skip silently. |
+| "I know the answer, the process is overhead" | The evidence obligations are the non-negotiable part. The path to the evidence is yours to choose; the evidence itself is not.  |
+| "The user wants speed, not process"          | Speed pressure never waives a non-negotiable rule — it is a legitimate reason to declare a controlled exception, with evidence. |
 
 ## What To Avoid
 

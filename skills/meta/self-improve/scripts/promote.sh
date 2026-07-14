@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # Brewva Learning Promotion Helper
-# Promotes a learning entry to a permanent project knowledge target.
+# Emits a reviewable promotion candidate for a learning entry, or routes the
+# entry to its manual promotion path. No target is ever written directly:
+# AGENTS.md and docs/ land only as human-reviewed diffs.
 # Usage: ./promote.sh <entry-id> <target> [--dry-run]
 
 set -euo pipefail
 
 LEARNINGS_DIR="./.brewva/learnings"
-AGENTS_FILE="./AGENTS.md"
+CANDIDATES_DIR="$LEARNINGS_DIR/candidates"
 
 # Abort early if learnings dir doesn't exist
 if [ ! -d "$LEARNINGS_DIR" ]; then
@@ -25,17 +27,19 @@ usage() {
     cat << EOF
 Usage: $(basename "$0") <entry-id> <target> [options]
 
-Promote a learning entry to a permanent knowledge location.
+Emit a promotion candidate for a learning entry. Candidates are files for
+human review; landing in the target is always a reviewed diff, never an
+automated write.
 
 Arguments:
   entry-id    Learning entry ID (e.g. LRN-20260226-001)
   target      Promotion target:
-                agents     → append to AGENTS.md
+                agents     → emit a candidate file targeting AGENTS.md
                 docs       → print for manual addition to docs/
                 skill      → redirect to extract-skill.sh
 
 Options:
-  --dry-run   Show what would be promoted without modifying files
+  --dry-run   Show the candidate that would be emitted without writing files
   -h, --help  Show this help message
 
 Examples:
@@ -114,6 +118,21 @@ find_entry() {
     echo "$content"
 }
 
+# Update the entry's Status field in its source file.
+set_entry_status() {
+    local id="$1"
+    local file="$2"
+    local new_status="$3"
+    awk -v id="$id" -v status="$new_status" '
+        $0 ~ "^## \\[" id "\\]" { found = 1 }
+        found && /^\*\*Status\*\*:/ {
+            sub(/:.*$/, ": " status)
+            found = 0
+        }
+        { print }
+    ' "$file" > "${file}.tmp" && mv "${file}.tmp" "$file"
+}
+
 result=$(find_entry "$ENTRY_ID")
 SOURCE_FILE=$(echo "$result" | head -1)
 ENTRY_CONTENT=$(echo "$result" | sed '1d;2d')
@@ -123,47 +142,59 @@ log_info "Found $ENTRY_ID in $SOURCE_FILE"
 # Extract summary line
 SUMMARY=$(echo "$ENTRY_CONTENT" | grep -A1 "^### Summary" | tail -1 | sed 's/^[[:space:]]*//')
 
+EMITTED_DATE=$(date +%Y-%m-%d)
+# BSD date (macOS) first, GNU date fallback.
+REEVALUATE_DATE=$(date -v+90d +%Y-%m-%d 2>/dev/null || date -d "+90 days" +%Y-%m-%d)
+
 case "$TARGET" in
     agents)
-        AGENTS_ENTRY=$(cat << ENTRY
+        CANDIDATE_FILE="$CANDIDATES_DIR/$ENTRY_ID.md"
+        CANDIDATE_CONTENT=$(cat << CANDIDATE
+# Promotion Candidate: $ENTRY_ID
 
-### $ENTRY_ID: $SUMMARY
+- Status: candidate (pending human review)
+- Summary: $SUMMARY
+- Source: $SOURCE_FILE
+- Proposed target: AGENTS.md
+- Emitted: $EMITTED_DATE
+- Re-evaluate by: $REEVALUATE_DATE
+- Qualification (reviewer must confirm ONE):
+  - [ ] Recurrence: 2+ independent occurrences cited below
+  - [ ] Operator-directed: an explicit human instruction to promote (an
+        authorization signal — correctness still rides on this review)
 
-$(echo "$ENTRY_CONTENT" | awk '/^### Details/,/^### /' | head -n -1 | tail -n +2 | sed 's/^[[:space:]]*//')
+## Proposed entry
 
-_Promoted from \`.brewva/learnings/\` on $(date +%Y-%m-%d)._
-ENTRY
+$ENTRY_CONTENT
+
+## Landing procedure
+
+A human reviews this candidate. If accepted, land the entry in AGENTS.md as a
+normal reviewed diff (commit + review), then set the source entry's Status to
+promoted and record the landing commit here. If rejected or expired
+(re-evaluate date passed without landing), set the source entry's Status back
+to pending and delete this file. There is no automated append path to
+AGENTS.md.
+CANDIDATE
 )
         if [ "$DRY_RUN" = true ]; then
-            log_info "Dry run — would append to $AGENTS_FILE:"
-            echo -e "${CYAN}${AGENTS_ENTRY}${NC}"
+            log_info "Dry run — would write candidate to $CANDIDATE_FILE:"
+            echo -e "${CYAN}${CANDIDATE_CONTENT}${NC}"
             echo ""
-            log_info "Would update $SOURCE_FILE: Status → promoted, Promoted → AGENTS.md"
+            log_info "Would update $SOURCE_FILE: Status → candidate"
         else
-            echo "$AGENTS_ENTRY" >> "$AGENTS_FILE"
-            log_info "Appended to $AGENTS_FILE"
+            mkdir -p "$CANDIDATES_DIR"
+            printf '%s\n' "$CANDIDATE_CONTENT" > "$CANDIDATE_FILE"
+            log_info "Candidate written to $CANDIDATE_FILE"
 
-            # Update status in source file
-            if command -v sed &>/dev/null; then
-                sed -i.bak "s/^\\(## \\[$ENTRY_ID\\].*\\)/\\1/" "$SOURCE_FILE"
-                # Update Status field within the entry
-                awk -v id="$ENTRY_ID" '
-                    /^\['"$ENTRY_ID"'\]/{found=1}
-                    found && /^\*\*Status\*\*:/{
-                        sub(/pending/, "promoted")
-                        found=0
-                    }
-                    {print}
-                ' "$SOURCE_FILE" > "${SOURCE_FILE}.tmp" && mv "${SOURCE_FILE}.tmp" "$SOURCE_FILE"
-                rm -f "${SOURCE_FILE}.bak"
-            fi
-
-            log_info "Updated $ENTRY_ID status to promoted in $SOURCE_FILE"
+            set_entry_status "$ENTRY_ID" "$SOURCE_FILE" "candidate"
+            log_info "Updated $ENTRY_ID status to candidate in $SOURCE_FILE"
             echo ""
-            log_info "Promotion complete!"
+            log_info "Candidate emitted — NOT landed."
             echo "  Entry: $ENTRY_ID"
-            echo "  Target: $AGENTS_FILE"
+            echo "  Candidate: $CANDIDATE_FILE"
             echo "  Summary: $SUMMARY"
+            echo "  Next: human review, then land in AGENTS.md as a reviewed diff."
         fi
         ;;
     docs)

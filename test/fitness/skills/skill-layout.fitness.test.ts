@@ -204,14 +204,22 @@ describe("skill layout quality", () => {
       ).not.toContain("authored-behavior.md");
     }
 
+    // The cross-skill deviation rule lives ONLY in authored-behavior.md: skills
+    // inherit it at runtime instead of restating it. The sentinel phrase is the
+    // v3 deviation-with-evidence rule (which replaced the retired
+    // letter-compliance clause). Whitespace is normalized so the formatter's
+    // line wrapping cannot hide a match.
+    const sentinel = "An exception needs evidence, not eloquence";
+    const flatten = (value: string): string => value.replace(/\s+/g, " ");
     const occurrences = collectSkillFiles(resolve(repoRoot, "skills")).flatMap((skillFile) => {
-      const content = readFileSync(skillFile, "utf8");
-      return content.includes("Violating the letter") ? [skillFile] : [];
+      const content = flatten(readFileSync(skillFile, "utf8"));
+      return content.includes(sentinel) ? [skillFile] : [];
     });
-    const referenceContent = readFileSync(allowedSource, "utf8");
+    const referenceContent = flatten(readFileSync(allowedSource, "utf8"));
 
     expect(occurrences).toEqual([]);
-    expect(referenceContent).toContain("Violating the letter");
+    expect(referenceContent).toContain(sentinel);
+    expect(referenceContent).not.toContain("Violating the letter");
   });
 
   it("keeps coding discipline guardrails in prep and implementation skills", () => {

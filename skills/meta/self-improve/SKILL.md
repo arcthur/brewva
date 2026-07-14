@@ -88,7 +88,9 @@ Decide the improvement home:
 - bounded follow-up experiment (not an immediate permanent rule)
 
 Run `scripts/review.sh` to check the improvement against existing patterns.
-Run `scripts/promote.sh` when the improvement is validated and ready for its home.
+Run `scripts/promote.sh` when the improvement is validated: it emits a
+promotion candidate for human review (targets like `AGENTS.md` land only as
+reviewed diffs — the script never writes them directly).
 
 **If the improvement home is unclear**: Propose the experiment first, not the
 permanent rule. Validate before promoting.
@@ -98,7 +100,8 @@ permanent rule. Validate before promoting.
 - `scripts/activator.sh` — Activate the self-improve workspace learning loop.
 - `scripts/error-detector.sh` — Scan artifacts for recurring error patterns.
 - `scripts/extract-skill.sh` — Extract a validated improvement into skill form.
-- `scripts/promote.sh` — Promote a validated improvement to its target home.
+- `scripts/promote.sh` — Emit a reviewable promotion candidate for a validated
+  improvement; landing in the target is a human-reviewed diff.
 - `scripts/review.sh` — Review an improvement hypothesis against existing patterns.
 - `scripts/setup.sh` — Initialize the self-improve workspace state.
 

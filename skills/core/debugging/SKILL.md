@@ -7,6 +7,7 @@ selection:
     rank hypotheses, and confirm root cause before patching.
 references:
   - references/failure-triage.md
+  - references/strict-protocol.md
   - references/example.md
   - references/rationalizations.md
 scripts:
@@ -18,15 +19,21 @@ scripts:
 ## The Iron Law
 
 ```
-NO PATCH WITHOUT CONFIRMED ROOT CAUSE
+NO SHIPPED FIX WITHOUT CONFIRMED ROOT CAUSE — PROBES ARE LEGAL: DECLARE THE
+HYPOTHESIS AND EXPECTED OBSERVATION, REVERT AFTER
 ```
+
+A probe is a controlled experiment: a reversible change made to falsify a
+declared hypothesis, observed, then reverted. A shipped fix is a change you
+intend to keep. The law binds the second, never the first — in a cheaply
+reversible workspace, intervention is often the strongest causal instrument
+available.
 
 ## When to Use
 
 - Tests or runtime behavior fail unexpectedly.
 - A regression appears after recent changes.
 - The team needs causal confidence before patching.
-- Under time pressure — emergencies make guessing tempting.
 - You already tried a fix and it did not work.
 
 ## When NOT to Use
@@ -37,58 +44,100 @@ NO PATCH WITHOUT CONFIRMED ROOT CAUSE
 
 ## Workflow
 
-### Phase 1: Reproduce the failure
+### Phase 1: Reproduce or bound the failure
 
 Capture the failing command, first error line, and affected boundary.
 
-**If not reproducible**: Stop. Record the gap in `investigation_record`. Do not guess.
-**If reproducible**: Proceed to Phase 2.
+**If reproducible**: Proceed to Phase 2 with the reproduction as your probe
+bench.
+**If not reproducible**: Do not stop — switch to evidence-limited
+investigation: add instrumentation on the suspected path, contain the blast
+radius if the failure is live, and work from recorded evidence (event tape,
+logs, git history, prior traces). Record the reproduction gap in
+`investigation_record`; a cause confirmed only from recorded evidence is
+stated with that caveat, never upgraded silently.
 
 Before Phase 2, write a one-sentence root-cause candidate in plain language.
 This sentence is provisional, but it must name a mechanism, not a symptom.
 
-### Phase 2: Rank hypotheses
+### Phase 2: Rank hypotheses and falsify
 
-Keep at most 3 active hypotheses. Run `scripts/hypothesis_tracker.py` to validate.
-Falsify the strongest hypothesis first, not the easiest to patch.
+Keep every active hypothesis falsifiable: each one carries its evidence
+status and the next observation (or probe) that would falsify it. Falsify
+the strongest hypothesis first, not the easiest to patch.
 
-If the failure looks like a regression, check recent history with `git` patterns.
-If it resembles a prior repo pattern, query the precedent layer.
+If the failure looks like a regression, bisect: a known-good baseline plus a
+change range narrows the first bad commit or config transition faster than
+local inspection. If it resembles a prior repo pattern, query the precedent
+layer.
 
-Use bisect mode when the symptom has a known-good baseline or a recent change
-range. Bisect mode narrows the first bad commit, config change, or artifact
-transition before proposing a repair.
+`scripts/hypothesis_tracker.py` is available as an advisory format lint for
+externalizing the hypothesis list; its output is never evidence and never
+decides escalation.
 
-**If tracker says `should_escalate`**: Stop. All hypotheses exhausted — escalate.
-**If active hypotheses remain**: Proceed to Phase 3.
+**If a new attempt would not be informed by anything new from the last one**:
+Stop generating variants. Widen evidence instead — instrument, bisect, or
+hand off with the ranked hypotheses.
 
 ### Phase 3: Separate symptom from cause
 
 Classify each observation as direct evidence, hypothesis, or speculation.
-Identify the single explanation that fits the full signal.
+Identify the smallest set of causes that explains the full signal — compound
+failures are real; do not force one explanation onto two independent defects.
 
-**If no single explanation fits**: Return to Phase 2 with new hypotheses.
-**If one explanation survives**: Proceed to Phase 4.
+**If no candidate set explains the full signal**: Return to Phase 2 with the
+unexplained residue as the new falsification target.
+**If a candidate set survives**: Proceed to Phase 4.
 
 ### Phase 4: Confirm and emit
 
-Do not patch. Produce all five outputs:
+Confirm causally — a probe whose predicted observation comes true, or
+recorded evidence that excludes every rival — then emit all five outputs:
 
-- `root_cause`: single dominant cause and the boundary where it lives.
+- `root_cause`: the confirmed cause set and the boundary where it lives.
 - `fix_strategy`: minimum valid repair and the verification needed.
 - `failure_evidence`: commands, traces, observed conditions.
-- `investigation_record`: hypotheses tested, evidence, disproving observations, final cause.
+- `investigation_record`: hypotheses tested, evidence, disproving
+  observations, probes run (with their declared expectations), final cause.
 - `planning_posture`: `trivial` | `moderate` | `complex` | `high_risk`.
 
-**If confirmation evidence is weak**: Return to Phase 1 with tighter reproduction.
+The fix itself belongs to `implementation`; hand off rather than widening
+this skill into the patch.
 
-Same-symptom hard stop: if two attempted explanations produce the same symptom
-with no new falsifying evidence, stop and reset the investigation around the
-three best hypotheses. Do not make a third patch-shaped guess.
+**If confirmation evidence is weak**: Say so — emit with the confidence
+caveat or return to Phase 2. Do not dress a plausible story as a confirmed
+cause.
+
+Under time pressure, after two failed fix attempts, or when you notice
+yourself patching symptoms: load `references/strict-protocol.md` and follow
+it — it is the tightened version of this workflow for exactly those
+conditions.
+
+## Rules
+
+- `debugging.confirmed-cause-before-shipped-fix` (controlled-exception) — No
+  shipped fix without a confirmed root cause. Exception evidence: a probe
+  receipt (declared hypothesis, expected observation, revert plan) recorded
+  in `investigation_record`, or explicit operator approval for a mitigation
+  shipped ahead of the cause.
+- `debugging.no-fabricated-evidence` (non-negotiable) — Never present
+  speculation or an unrun check as an observed fact; every claimed
+  observation names how it was observed.
+- `debugging.fresh-evidence-per-attempt` (controlled-exception) — A repeated
+  attempt must be informed by new evidence from the last one. Exception
+  evidence: a named nondeterminism source that makes the same attempt a new
+  sample (timing race, environment reset).
+- `debugging.active-hypothesis-count` (adaptive-heuristic) — Default: as many
+  active hypotheses as you can name a next falsification step for; prune the
+  ones you cannot.
 
 ## Scripts
 
-- `scripts/hypothesis_tracker.py` — Input: hypotheses array with id/claim/status/evidence, optional max_active. Output: validation result with active_count and escalation signal. Run before and after each Phase 2 iteration.
+- `scripts/hypothesis_tracker.py` — Advisory format lint over the
+  self-reported hypothesis list (ids, statuses, evidence fields present).
+  Useful for externalizing state across long sessions; its input is the
+  model's own report, so its output is never independent evidence, never a
+  phase gate, and never an escalation authority.
 
 ## Decision Protocol
 
@@ -96,28 +145,13 @@ three best hypotheses. Do not make a third patch-shaped guess.
 - What condition must already be true for the observed symptom to appear?
 - What earlier state transition or input created that condition?
 - What single observation would falsify the current leading hypothesis?
-- If the proposed cause were repaired, what downstream symptom disappears immediately?
-- Can the root cause be stated in one sentence without reusing the symptom as
-  the explanation?
+- What is the cheapest probe that discriminates between the top two
+  hypotheses — and what exactly do I expect to see in each case?
+- Can the root cause be stated in one sentence without reusing the symptom
+  as the explanation?
 - Is a bisect cheaper than another local inspection pass?
-
-## Red Flags — STOP
-
-If you catch yourself thinking any of these, STOP and return to Phase 1:
-
-- "Quick fix for now, investigate later"
-- "Just try changing X and see if it works"
-- "I don't fully understand but this might work"
-- "One more fix attempt" (when already tried 2+)
-- "It's probably X, let me fix that"
-- Proposing solutions before tracing data flow
-- Each fix reveals a new problem in a different place
-- Repeating the same symptom after two explanation attempts
-- Root-cause text that says what failed but not why it failed
-
-## Common Rationalizations
-
-See `references/rationalizations.md` for the anti-pattern table.
+- If reproduction is impossible, which recorded evidence (tape, logs,
+  history) bounds the cause best?
 
 ## Concrete Example
 
@@ -125,18 +159,28 @@ See `references/example.md` for the grounded example output shape.
 
 ## Handoff Expectations
 
-- `root_cause` names one dominant cause, the boundary where it lives, and why competing explanations were rejected.
-- `fix_strategy` describes the smallest credible repair and the verification proving the repair.
-- `failure_evidence` preserves commands, traces, and conditions so implementation can continue from the failing state.
-- `investigation_record` keeps the debugging path replayable: hypotheses, evidence, disproof, final cause.
-- `planning_posture` tells downstream planning whether the repair is local, bounded, or high-risk.
-- If the repair is not obvious after confirmation, hand off the top three
-  hypotheses and rejected explanations so `plan` or `implementation` does not
-  restart from scratch.
+- `root_cause` names the confirmed cause set, the boundary where it lives,
+  and why competing explanations were rejected.
+- `fix_strategy` describes the smallest credible repair and the verification
+  proving the repair.
+- `failure_evidence` preserves commands, traces, and conditions so
+  implementation can continue from the failing state.
+- `investigation_record` keeps the debugging path replayable: hypotheses,
+  evidence, probes with declared expectations, disproof, final cause — and
+  the reproduction gap when the investigation was evidence-limited.
+- `planning_posture` tells downstream planning whether the repair is local,
+  bounded, or high-risk.
+- If the repair is not obvious after confirmation, hand off the top ranked
+  hypotheses and rejected explanations so `plan` or `implementation` does
+  not restart from scratch.
 
 ## Stop Conditions
 
-- The issue cannot be reproduced with current information.
-- Three ranked hypotheses are exhausted with no confirmed cause (`hypothesis_tracker.py` returns `should_escalate: true`).
-- The real blocker is missing runtime or repository context that cannot be obtained.
-- The same symptom persists after two explanation attempts without new evidence.
+- The cause is confirmed and the fix belongs to `implementation`.
+- Reproduction is impossible AND recorded evidence (tape, logs, history,
+  instrumentation) is exhausted without a surviving explanation — hand off
+  the ranked hypotheses and the evidence gap.
+- The real blocker is missing runtime or repository context that cannot be
+  obtained from the current environment.
+- New attempts have stopped being informed by new evidence and further
+  instrumentation is outside this session's reach.
