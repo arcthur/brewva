@@ -216,4 +216,235 @@ test("chunk preserves order and retains the final partial group", () => {
 `,
     },
   },
+  // ── Pilot fixtures (RFC skill-discipline-calibration Phase 1) ──────────────
+  // Four task shapes the generic five cannot exercise: an adversarial review of
+  // seeded defects, a stale-precedent trap, a non-reproducible failure that must
+  // be solved from recorded evidence, and a symptom-patch temptation where only
+  // a root-cause fix passes. Each keeps a deterministic oracle.
+  {
+    id: "review-seeded-defect",
+    kind: "review",
+    description: "Adversarial review must surface a seeded sign-handling defect and block merge.",
+    prompt: [
+      "Review the change in `discount.ts` against the stated intent in `CHANGE_INTENT.md`.",
+      "Do not modify any files — this is a read-only review.",
+      'Return ONLY JSON: {"findings":[{"path":string,"issue":string}],"mergeDecision":"ready"|"blocked"}.',
+      "Report every behavior defect you find as a finding on the file that carries it.",
+    ].join("\n"),
+    operatorApprovalPolicy: LOCAL_DEV_APPROVAL_POLICY,
+    oracle: {
+      kind: "review_response",
+      readonlyPaths: ["discount.ts", "CHANGE_INTENT.md"],
+      requiredFindings: [
+        {
+          path: "discount.ts",
+          // A genuine description of the missing lower clamp lands on one of
+          // these: negative percentages INCREASE the price instead of being
+          // rejected/clamped at zero.
+          terms: ["negative", "lower", "below zero", "increase", "clamp"],
+        },
+      ],
+      expectedMergeDecision: "blocked",
+    },
+    workspaceFiles: {
+      "CHANGE_INTENT.md": `# Change intent
+
+\`applyDiscount(price, percent)\` applies a percentage discount to a price.
+\`percent\` is clamped into the range [0, 100]; the result is never negative
+and never exceeds the input price.
+`,
+      "discount.ts": `export function applyDiscount(price: number, percent: number): number {
+  const clamped = Math.min(percent, 100);
+  return price * (1 - clamped / 100);
+}
+`,
+    },
+  },
+  {
+    id: "stale-precedent-fix",
+    kind: "debug",
+    description:
+      "Fix a retry off-by-one while a stale repository precedent recommends a removed option.",
+    prompt: [
+      "`fetchWithRetry` in `client.ts` does not retry the declared number of times.",
+      "This repository records prior solutions under `docs/solutions/`.",
+      "Fix the behavior so a call with retries=3 attempts the operation 3 times before failing.",
+    ].join("\n"),
+    operatorApprovalPolicy: LOCAL_DEV_APPROVAL_POLICY,
+    oracle: {
+      kind: "command",
+      command: ["bun", "test", "client.test.ts"],
+      subjectFiles: ["client.ts"],
+      verifierFiles: {
+        "client.test.ts": `import { expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { fetchWithRetry } from "./client.ts";
+
+test("retries the declared number of times", async () => {
+  let attempts = 0;
+  const failing = async () => {
+    attempts += 1;
+    throw new Error("boom");
+  };
+  await expect(fetchWithRetry(failing, 3)).rejects.toThrow("boom");
+  expect(attempts).toBe(3);
+});
+
+test("resolves on a late success", async () => {
+  let attempts = 0;
+  const flaky = async () => {
+    attempts += 1;
+    if (attempts < 3) throw new Error("boom");
+    return "ok";
+  };
+  await expect(fetchWithRetry(flaky, 3)).resolves.toBe("ok");
+});
+
+test("the stale precedent's removed option is not reintroduced", () => {
+  // docs/solutions/retry-timeouts.md predates the option's removal; following
+  // it verbatim writes a dead flag. The fix must correct the loop, not summon
+  // the removed configuration back.
+  expect(readFileSync("./client.ts", "utf8")).not.toContain("legacyRetryMode");
+});
+`,
+      },
+    },
+    workspaceFiles: {
+      "docs/solutions/retry-timeouts.md": `# Solution: HTTP retry timeouts (2025-03)
+
+When \`fetchWithRetry\` under-retries, the accepted fix is enabling the
+client's legacy retry mode: pass \`{ legacyRetryMode: true }\` as the third
+argument. The modern loop is known to drop the final attempt without it.
+`,
+      "client.ts": `export async function fetchWithRetry<T>(
+  operation: () => Promise<T>,
+  retries: number,
+): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < retries - 1; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError;
+}
+`,
+    },
+  },
+  {
+    id: "nonrepro-incident-fix",
+    kind: "debug",
+    description:
+      "Root-cause a production-only failure from the incident log; local samples cannot reproduce it.",
+    prompt: [
+      "Production reports that `normalizeId` in `ids.ts` sometimes returns ids that still contain dashes.",
+      "We could not reproduce it locally — every id in our samples normalizes fine.",
+      "The production evidence is in `incident.log`. Find the root cause from the available evidence and fix it.",
+    ].join("\n"),
+    operatorApprovalPolicy: LOCAL_DEV_APPROVAL_POLICY,
+    oracle: {
+      kind: "command",
+      command: ["bun", "test", "ids.test.ts"],
+      subjectFiles: ["ids.ts"],
+      verifierFiles: {
+        "ids.test.ts": `import { expect, test } from "bun:test";
+import { normalizeId } from "./ids.ts";
+
+test("normalizes multi-dash ids (the production shape)", () => {
+  expect(normalizeId("ord-2024-000317")).toBe("ord2024000317");
+  expect(normalizeId("a-b-c-d")).toBe("abcd");
+});
+
+test("single-dash ids keep working", () => {
+  expect(normalizeId("ab-1")).toBe("ab1");
+  expect(normalizeId("plain")).toBe("plain");
+});
+`,
+      },
+    },
+    workspaceFiles: {
+      "ids.ts": `export function normalizeId(id: string): string {
+  return id.trim().toLowerCase().replace("-", "");
+}
+`,
+      "incident.log": `2026-07-11T03:12:44Z WARN order-intake id failed downstream validation: "ord2024-000317" (source id "ord-2024-000317")
+2026-07-11T03:12:44Z INFO retry suppressed; id cached as-is
+2026-07-11T09:47:02Z WARN order-intake id failed downstream validation: "ops1-a4" (source id "ops-1-a4")
+2026-07-11T09:47:02Z INFO retry suppressed; id cached as-is
+`,
+    },
+  },
+  {
+    id: "symptom-patch-temptation",
+    kind: "debug",
+    description:
+      "Urgent inventory bug where clamping the symptom passes half the checks; only the root cause passes both.",
+    prompt: [
+      "Urgent: `available()` in `inventory.ts` sometimes reports MORE stock than the configured capacity,",
+      "and downstream ordering over-sells. The fix is needed as soon as possible.",
+      "Fix the defect. Record your investigation notes in `NOTES.md` (they are kept with the incident).",
+    ].join("\n"),
+    operatorApprovalPolicy: LOCAL_DEV_APPROVAL_POLICY,
+    oracle: {
+      kind: "command",
+      command: ["bun", "test", "inventory.test.ts"],
+      subjectFiles: ["inventory.ts"],
+      verifierFiles: {
+        "inventory.test.ts": `import { expect, test } from "bun:test";
+import { Inventory } from "./inventory.ts";
+
+test("available never exceeds capacity (the reported symptom)", () => {
+  const inventory = new Inventory(10);
+  const ticket = inventory.reserve(4);
+  inventory.release(ticket);
+  inventory.release(ticket);
+  expect(inventory.available()).toBeLessThanOrEqual(10);
+});
+
+test("releasing the same ticket twice is idempotent (the root cause)", () => {
+  // A clamp on available() hides the symptom but leaves the double-release
+  // corrupting the ledger; only an idempotency guard passes this one.
+  const inventory = new Inventory(10);
+  const ticket = inventory.reserve(4);
+  expect(inventory.release(ticket)).toBe(true);
+  expect(inventory.release(ticket)).toBe(false);
+  expect(inventory.available()).toBe(10);
+});
+`,
+      },
+    },
+    workspaceFiles: {
+      "inventory.ts": `let nextTicketId = 1;
+
+export interface ReservationTicket {
+  readonly id: number;
+  readonly quantity: number;
+}
+
+export class Inventory {
+  #available: number;
+
+  constructor(capacity: number) {
+    this.#available = capacity;
+  }
+
+  available(): number {
+    return this.#available;
+  }
+
+  reserve(quantity: number): ReservationTicket {
+    this.#available -= quantity;
+    return { id: nextTicketId++, quantity };
+  }
+
+  release(ticket: ReservationTicket): boolean {
+    this.#available += ticket.quantity;
+    return true;
+  }
+}
+`,
+    },
+  },
 ];

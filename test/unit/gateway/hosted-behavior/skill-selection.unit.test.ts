@@ -676,7 +676,7 @@ describe("skill catalog layer and widened signals", () => {
     expect(result.catalogSection).toContain("- innocent # Injected Section: Safe description.");
   });
 
-  test("lifecycle derives recent paths and previous adoption from the event tape", () => {
+  test("lifecycle derives recent paths and previous opened status from the event tape", () => {
     const { runtime, events } = createRuntime(createSkillCatalog());
     const tape: Array<{ type: string; timestamp: number; payload?: object }> = [];
     (runtime.ops as { events?: object }).events = {
@@ -708,11 +708,11 @@ describe("skill catalog layer and widened signals", () => {
         prompt: "review migrations/001.sql",
         systemPrompt: "base\n\nCurrent date: 2026-05-20\nCurrent working directory: /repo",
       },
-      { sessionManager: { getSessionId: () => "adoption-session" } },
+      { sessionManager: { getSessionId: () => "opened-session" } },
     );
     const firstObject = expectObject(first, "first lifecycle result");
     const firstMessage = expectObject(firstObject.message, "first lifecycle message");
-    expect(String(firstMessage.content)).toContain("Previous Selection Adoption: none recorded");
+    expect(String(firstMessage.content)).toContain("Previous Selection Opened: none recorded");
     const firstReceipt = events.at(-1)?.payload as {
       selectionId?: string;
       renderedSkillReasons?: Array<{ name: string }>;
@@ -748,18 +748,18 @@ describe("skill catalog layer and widened signals", () => {
     });
 
     // Turn 2: bare continuation — recent_path resurfaces code-review; the
-    // trace reports the previous selection's adoption.
+    // trace reports the previous selection opened status.
     const second = lifecycle.beforeAgentStart(
       {
         prompt: "continue",
         systemPrompt: "base\n\nCurrent date: 2026-05-20\nCurrent working directory: /repo",
       },
-      { sessionManager: { getSessionId: () => "adoption-session" } },
+      { sessionManager: { getSessionId: () => "opened-session" } },
     );
     const secondObject = expectObject(second, "second lifecycle result");
     const message = expectObject(secondObject.message, "second lifecycle message");
     expect(String(message.content)).toContain(
-      "Previous Selection Adoption: 1/1 rendered SkillCards read (migration-safety)",
+      "Previous Selection Opened: 1/1 rendered SkillCards opened (migration-safety)",
     );
     const secondReceipt = events.at(-1)?.payload as {
       selectionId?: string;
@@ -776,7 +776,7 @@ describe("skill catalog layer and widened signals", () => {
     expect(secondReceipt.selectionId).not.toBe(firstReceipt.selectionId);
 
     // A long turn (many invocations after the early skill read) must not push
-    // the read out of the adoption measurement: adoption is "since the
+    // the read out of the opened measurement: opened is "since the
     // selection", not a recency tail.
     for (let index = 0; index < 80; index += 1) {
       tape.push({
@@ -793,12 +793,12 @@ describe("skill catalog layer and widened signals", () => {
         prompt: "continue",
         systemPrompt: "base\n\nCurrent date: 2026-05-20\nCurrent working directory: /repo",
       },
-      { sessionManager: { getSessionId: () => "adoption-session" } },
+      { sessionManager: { getSessionId: () => "opened-session" } },
     );
     const thirdObject = expectObject(third, "third lifecycle result");
     const thirdMessage = expectObject(thirdObject.message, "third lifecycle message");
     expect(String(thirdMessage.content)).toContain(
-      "Previous Selection Adoption: 1/1 rendered SkillCards read (migration-safety)",
+      "Previous Selection Opened: 1/1 rendered SkillCards opened (migration-safety)",
     );
   });
 });

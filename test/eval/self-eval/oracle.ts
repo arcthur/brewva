@@ -42,6 +42,14 @@ export async function runFixtureOracle(input: {
       assistantText: input.assistantText,
     });
   }
+  if (input.oracle.kind === "review_response") {
+    return checkReviewResponse({
+      oracle: input.oracle,
+      workspace: input.workspace,
+      stagedFiles: input.stagedFiles,
+      assistantText: input.assistantText,
+    });
+  }
   return runTrustedCommandOracle({
     oracle: input.oracle,
     workspace: input.workspace,
@@ -271,6 +279,55 @@ function checkArchitectureResponse(input: {
   for (const expected of input.oracle.modules) {
     const actual = actualByPath.get(expected.path);
     if (!actual || !matchesArchitectureModule(actual, expected)) return "task_failed";
+  }
+  return "task_passed";
+}
+
+/**
+ * Grade a review fixture: the target stays untouched (review is read-only),
+ * the final answer parses as the declared findings JSON, every seeded defect
+ * is surfaced by a finding on the seeded path mentioning at least one expected
+ * term, and the merge decision matches what a correct review of the seeded
+ * target must conclude. Detection is graded, not phrasing — but a review that
+ * lists the defect and still calls the merge `ready` fails: surfacing without
+ * blocking is the rubber-stamp this fixture exists to catch.
+ */
+function checkReviewResponse(input: {
+  readonly oracle: Extract<SelfEvalOracle, { readonly kind: "review_response" }>;
+  readonly workspace: string;
+  readonly stagedFiles: Readonly<Record<string, string>>;
+  readonly assistantText?: string;
+}): "task_passed" | "task_failed" {
+  if (
+    checkReadonlyUnchanged(input.oracle.readonlyPaths, input.workspace, input.stagedFiles) !==
+    "task_passed"
+  ) {
+    return "task_failed";
+  }
+  if (!input.assistantText?.trim()) return "task_failed";
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(input.assistantText);
+  } catch {
+    return "task_failed";
+  }
+  if (!isRecord(parsed) || !Array.isArray(parsed.findings) || !parsed.findings.every(isRecord)) {
+    return "task_failed";
+  }
+  if (parsed.mergeDecision !== input.oracle.expectedMergeDecision) return "task_failed";
+
+  const findings = parsed.findings.map((finding) => ({
+    path: typeof finding.path === "string" ? finding.path : "",
+    issue: typeof finding.issue === "string" ? finding.issue.toLowerCase() : "",
+  }));
+  for (const expected of input.oracle.requiredFindings) {
+    const matched = findings.some(
+      (finding) =>
+        finding.path === expected.path &&
+        expected.terms.some((term) => finding.issue.includes(term.toLowerCase())),
+    );
+    if (!matched) return "task_failed";
   }
   return "task_passed";
 }

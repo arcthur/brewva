@@ -38,9 +38,9 @@ documented invariant that nothing checks is a promise, not a contract.`
 - Promotion target:
   - `docs/research/decisions/` — an ADR once Phase 0 lands and the pilot
     paired evaluation reports task-success non-inferiority.
-  - `skills/meta/skill-authoring/references/skill-anatomy-v2.md` → v3 (the
-    kernel/scaffold anatomy, the three-tier rule grammar, the rule manifest,
-    and the validator-authority rule).
+  - `skills/meta/skill-authoring/references/skill-anatomy-v3.md` — landed,
+    replacing v2 (the kernel/scaffold anatomy, the three-tier rule grammar,
+    the rule manifest, and the validator-authority rule).
   - The pilot skills first (`skills/core/debugging`, `skills/core/review`,
     `skills/core/learning-research`), the rest of the corpus only after the
     pilot gate.
@@ -557,8 +557,8 @@ Three tiers replace the draft's two:
 ## Source Anchors
 
 - Meta genre: `skills/meta/skill-authoring/SKILL.md`,
-  `skills/meta/skill-authoring/references/skill-anatomy-v2.md`,
-  `skills/meta/skill-authoring/references/authored-behavior.md` (F1).
+  `skills/meta/skill-authoring/references/skill-anatomy-v3.md` (v2 at audit
+  time), `skills/meta/skill-authoring/references/authored-behavior.md` (F1).
 - Iron Laws / budgets / identity constraints: `skills/core/debugging/SKILL.md`
   (+ `scripts/hypothesis_tracker.py`), `skills/core/implementation/SKILL.md`
   (+ `scripts/check_scope_drift.py`), `skills/core/review/SKILL.md`,
@@ -573,8 +573,9 @@ Three tiers replace the draft's two:
   ("any of these"), `skills/core/calibration-report/SKILL.md` (the human-review
   boundary claim) (F8).
 - Adoption semantics:
-  `packages/brewva-gateway/src/hosted/internal/session/skills/skill-adoption.ts`
-  (read-class match = adopted; no `selectionId` on tool events),
+  `packages/brewva-gateway/src/hosted/internal/session/skills/skill-projections.ts`
+  (named `skill-adoption.ts` at audit time; read-class match = opened, no
+  `selectionId` on tool events),
   `packages/brewva-gateway/src/hosted/internal/session/skills/skill-selection.ts`
   (catalog + shortlist escape hatches) (F9).
 - Behavior gate: `test/eval/self-eval/oracle.ts`,
@@ -612,6 +613,53 @@ Three tiers replace the draft's two:
   - _The pilot may be unrepresentative._ Three skills, chosen for maximum
     constraint density, not randomness; expansion stays skill-by-skill with
     the same gate rather than a bulk rewrite.
+
+## Landing Log — 2026-07-14 (Phases 0–2 implemented on this branch)
+
+Phases 0, 1, and 2 landed as code on `claude/rfc-skill-discipline-calibration`;
+Phase 3 (the live paired gate and any expansion/retirement) remains open —
+it needs provider runs, which is exactly what the landed assets exist to feed.
+
+- **Phase 0.** `promote.sh agents` emits a reviewable candidate under
+  `.brewva/learnings/candidates/` (qualification checklist, provenance,
+  re-evaluation date; the never-matching status-update awk fixed in passing);
+  `promotion-targets.md` criteria are recurrence-or-reviewed. The projection
+  renamed: `skill-adoption.ts` → `skill-projections.ts`,
+  `projectLatestSkillOpened` / `SkillOpenedSample` / `Previous Selection
+Opened` trace line, with the module header documenting the `selectionId`
+  receipt binding a real conduct metric would need. Delegation-domain
+  adoption vocabulary untouched.
+- **Phase 1.** Rule manifests landed in the three pilot kernels and are
+  enforced twice: `quick_validate.py` (authoring side) and
+  `test/fitness/skills/skill-rule-manifest.fitness.test.ts` (repo gate:
+  grammar, skill-name prefix, tier vocabulary, exception-evidence presence,
+  global ruleId uniqueness, pilot coverage pin). Trigger-quality sets landed
+  as `test/fitness/skills/skill-trigger-quality.fitness.test.ts` —
+  should-trigger / should-not-trigger queries scored with the exact
+  `discover_skills` text shape + TF-IDF ranking, green on the real catalog.
+  The eval side landed four pilot fixtures (`review-seeded-defect` with the
+  new `review_response` oracle, `stale-precedent-fix`,
+  `nonrepro-incident-fix`, `symptom-patch-temptation`) each with
+  discriminative-power unit tests proving the oracle passes the genuine fix
+  and fails the tempting shortcut; `report:self-eval:compare` implements the
+  paired comparison (per-fixture pairing, declared non-inferiority margin
+  0.1, min 10 paired runs per side, `inconclusive` under that — never a
+  silent pass; tool-call cost secondary).
+- **Phase 2.** Anatomy v3 replaced v2 (kernel/scaffold, rule-manifest
+  grammar, wording registers, validator authority ceiling, provenance-carrying
+  rationalization tables); `authored-behavior.md` carries
+  deviation-with-evidence and two-lane reality arbitration, with the
+  letter-compliance clauses deleted and the layout fitness sentinel moved to
+  the new rule. The three pilot kernels rewrote to v3 with strict material
+  relocated into `references/strict-protocol.md` scaffolds (failure-mode
+  preamble + three-arm eval contract); `check-skill-dod.sh` and
+  `quick_validate.py` moved to v3 required-section sets; `calibration-report`
+  gained its missing kernel sections in passing.
+- **Verification at landing:** `bun run check` green; skills gates green
+  (DoD pass over 35 skills, layout + rule-manifest + trigger-quality
+  fitness, quick_validate contract tests); eval unit suite green including
+  the fixture discriminative-power tests. Full-suite and docs-gate results
+  are recorded in the landing commits.
 
 ## Promotion Criteria And Destination Docs
 

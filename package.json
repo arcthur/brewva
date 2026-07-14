@@ -62,6 +62,7 @@
     "report:context-evidence": "bun run script/report-context-evidence.ts",
     "report:delegation-evidence": "bun run script/report-delegation-evidence.ts",
     "report:self-eval": "bun run test/eval/self-eval/run-self-eval.ts",
+    "report:self-eval:compare": "bun run test/eval/self-eval/compare-reports.ts",
     "start": "bun run --preload @opentui/solid/preload packages/brewva-cli/src/index.ts",
     "test": "bun run test:ci",
     "test:ci": "bun run test:unit && bun run test:contract && bun run test:system && bun run test:fitness",

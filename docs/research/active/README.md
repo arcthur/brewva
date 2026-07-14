@@ -444,7 +444,12 @@ finally reveal.`
   their own RFC. Phase 0 stays deterministic: promotion → RDP-style reviewed
   candidates; adoption renamed `opened`. The verification ladder, honesty
   contracts, side-effect gates, and project invariants are named appreciating
-  assets, out of subtraction scope. Under the line `Govern effects, not
+  assets, out of subtraction scope. Phases 0–2 landed on the RFC branch
+  (candidate flow, `opened` rename, anatomy v3, three pilot kernels +
+  strict-protocol scaffolds, rule manifests with dual enforcement,
+  trigger-quality fitness, four pilot eval fixtures with
+  discriminative-power tests, `report:self-eval:compare`); Phase 3 — the
+  live paired gate — remains open. Under the line `Govern effects, not
 thought paths — in the skill text too; an exception carries evidence, not
 eloquence.`
 

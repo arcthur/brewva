@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { SELF_EVAL_FIXTURES } from "../../eval/self-eval/fixtures.js";
 
-const VALID_KINDS = new Set(["build", "debug", "comprehension"]);
+const VALID_KINDS = new Set(["build", "debug", "comprehension", "review"]);
 // The effect classes an unattendedApproval policy may key on (ToolEffectClass).
 const VALID_EFFECT_CLASSES = new Set([
   "workspace_read",
@@ -84,6 +84,14 @@ describe("self-eval fixtures (frozen evaluator definitions)", () => {
           expect(module.path.length).toBeGreaterThan(0);
           expect(module.responsibilityTerms.length).toBeGreaterThan(0);
         }
+      } else if (oracle.kind === "review_response") {
+        expect(oracle.readonlyPaths.length).toBeGreaterThan(0);
+        expect(oracle.requiredFindings.length).toBeGreaterThan(0);
+        for (const finding of oracle.requiredFindings) {
+          expect(finding.path.length).toBeGreaterThan(0);
+          expect(finding.terms.length).toBeGreaterThan(0);
+        }
+        expect(["ready", "blocked"]).toContain(oracle.expectedMergeDecision);
       } else {
         expect(oracle.kind).toBe("readonly_unchanged");
         expect(oracle.paths.length).toBeGreaterThan(0);

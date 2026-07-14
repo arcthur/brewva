@@ -63,12 +63,32 @@ export type SelfEvalOracle =
       readonly kind: "architecture_response";
       readonly readonlyPaths: readonly string[];
       readonly modules: readonly SelfEvalArchitectureModuleExpectation[];
+    }
+  | {
+      readonly kind: "review_response";
+      readonly readonlyPaths: readonly string[];
+      /** Every seeded defect the review must surface to pass. */
+      readonly requiredFindings: readonly SelfEvalReviewFindingExpectation[];
+      /** The merge decision a correct review of the seeded target must reach. */
+      readonly expectedMergeDecision: "ready" | "blocked";
     };
 
 export interface SelfEvalArchitectureModuleExpectation {
   readonly path: string;
   readonly dependsOn: readonly string[];
   readonly responsibilityTerms: readonly string[];
+}
+
+/**
+ * One seeded defect a review-fixture response must surface: a finding whose
+ * `path` equals the seeded file and whose issue text mentions at least one of
+ * the expected terms (case-insensitive). Terms are deliberately generous — a
+ * genuine description of the defect lands on one of them; the oracle grades
+ * detection, not phrasing.
+ */
+export interface SelfEvalReviewFindingExpectation {
+  readonly path: string;
+  readonly terms: readonly string[];
 }
 
 /**
@@ -98,8 +118,12 @@ export interface SelfEvalRunMetrics {
   readonly cost?: SelfEvalCostObservation;
 }
 
-/** The three task shapes the n=12 recipe exercised. */
-export type SelfEvalTaskKind = "build" | "debug" | "comprehension";
+/**
+ * The task shapes under evaluation: the three the n=12 recipe exercised, plus
+ * `review` (pilot fixtures for the skill-discipline-calibration gate — a
+ * read-only adversarial read scored on seeded-defect detection).
+ */
+export type SelfEvalTaskKind = "build" | "debug" | "comprehension" | "review";
 
 /**
  * One frozen self-eval task (an evaluator definition, D6). Fixtures are DATA,
